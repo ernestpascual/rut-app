@@ -7,6 +7,10 @@ import {
   sendChatMessage,
   deleteChatMessage,
   getChatMessages,
+  AVAILABLE_MODELS,
+  DEFAULT_AI_MODEL,
+  getUserPreferredModel,
+  setUserPreferredModel,
 } from './chatService';
 import { Project, InspirationItem } from '../../types';
 
@@ -224,6 +228,47 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     await deleteChatMessage(session.id, userMessage.id);
     messages = await getChatMessages(session.id);
     expect(messages.length).toBe(0);
+  });
+
+  test('provides available models and defaults to gemini-3.5-flash-lite', async () => {
+    expect(DEFAULT_AI_MODEL).toBe('gemini-3.5-flash-lite');
+    expect(AVAILABLE_MODELS.length).toBe(4);
+    expect(AVAILABLE_MODELS.map((m) => m.id)).toEqual([
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
+      'gemini-4',
+    ]);
+  });
+
+  test('manages user preferred model and persists updates', async () => {
+    // When unset, returns default model
+    await setUserPreferredModel('gemini-3.5-flash-lite');
+    let model = await getUserPreferredModel();
+    expect(model).toBe('gemini-3.5-flash-lite');
+
+    // Updates to gemini-4
+    await setUserPreferredModel('gemini-4');
+    model = await getUserPreferredModel();
+    expect(model).toBe('gemini-4');
+
+    // Updates to gemini-3.8-flash
+    await setUserPreferredModel('gemini-3.8-flash');
+    model = await getUserPreferredModel();
+    expect(model).toBe('gemini-3.8-flash');
+  });
+
+  test('sendChatMessage stamps assistant message with chosen model', async () => {
+    const session = await createChatSession('Model Verification Train');
+    const { assistantMessage } = await sendChatMessage(
+      session.id,
+      'Explore minimal branding angles',
+      {
+        model: 'gemini-3.8-flash',
+      }
+    );
+
+    expect(assistantMessage.model).toBe('gemini-3.8-flash');
   });
 });
 

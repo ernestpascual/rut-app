@@ -42,15 +42,12 @@ import {
   deleteChatSession,
   deleteChatMessage,
   getLocalChats,
+  AVAILABLE_MODELS,
+  DEFAULT_AI_MODEL,
+  getUserPreferredModel,
+  setUserPreferredModel,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
-
-const AVAILABLE_MODELS = [
-  { id: 'gemini-3.5-flash-lite', label: '3.5 FLASH LITE (DEFAULT)' },
-  { id: 'gemini-3.6-flash', label: '3.6 FLASH' },
-  { id: 'gemini-3.8-flash', label: '3.8 FLASH' },
-  { id: 'gemini-4', label: 'GEMINI 4' },
-];
 
 export default function ChatWorkspaceScreen() {
   const router = useRouter();
@@ -64,8 +61,15 @@ export default function ChatWorkspaceScreen() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash-lite');
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
   const [showModelModal, setShowModelModal] = useState(false);
+
+  // Load default model set from user preferences
+  useEffect(() => {
+    getUserPreferredModel(user?.uid).then((pref) => {
+      if (pref) setSelectedModel(pref);
+    });
+  }, [user?.uid]);
 
   // Pinning modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -388,7 +392,7 @@ export default function ChatWorkspaceScreen() {
               style={{ height: 34, paddingHorizontal: 10, marginRight: spacing.xs }}
             />
             <Button
-              title="MODEL"
+              title={`⚡ ${selectedModel.replace('gemini-', '').toUpperCase()}`}
               variant="secondary"
               onPress={() => setShowModelModal(true)}
               style={{ height: 34, paddingHorizontal: 10 }}
@@ -605,7 +609,7 @@ export default function ChatWorkspaceScreen() {
             />
             <ScrollView style={{ padding: spacing.base }}>
               <Text style={styles.modalSubhead}>
-                Select the model used for Train of Thought synthesis and inspiration retrieval.
+                Select the model used for Train of Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
               </Text>
               {AVAILABLE_MODELS.map((m) => {
                 const isSelected = selectedModel === m.id;
@@ -614,15 +618,29 @@ export default function ChatWorkspaceScreen() {
                     key={m.id}
                     onPress={() => {
                       setSelectedModel(m.id);
+                      setUserPreferredModel(m.id, user?.uid);
                       setShowModelModal(false);
                     }}
                     style={[
                       styles.pinItemCard,
                       isSelected ? styles.pinItemCardActive : null,
+                      { padding: spacing.sm, marginBottom: spacing.sm },
                     ]}
                   >
                     <View style={styles.pinRow}>
-                      <Text style={styles.pinItemTitle}>{m.label}</Text>
+                      <View style={{ flex: 1, marginRight: spacing.sm }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                          <Text style={[styles.pinItemTitle, { fontWeight: '700' }]}>{m.name}</Text>
+                          <Badge
+                            label={m.badge}
+                            variant={isSelected ? 'inverse' : 'grade'}
+                            style={{ marginLeft: spacing.xs }}
+                          />
+                        </View>
+                        <Text style={{ color: colors.inkSoft, fontSize: 11, lineHeight: 16 }}>
+                          {m.description}
+                        </Text>
+                      </View>
                       <Badge
                         label={isSelected ? 'ACTIVE ✓' : 'SELECT'}
                         variant={isSelected ? 'inverse' : 'outline'}

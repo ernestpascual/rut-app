@@ -19,6 +19,43 @@ import { getDumpInspirations } from '../dump/dumpService';
 
 const CHATS_STORAGE_KEY = '@rut_chats_v2';
 const MESSAGES_STORAGE_PREFIX = '@rut_chat_messages_v2:';
+export const PREFERRED_MODEL_STORAGE_KEY = '@rut_preferred_model';
+
+export const DEFAULT_AI_MODEL = 'gemini-3.5-flash-lite';
+
+export interface ModelOption {
+  id: string;
+  name: string;
+  badge: string;
+  description: string;
+}
+
+export const AVAILABLE_MODELS: ModelOption[] = [
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Lite',
+    badge: 'DEFAULT',
+    description: 'Ultra-fast response with lowest latency. Ideal for real-time brainstorming.',
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    badge: 'BALANCED',
+    description: 'Balanced speed and synthesis depth across design references.',
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    badge: 'ENHANCED',
+    description: 'High-fidelity contextual association across multiple inspirations.',
+  },
+  {
+    id: 'gemini-4',
+    name: 'Gemini 4',
+    badge: 'REASONING',
+    description: 'Deep strategic reasoning and extensive cross-domain synthesis.',
+  },
+];
 
 /**
  * Returns whether the current environment is running with live Firebase credentials
@@ -26,6 +63,53 @@ const MESSAGES_STORAGE_PREFIX = '@rut_chat_messages_v2:';
  */
 function isLiveAuth(uid?: string | null): boolean {
   return !!uid && uid !== DUMMY_USER_UID;
+}
+
+/**
+ * Loads the user's preferred model, checking Firestore first and falling back to AsyncStorage.
+ */
+export async function getUserPreferredModel(uid?: string | null): Promise<string> {
+  const targetUid = uid || (auth?.currentUser?.uid ?? null);
+
+  if (isLiveAuth(targetUid)) {
+    try {
+      const snap = await getDoc(doc(db, 'users', targetUid!));
+      if (snap.exists() && snap.data()?.preferredModel) {
+        const preferred = snap.data()?.preferredModel;
+        try {
+          await AsyncStorage.setItem(PREFERRED_MODEL_STORAGE_KEY, preferred);
+        } catch {}
+        return preferred;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch preferredModel from Firestore:', e);
+    }
+  }
+
+  try {
+    const cached = await AsyncStorage.getItem(PREFERRED_MODEL_STORAGE_KEY);
+    if (cached) return cached;
+  } catch {}
+
+  return DEFAULT_AI_MODEL;
+}
+
+/**
+ * Sets and persists the user's preferred model in both AsyncStorage and Firestore.
+ */
+export async function setUserPreferredModel(model: string, uid?: string | null): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PREFERRED_MODEL_STORAGE_KEY, model);
+  } catch {}
+
+  const targetUid = uid || (auth?.currentUser?.uid ?? null);
+  if (isLiveAuth(targetUid)) {
+    try {
+      await setDoc(doc(db, 'users', targetUid!), { preferredModel: model }, { merge: true });
+    } catch (e) {
+      console.warn('Failed to save preferred model to Firestore:', e);
+    }
+  }
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Pressable,
   Linking,
   Image,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -47,6 +48,10 @@ import {
   getChatMessages,
   sendChatMessage,
   deleteChatMessage,
+  AVAILABLE_MODELS,
+  DEFAULT_AI_MODEL,
+  getUserPreferredModel,
+  setUserPreferredModel,
 } from '../../../src/features/chat/chatService';
 
 export default function ProjectDetailScreen() {
@@ -83,6 +88,25 @@ export default function ProjectDetailScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInputText, setChatInputText] = useState('');
   const [sendingThought, setSendingThought] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
+  const [showModelModal, setShowModelModal] = useState(false);
+  const thoughtStreamScrollRef = useRef<ScrollView>(null);
+
+  // Load user's default preferred model
+  useEffect(() => {
+    getUserPreferredModel(user?.uid).then((pref) => {
+      if (pref) setSelectedModel(pref);
+    });
+  }, [user?.uid]);
+
+  // Auto-scroll chat stream when thoughts update
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      setTimeout(() => {
+        thoughtStreamScrollRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [chatMessages.length, sendingThought]);
 
   // Load project & inspiration links
   useEffect(() => {
@@ -458,6 +482,7 @@ export default function ProjectDetailScreen() {
         },
         pinnedInspirations: attachedItems,
         allInspirations: allDumpItems,
+        model: selectedModel,
       });
 
       setChatMessages((prev) => {
@@ -495,6 +520,12 @@ export default function ProjectDetailScreen() {
         },
       },
     ]);
+  };
+
+  const handleSelectModel = (modelId: string) => {
+    setSelectedModel(modelId);
+    setUserPreferredModel(modelId, user?.uid);
+    setShowModelModal(false);
   };
 
   if (loading || !project) {
@@ -883,31 +914,173 @@ export default function ProjectDetailScreen() {
             {/* TRAIN OF THOUGHT CHAT SECTION */}
             <View style={styles.thoughtSection}>
               <View style={styles.thoughtHeaderRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.xs }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, flex: 1 }}>
                   <Text style={styles.sectionHeading}>TRAIN OF THOUGHT</Text>
                   <Badge
                     label={`${chatMessages.length} THOUGHTS`}
                     variant={chatMessages.length > 0 ? 'inverse' : 'grade'}
-                    style={{ marginLeft: spacing.xs }}
                   />
                 </View>
-                {ideaChat ? (
-                  <Button
-                    title="↗ FULL CHAT"
-                    variant="secondary"
-                    onPress={() => router.push(`/(app)/chat/${ideaChat.id}`)}
-                    style={{ height: 32, paddingHorizontal: 10 }}
-                  />
-                ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Pressable
+                    style={styles.modelPillButton}
+                    onPress={() => setShowModelModal(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Change AI model"
+                  >
+                    <Text style={styles.modelPillText}>
+                      ⚡ {selectedModel.replace('gemini-', '').toUpperCase()} ▾
+                    </Text>
+                  </Pressable>
+                  {ideaChat ? (
+                    <Button
+                      title="↗ FULL CHAT"
+                      variant="secondary"
+                      onPress={() => router.push(`/(app)/chat/${ideaChat.id}`)}
+                      style={{ height: 32, paddingHorizontal: 10 }}
+                    />
+                  ) : null}
+                </View>
               </View>
 
               <Card style={styles.thoughtCard}>
                 <Text style={styles.thoughtBannerText}>
-                  Explore, critique, and iterate on &ldquo;{project.title}&rdquo;. Attached inspirations ({links.length}) are automatically incorporated into context.
+                  Interactive thought flow powered by {selectedModel}. Attached inspirations ({links.length}) are anchored into reasoning context.
                 </Text>
 
-                {/* QUICK PROMPT CHIPS */}
-                <View style={styles.quickPromptRow}>
+                {/* SCROLLABLE CHAT MESSAGES STREAM */}
+                <View style={styles.chatStreamContainer}>
+                  {chatMessages.length > 0 ? (
+                    <ScrollView
+                      nestedScrollEnabled
+                      ref={thoughtStreamScrollRef}
+                      style={styles.chatMessageScroll}
+                      contentContainerStyle={styles.chatMessageScrollContent}
+                      showsVerticalScrollIndicator
+                    >
+                      {chatMessages.map((msg) => {
+                        const isUser = msg.role === 'user';
+                        return (
+                          <View
+                            key={msg.id}
+                            style={[
+                              styles.chatBubbleWrapper,
+                              isUser ? styles.chatUserWrapper : styles.chatAssistantWrapper,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.chatBubble,
+                                isUser ? styles.chatUserBubble : styles.chatAssistantBubble,
+                              ]}
+                            >
+                              <View style={styles.chatBubbleMetaRow}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <Text
+                                    style={[
+                                      styles.chatRoleTag,
+                                      isUser ? styles.chatUserRoleTag : styles.chatAssistantRoleTag,
+                                    ]}
+                                  >
+                                    {isUser ? 'YOU' : 'RUT'}
+                                  </Text>
+                                  {!isUser && (
+                                    <Badge
+                                      label={msg.model ? msg.model.replace('gemini-', '').toUpperCase() : selectedModel.replace('gemini-', '').toUpperCase()}
+                                      variant="grade"
+                                      style={{ marginLeft: 6, paddingVertical: 1, paddingHorizontal: 4 }}
+                                    />
+                                  )}
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <Text
+                                    style={[
+                                      styles.chatTimestamp,
+                                      isUser ? styles.chatUserTimestamp : styles.chatAssistantTimestamp,
+                                    ]}
+                                  >
+                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </Text>
+                                  <Pressable
+                                    onPress={() => handleDeleteThought(msg.id)}
+                                    hitSlop={8}
+                                    style={{ marginLeft: 8 }}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.chatDeleteBtn,
+                                        isUser ? styles.chatUserDeleteBtn : styles.chatAssistantDeleteBtn,
+                                      ]}
+                                    >
+                                      ✕
+                                    </Text>
+                                  </Pressable>
+                                </View>
+                              </View>
+
+                              <Text
+                                style={[
+                                  styles.chatMessageText,
+                                  isUser ? styles.chatUserText : styles.chatAssistantText,
+                                ]}
+                                selectable
+                              >
+                                {msg.content}
+                              </Text>
+
+                              {/* Cited references */}
+                              {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
+                                <View style={styles.chatCitationsBox}>
+                                  <Text style={styles.chatCitationsTitle}>CITED REFERENCES:</Text>
+                                  <View style={styles.chatCitationsRow}>
+                                    {msg.sourceInspirationIds.map((sid) => {
+                                      const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
+                                      return (
+                                        <Pressable
+                                          key={sid}
+                                          style={styles.citationPill}
+                                          onPress={() => router.push(`/(app)/inspiration/${sid}`)}
+                                        >
+                                          <Text style={styles.citationPillText} numberOfLines={1}>
+                                            🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
+                                          </Text>
+                                        </Pressable>
+                                      );
+                                    })}
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.emptyThoughtBox}>
+                      <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
+                      <Text style={styles.emptyThoughtText}>
+                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {sendingThought ? (
+                  <View style={styles.thinkingIndicator}>
+                    <ActivityIndicator size="small" color={colors.ink} />
+                    <Text style={styles.thinkingText}>
+                      DEVELOPING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* QUICK PROMPT CHIPS CAROUSEL */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.quickPromptScroll}
+                  contentContainerStyle={styles.quickPromptScrollContent}
+                >
                   <Pressable
                     style={styles.quickChip}
                     onPress={() => handleSendThought(`Explore conceptual variations and bold angles for ${project.title}`)}
@@ -932,79 +1105,105 @@ export default function ProjectDetailScreen() {
                   >
                     <Text style={styles.quickChipText}>✍️ Polish Brief</Text>
                   </Pressable>
-                </View>
+                  <Pressable
+                    style={styles.quickChip}
+                    onPress={() => handleSendThought(`What spatial or physical installation would best manifest ${project.title}?`)}
+                  >
+                    <Text style={styles.quickChipText}>📐 Spatial & Form</Text>
+                  </Pressable>
+                </ScrollView>
 
-                {/* MESSAGE STREAM */}
-                {chatMessages.length > 0 ? (
-                  <View style={styles.thoughtStream}>
-                    {chatMessages.slice(-6).map((msg) => (
-                      <View
-                        key={msg.id}
-                        style={[
-                          styles.inlineBubble,
-                          msg.role === 'user' ? styles.inlineUserBubble : styles.inlineAssistantBubble,
-                        ]}
-                      >
-                        <View style={styles.bubbleHeader}>
-                          <Text
-                            style={[
-                              styles.inlineRoleLabel,
-                              msg.role === 'user' ? styles.inlineUserRole : styles.inlineAssistantRole,
-                            ]}
-                          >
-                            {msg.role === 'user' ? 'YOU' : `RUT ASSISTANT (${msg.model || 'gemini-3.5-flash-lite'})`}
-                          </Text>
-                          <Pressable
-                            onPress={() => handleDeleteThought(msg.id)}
-                            hitSlop={8}
-                          >
-                            <Text style={styles.deleteThoughtBtn}>✕</Text>
-                          </Pressable>
-                        </View>
-                        <Text
-                          style={[
-                            styles.inlineMessageText,
-                            msg.role === 'user' ? styles.inlineUserText : styles.inlineAssistantText,
-                          ]}
-                        >
-                          {msg.content}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.emptyThoughtBox}>
-                    <Text style={styles.emptyThoughtText}>
-                      No thoughts logged for this idea yet. Tap a quick prompt above or ask a question below to start the train of thought.
+                {/* INLINE CHAT INPUT DOCK */}
+                <View style={styles.chatInputDock}>
+                  <View style={styles.chatInputTopRow}>
+                    <Pressable
+                      style={styles.chatInputModelBadge}
+                      onPress={() => setShowModelModal(true)}
+                    >
+                      <Text style={styles.chatInputModelText}>
+                        ⚡ {selectedModel} ▾
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.chatInputHelpText}>
+                      Tap model to switch • Persists across sessions
                     </Text>
                   </View>
-                )}
-
-                {sendingThought ? (
-                  <View style={styles.thinkingIndicator}>
-                    <ActivityIndicator size="small" color={colors.ink} />
-                    <Text style={styles.thinkingText}>DEVELOPING TRAIN OF THOUGHT...</Text>
+                  <View style={styles.thoughtInputRow}>
+                    <Input
+                      value={chatInputText}
+                      onChangeText={setChatInputText}
+                      placeholder="Type a thought, critique, or inquiry..."
+                      containerStyle={{ flex: 1, marginVertical: 0 }}
+                      onSubmitEditing={() => handleSendThought()}
+                      returnKeyType="send"
+                    />
+                    <Button
+                      title={sendingThought ? '...' : 'THINK →'}
+                      onPress={() => handleSendThought()}
+                      disabled={!chatInputText.trim() || sendingThought}
+                      style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 16 }}
+                    />
                   </View>
-                ) : null}
-
-                {/* INLINE CHAT INPUT */}
-                <View style={styles.thoughtInputRow}>
-                  <Input
-                    value={chatInputText}
-                    onChangeText={setChatInputText}
-                    placeholder="Brainstorm an angle or question..."
-                    containerStyle={{ flex: 1, marginVertical: 0 }}
-                    onSubmitEditing={() => handleSendThought()}
-                  />
-                  <Button
-                    title="THINK →"
-                    onPress={() => handleSendThought()}
-                    disabled={!chatInputText.trim() || sendingThought}
-                    style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 14 }}
-                  />
                 </View>
               </Card>
             </View>
+
+            {/* MODEL SELECTION MODAL */}
+            <Modal visible={showModelModal} animationType="slide" transparent>
+              <SafeAreaView style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <TopNav
+                    title="rut"
+                    subtitle="Select Gemini Model"
+                    rightAction={
+                      <Button
+                        title="DONE"
+                        variant="text"
+                        onPress={() => setShowModelModal(false)}
+                      />
+                    }
+                  />
+                  <ScrollView style={{ padding: spacing.base }}>
+                    <Text style={styles.modalSubhead}>
+                      Select the model used for Train of Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
+                    </Text>
+                    {AVAILABLE_MODELS.map((m) => {
+                      const isSelected = selectedModel === m.id;
+                      return (
+                        <Card
+                          key={m.id}
+                          onPress={() => handleSelectModel(m.id)}
+                          style={[
+                            styles.modelCardItem,
+                            isSelected ? styles.modelCardItemActive : null,
+                          ]}
+                        >
+                          <View style={styles.modelRow}>
+                            <View style={{ flex: 1, marginRight: spacing.sm }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                <Text style={[styles.modelItemTitle, { fontWeight: '700' }]}>{m.name}</Text>
+                                <Badge
+                                  label={m.badge}
+                                  variant={isSelected ? 'inverse' : 'grade'}
+                                  style={{ marginLeft: spacing.xs }}
+                                />
+                              </View>
+                              <Text style={[styles.modelItemDesc, { fontSize: 11, lineHeight: 16 }]}>
+                                {m.description}
+                              </Text>
+                            </View>
+                            <Badge
+                              label={isSelected ? 'ACTIVE ✓' : 'SELECT'}
+                              variant={isSelected ? 'inverse' : 'outline'}
+                            />
+                          </View>
+                        </Card>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </SafeAreaView>
+            </Modal>
 
             {/* DELETE IDEA BUTTON */}
             <View style={styles.footerSection}>
@@ -1255,6 +1454,19 @@ const getStyles = (colors: ThemeColors) =>
     alignItems: 'center',
     marginBottom: spacing.xs,
   },
+  modelPillButton: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  modelPillText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.ink,
+  },
   thoughtCard: {
     backgroundColor: colors.surfaceGrade,
     borderWidth: 1,
@@ -1267,11 +1479,160 @@ const getStyles = (colors: ThemeColors) =>
     lineHeight: 18,
     marginBottom: spacing.sm,
   },
-  quickPromptRow: {
+  chatStreamContainer: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    marginBottom: spacing.sm,
+  },
+  chatMessageScroll: {
+    maxHeight: 420,
+    minHeight: 180,
+  },
+  chatMessageScrollContent: {
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  chatBubbleWrapper: {
+    width: '100%',
+  },
+  chatUserWrapper: {
+    alignItems: 'flex-end',
+  },
+  chatAssistantWrapper: {
+    alignItems: 'flex-start',
+  },
+  chatBubble: {
+    maxWidth: '92%',
+    padding: spacing.sm,
+  },
+  chatUserBubble: {
+    backgroundColor: colors.ink,
+    borderWidth: 1,
+    borderColor: colors.ink,
+  },
+  chatAssistantBubble: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.ink,
+  },
+  chatBubbleMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  chatRoleTag: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  chatUserRoleTag: {
+    color: colors.onInk,
+  },
+  chatAssistantRoleTag: {
+    color: colors.ink,
+  },
+  chatTimestamp: {
+    ...typography.captionCap,
+    fontSize: 8,
+  },
+  chatUserTimestamp: {
+    color: colors.inkMid,
+  },
+  chatAssistantTimestamp: {
+    color: colors.inkSoft,
+  },
+  chatDeleteBtn: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  chatUserDeleteBtn: {
+    color: colors.inkMid,
+  },
+  chatAssistantDeleteBtn: {
+    color: colors.inkSoft,
+  },
+  chatMessageText: {
+    ...typography.bodyMd,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  chatUserText: {
+    color: colors.onInk,
+  },
+  chatAssistantText: {
+    color: colors.ink,
+  },
+  chatCitationsBox: {
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineSoft,
+  },
+  chatCitationsTitle: {
+    ...typography.captionCap,
+    fontSize: 8,
+    color: colors.inkSoft,
+    marginBottom: 4,
+  },
+  chatCitationsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 4,
+  },
+  citationPill: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  citationPillText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.ink,
+  },
+  emptyThoughtBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyThoughtHeading: {
+    ...typography.captionCap,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyThoughtText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
+  },
+  thinkingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  thinkingText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    marginLeft: spacing.xs,
+  },
+  quickPromptScroll: {
+    marginBottom: spacing.sm,
+  },
+  quickPromptScrollContent: {
     gap: spacing.xs,
-    marginBottom: spacing.base,
+    paddingVertical: 2,
   },
   quickChip: {
     borderWidth: 1,
@@ -1286,87 +1647,73 @@ const getStyles = (colors: ThemeColors) =>
     fontWeight: '600',
     fontSize: 10,
   },
-  thoughtStream: {
-    marginBottom: spacing.base,
-  },
-  inlineBubble: {
-    marginBottom: spacing.xs,
-    padding: spacing.sm,
-  },
-  bubbleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  inlineUserBubble: {
-    backgroundColor: colors.ink,
-    alignSelf: 'flex-end',
-    maxWidth: '90%',
-  },
-  inlineAssistantBubble: {
+  chatInputDock: {
     backgroundColor: colors.canvas,
     borderWidth: 1,
     borderColor: colors.hairline,
-    alignSelf: 'flex-start',
-    maxWidth: '95%',
+    padding: spacing.xs,
   },
-  inlineRoleLabel: {
+  chatInputTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xxs,
+  },
+  chatInputModelBadge: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  chatInputModelText: {
     ...typography.captionCap,
     fontSize: 8,
-    marginBottom: 2,
-  },
-  inlineUserRole: {
-    color: colors.inkMid,
-  },
-  inlineAssistantRole: {
-    color: colors.inkSoft,
-  },
-  inlineMessageText: {
-    ...typography.bodyMd,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  inlineUserText: {
-    color: colors.onInk,
-  },
-  inlineAssistantText: {
+    fontWeight: '700',
     color: colors.ink,
   },
-  emptyThoughtBox: {
-    padding: spacing.base,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.hairline,
-    marginBottom: spacing.base,
-  },
-  deleteThoughtBtn: {
+  chatInputHelpText: {
     ...typography.captionCap,
-    fontSize: 10,
+    fontSize: 8,
     color: colors.inkSoft,
-    fontWeight: '700',
-    paddingHorizontal: 4,
-  },
-  emptyThoughtText: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  thinkingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  thinkingText: {
-    ...typography.captionCap,
-    fontSize: 9,
-    color: colors.inkSoft,
-    marginLeft: spacing.xs,
   },
   thoughtInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  modalSubhead: {
+    ...typography.bodyMd,
+    color: colors.inkSoft,
+    marginBottom: spacing.base,
+  },
+  modelCardItem: {
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.hairlineSoft,
+    padding: spacing.sm,
+  },
+  modelCardItemActive: {
+    borderColor: colors.ink,
+  },
+  modelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modelItemTitle: {
+    ...typography.bodyMd,
+    color: colors.ink,
+  },
+  modelItemDesc: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
   },
 });
