@@ -37,13 +37,14 @@ export default function SettingsScreen() {
   const [monthSummary, setMonthSummary] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.6-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash-lite');
   const [customModel, setCustomModel] = useState<string>('');
   const [modelError, setModelError] = useState<string | null>(null);
   const [savingModel, setSavingModel] = useState<boolean>(false);
 
   const ALLOWED_MODELS = [
-    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (Default)' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite (Default)' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
     { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
     { id: 'gemini-4', label: 'Gemini 4' },
   ];
@@ -134,7 +135,9 @@ export default function SettingsScreen() {
     setModelError(null);
     const clean = modelName.trim().toLowerCase();
     const normalized =
-      clean === 'gemini-4' || clean === 'gemini 4' || clean === 'gemini-4.0' || clean === 'gemini 4.0' || clean === 'gemini-4-flash' || clean === 'gemini-4.0-flash'
+      clean === 'gemini-3.5-flash-lite' || clean === 'gemini-3.5-lite' || clean === 'gemini 3.5 flash lite' || clean === 'gemini 3.5 lite'
+        ? 'gemini-3.5-flash-lite'
+        : clean === 'gemini-4' || clean === 'gemini 4' || clean === 'gemini-4.0' || clean === 'gemini 4.0' || clean === 'gemini-4-flash' || clean === 'gemini-4.0-flash'
         ? 'gemini-4'
         : clean === 'gemini-3.8-flash' || clean === 'gemini-3.8' || clean === 'gemini 3.8' || clean === 'gemini 3.8 flash'
         ? 'gemini-3.8-flash'
@@ -143,7 +146,7 @@ export default function SettingsScreen() {
         : null;
 
     if (!normalized) {
-      setModelError('Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted.');
+      setModelError('Only Gemini 3.5 Flash Lite, Gemini 3.6 Flash, Gemini 3.8 Flash, and Gemini 4 are permitted.');
       return;
     }
     if (!user) return;
@@ -222,11 +225,11 @@ export default function SettingsScreen() {
         <Card style={styles.sectionCard}>
           <View style={styles.auditHeader}>
             <Text style={styles.sectionHeading}>AI MODEL CONFIGURATION</Text>
-            <Badge label="GEMINI 4 • 3.8 • 3.6" variant="inverse" />
+            <Badge label="3.5 LITE • 3.6 • 3.8 • 4" variant="inverse" />
           </View>
           <Text style={styles.disclaimerText}>
             Select the active Gemini model for AI indexing, trains of thought, and project matching.
-            Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are supported (Gemini 3.6 Flash is default).
+            Gemini 3.5 Flash Lite is default.
           </Text>
 
           {modelError ? (
@@ -256,7 +259,7 @@ export default function SettingsScreen() {
                 setCustomModel(text);
                 if (modelError) setModelError(null);
               }}
-              placeholder="e.g. gemini-3.6-flash, gemini-3.8-flash, gemini-4"
+              placeholder="e.g. gemini-3.5-flash-lite, gemini-3.6-flash, gemini-4"
               containerStyle={{ flex: 1, marginVertical: 0 }}
               onSubmitEditing={() => customModel && handleSaveModel(customModel)}
             />

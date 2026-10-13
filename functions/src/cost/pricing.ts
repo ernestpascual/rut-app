@@ -12,6 +12,11 @@ export interface ModelPricing {
 }
 
 export const PRICING_TABLE: Record<string, ModelPricing> = {
+  'gemini-3.5-flash-lite': {
+    inputPer1kTokensMicros: 38,
+    outputPer1kTokensMicros: 150,
+    embeddingPer1kCharsMicros: 0,
+  },
   'gemini-3.6-flash': {
     inputPer1kTokensMicros: 75,
     outputPer1kTokensMicros: 300,
@@ -53,9 +58,9 @@ export function calculateCostMicros(
   outputTokens: number = 0,
   chars: number = 0
 ): number {
-  const rates = PRICING_TABLE[model] || PRICING_TABLE['gemini-3.6-flash'] || {
-    inputPer1kTokensMicros: 75,
-    outputPer1kTokensMicros: 300,
+  const rates = PRICING_TABLE[model] || PRICING_TABLE['gemini-3.5-flash-lite'] || {
+    inputPer1kTokensMicros: 38,
+    outputPer1kTokensMicros: 150,
     embeddingPer1kCharsMicros: 0,
   };
   const inputCost = Math.round((inputTokens / 1000) * rates.inputPer1kTokensMicros);

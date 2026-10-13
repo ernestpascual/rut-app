@@ -8,6 +8,11 @@ exports.PRICING_TABLE = exports.PRICING_VERSION = void 0;
 exports.calculateCostMicros = calculateCostMicros;
 exports.PRICING_VERSION = '2026-09-01';
 exports.PRICING_TABLE = {
+    'gemini-3.5-flash-lite': {
+        inputPer1kTokensMicros: 38,
+        outputPer1kTokensMicros: 150,
+        embeddingPer1kCharsMicros: 0,
+    },
     'gemini-3.6-flash': {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
@@ -43,9 +48,9 @@ exports.PRICING_TABLE = {
  * Calculates estimated cost in integer micros.
  */
 function calculateCostMicros(model, inputTokens = 0, outputTokens = 0, chars = 0) {
-    const rates = exports.PRICING_TABLE[model] || exports.PRICING_TABLE['gemini-3.6-flash'] || {
-        inputPer1kTokensMicros: 75,
-        outputPer1kTokensMicros: 300,
+    const rates = exports.PRICING_TABLE[model] || exports.PRICING_TABLE['gemini-3.5-flash-lite'] || {
+        inputPer1kTokensMicros: 38,
+        outputPer1kTokensMicros: 150,
         embeddingPer1kCharsMicros: 0,
     };
     const inputCost = Math.round((inputTokens / 1000) * rates.inputPer1kTokensMicros);

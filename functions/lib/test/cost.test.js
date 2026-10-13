@@ -17,6 +17,7 @@ describe('Functions Cost Calculations', () => {
     });
     test('has current pricing version defined', () => {
         expect(pricing_1.PRICING_VERSION).toBe('2026-09-01');
+        expect(pricing_1.PRICING_TABLE['gemini-3.5-flash-lite']).toBeDefined();
         expect(pricing_1.PRICING_TABLE['gemini-3.6-flash']).toBeDefined();
         expect(pricing_1.PRICING_TABLE['gemini-3.8-flash']).toBeDefined();
         expect(pricing_1.PRICING_TABLE['gemini-4']).toBeDefined();

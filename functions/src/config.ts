@@ -32,24 +32,34 @@ export function getGeminiApiKey(): string | null {
 
 /**
  * Allowed AI models:
- * - Gemini 4 (gemini-4)
+ * - Gemini 3.5 Flash Lite (gemini-3.5-flash-lite) - DEFAULT
+ * - Gemini 3.6 Flash (gemini-3.6-flash)
  * - Gemini 3.8 Flash (gemini-3.8-flash)
- * - Gemini 3.6 Flash (gemini-3.6-flash) - DEFAULT
+ * - Gemini 4 (gemini-4)
  */
 export const ALLOWED_MODELS = [
+  'gemini-3.5-flash-lite',
   'gemini-3.6-flash',
   'gemini-3.8-flash',
   'gemini-4',
 ] as const;
 
 export type AllowedModel = (typeof ALLOWED_MODELS)[number];
-export const DEFAULT_MODEL: AllowedModel = 'gemini-3.6-flash';
+export const DEFAULT_MODEL: AllowedModel = 'gemini-3.5-flash-lite';
 
 /**
  * Normalizes input string to canonical model identifier.
  */
 export function normalizeModelName(model: string): string {
   const clean = (model || '').trim().toLowerCase();
+  if (
+    clean === 'gemini-3.5-flash-lite' ||
+    clean === 'gemini-3.5-lite' ||
+    clean === 'gemini 3.5 flash lite' ||
+    clean === 'gemini 3.5 lite'
+  ) {
+    return 'gemini-3.5-flash-lite';
+  }
   if (
     clean === 'gemini-4' ||
     clean === 'gemini 4' ||
@@ -80,20 +90,21 @@ export function normalizeModelName(model: string): string {
 }
 
 /**
- * Strictly ensures only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are allowed.
+ * Strictly ensures only Gemini 4, Gemini 3.8 Flash, Gemini 3.6 Flash, and Gemini 3.5 Flash Lite are allowed.
  */
 export function validateFlashModel(model: string): string {
   const normalized = normalizeModelName(model);
   if (
-    normalized === 'gemini-4' ||
+    normalized === 'gemini-3.5-flash-lite' ||
+    normalized === 'gemini-3.6-flash' ||
     normalized === 'gemini-3.8-flash' ||
-    normalized === 'gemini-3.6-flash'
+    normalized === 'gemini-4'
   ) {
     return normalized;
   }
 
   throw new Error(
-    `Invalid model '${model}'. Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted.`
+    `Invalid model '${model}'. Only Gemini 3.5 Flash Lite, Gemini 3.6 Flash, Gemini 3.8 Flash, and Gemini 4 are permitted.`
   );
 }
 
