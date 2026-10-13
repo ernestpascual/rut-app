@@ -19,6 +19,10 @@
               "rut"
             ]
           }
+        ],
+        "LSApplicationQueriesSchemes": [
+          "instagram",
+          "instagram-stories"
         ]
       }
     },
@@ -41,6 +45,21 @@
           "data": [
             {
               "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "text/*"
+            }
+          ]
+        },
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "rut"
             }
           ]
         }

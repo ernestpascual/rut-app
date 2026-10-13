@@ -9,6 +9,9 @@ const TRACKING_PARAMS = [
   'fbclid',
   'gclid',
   'igshid',
+  'igsh',
+  'ig_mid',
+  'img_index',
   '_hsenc',
   '_hsmi',
   'mc_cid',
@@ -18,7 +21,7 @@ const TRACKING_PARAMS = [
 ];
 
 /**
- * Extracts the first valid HTTP/HTTPS URL from a string.
+ * Extracts the first valid HTTP/HTTPS URL from a string, stripping trailing punctuation.
  */
 export function extractUrlFromText(text: string): string | null {
   if (!text) return null;
@@ -26,12 +29,31 @@ export function extractUrlFromText(text: string): string | null {
   const match = text.match(urlRegex);
   if (!match) return null;
   try {
-    const parsed = new URL(match[0]);
+    const cleanCandidate = match[0].replace(/[.,)\]"'>]+$/, '').trim();
+    const parsed = new URL(cleanCandidate);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return match[0];
+      return cleanCandidate;
     }
   } catch {
     return null;
+  }
+  return null;
+}
+
+/**
+ * Detects and normalizes an Instagram URL from text or raw link.
+ */
+export function extractInstagramUrl(input: string): string | null {
+  if (!input) return null;
+  const match = input.match(/(https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/[^\s]+)/i);
+  if (match) {
+    const cleaned = match[0].replace(/[.,)\]"'>]+$/, '').trim();
+    return normalizeUrl(cleaned) || cleaned;
+  }
+  const noProto = input.match(/((?:www\.)?(?:instagram\.com|instagr\.am)\/[^\s]+)/i);
+  if (noProto) {
+    const cleaned = `https://${noProto[0].replace(/[.,)\]"'>]+$/, '').trim()}`;
+    return normalizeUrl(cleaned) || cleaned;
   }
   return null;
 }

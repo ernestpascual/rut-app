@@ -72,11 +72,19 @@ export default function ShareTargetScreen() {
     const targetUrl = processed.rawUrl || processed.normalizedUrl;
     if (targetUrl) {
       setExtractingMeta(true);
-      enrichUrlMetadata(targetUrl, rawTitle, userNote)
+      enrichUrlMetadata(
+        targetUrl,
+        rawTitle || undefined,
+        userNote || undefined,
+        processed.sharedText || rawText || undefined
+      )
         .then((meta) => {
           setExtractedMeta(meta);
           if (meta.title && (!rawTitle || rawTitle.trim() === '')) {
             setTitle(meta.title);
+          }
+          if (meta.caption && (!userNote || userNote.trim() === '')) {
+            setUserNote(meta.caption);
           }
           if (meta.autoTags && meta.autoTags.length > 0) {
             setTags((prev) => Array.from(new Set([...prev, ...meta.autoTags])));

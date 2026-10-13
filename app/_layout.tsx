@@ -5,10 +5,31 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../src/features/auth/AuthContext';
 import { ThemeProvider, useTheme } from '../src/design/ThemeContext';
 
+import * as Linking from 'expo-linking';
+import { redirectSystemPath } from './+native-intent';
+
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const { user, loading, stagedShare } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    // Listen for warm incoming shares / deep links while the app is already running
+    const handleUrl = (event: { url: string }) => {
+      if (!event.url) return;
+      try {
+        const redirected = redirectSystemPath({ path: event.url, initial: false });
+        if (redirected && redirected.startsWith('/share-target')) {
+          router.push(redirected as any);
+        }
+      } catch {}
+    };
+
+    const sub = Linking.addEventListener('url', handleUrl);
+    return () => {
+      sub.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     if (loading) return;
