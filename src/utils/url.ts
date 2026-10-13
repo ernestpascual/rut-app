@@ -90,6 +90,27 @@ export function detectPlatform(urlOrDomain: string): SourcePlatform {
   if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
     return 'youtube';
   }
+  if (lower.includes('behance.net')) {
+    return 'behance';
+  }
+  if (lower.includes('dribbble.com')) {
+    return 'dribbble';
+  }
+  if (lower.includes('are.na')) {
+    return 'arena';
+  }
+  if (lower.includes('github.com')) {
+    return 'github';
+  }
+  if (lower.includes('vimeo.com')) {
+    return 'vimeo';
+  }
+  if (lower.includes('medium.com')) {
+    return 'medium';
+  }
+  if (lower.includes('substack.com')) {
+    return 'substack';
+  }
   if (lower.startsWith('http://') || lower.startsWith('https://')) {
     return 'web';
   }

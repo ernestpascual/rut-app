@@ -11,7 +11,8 @@ import {
   Alert,
   Modal,
   ScrollView,
-  Pressable
+  Pressable,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -69,6 +70,10 @@ export default function ChatWorkspaceScreen() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [bankItems, setBankItems] = useState<InspirationItem[]>([]);
   const [pinnedMap, setPinnedMap] = useState<Record<string, InspirationItem>>({});
+
+  // Pull from Dump modal state
+  const [pullDumpModalOpen, setPullDumpModalOpen] = useState(false);
+  const [dumpSearchQuery, setDumpSearchQuery] = useState('');
 
   // Create Project Modal state (cross-platform alternative to Alert.prompt)
   const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);
@@ -338,6 +343,12 @@ export default function ChatWorkspaceScreen() {
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Button
+              title="📥 PULL DUMP"
+              variant="secondary"
+              onPress={() => setPullDumpModalOpen(true)}
+              style={{ height: 34, paddingHorizontal: 10, marginRight: spacing.xs }}
+            />
+            <Button
               title={`PIN (${(session?.pinnedInspirationIds || []).length})`}
               variant="secondary"
               onPress={() => setPinModalOpen(true)}
@@ -404,6 +415,12 @@ export default function ChatWorkspaceScreen() {
                 Pose a design query, ask for conceptual angles, or synthesize with your bank inspirations.
               </Text>
               <View style={styles.promptChipsContainer}>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Check my dump and pull all relevant inspirations for this thought train')}
+                >
+                  <Text style={styles.promptChipText}>📥 Check & Pull From Dump</Text>
+                </Pressable>
                 <Pressable
                   style={styles.promptChip}
                   onPress={() => handleSendMessage('Explore conceptual variations and bold angles')}
@@ -510,10 +527,16 @@ export default function ChatWorkspaceScreen() {
 
         {/* Input Bar */}
         <View style={styles.inputBar}>
+          <Button
+            title="📥 DUMP"
+            variant="secondary"
+            onPress={() => setPullDumpModalOpen(true)}
+            style={{ marginRight: spacing.xs, height: 46, paddingHorizontal: 12 }}
+          />
           <Input
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask AI to brainstorm, critique, or expand ideas..."
+            placeholder="Ask AI to brainstorm, critique, or check dump..."
             containerStyle={{ flex: 1, marginVertical: 0 }}
             onSubmitEditing={() => handleSendMessage()}
           />
@@ -521,7 +544,7 @@ export default function ChatWorkspaceScreen() {
             title="THINK →"
             onPress={() => handleSendMessage()}
             disabled={!inputText.trim() || sending}
-            style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 16 }}
+            style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 14 }}
           />
         </View>
       </KeyboardAvoidingView>
@@ -662,6 +685,120 @@ export default function ChatWorkspaceScreen() {
                 loading={creatingProject}
                 style={{ marginTop: spacing.sm }}
               />
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal to Pull and Check from Dump in the Chat */}
+      <Modal visible={pullDumpModalOpen} animationType="slide" transparent>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TopNav
+              title="rut"
+              subtitle="Pull & Check From Dump"
+              rightAction={
+                <Button
+                  title="DONE"
+                  variant="text"
+                  onPress={() => setPullDumpModalOpen(false)}
+                />
+              }
+            />
+            <View style={{ paddingHorizontal: spacing.base, paddingTop: spacing.xs }}>
+              <Input
+                label="SEARCH DUMP INSPIRATIONS"
+                value={dumpSearchQuery}
+                onChangeText={setDumpSearchQuery}
+                placeholder="Search by title, domain, or auto-tag (e.g. brutalist, concrete)..."
+                containerStyle={{ marginVertical: 0 }}
+              />
+            </View>
+            <ScrollView style={{ padding: spacing.base }}>
+              <Text style={styles.modalSubhead}>
+                Tap &ldquo;ASK AI ABOUT THIS&rdquo; to immediately inspect any dump item in this train of thought, or &ldquo;+ PIN CONTEXT&rdquo; to inject it into every prompt.
+              </Text>
+              {bankItems
+                .filter((item) => {
+                  if (!dumpSearchQuery.trim()) return true;
+                  const q = dumpSearchQuery.toLowerCase();
+                  return (
+                    item.title.toLowerCase().includes(q) ||
+                    (item.sourceDomain && item.sourceDomain.toLowerCase().includes(q)) ||
+                    (item.siteName && item.siteName.toLowerCase().includes(q)) ||
+                    (item.tags || []).some((t) => t.toLowerCase().includes(q)) ||
+                    (item.editorialContext && item.editorialContext.toLowerCase().includes(q)) ||
+                    (item.userNote && item.userNote.toLowerCase().includes(q))
+                  );
+                })
+                .map((bItem) => {
+                  const isPinned = (session?.pinnedInspirationIds || []).includes(bItem.id);
+                  return (
+                    <Card key={bItem.id} style={styles.dumpPullCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        {bItem.sourcePlatform ? (
+                          <Badge label={bItem.sourcePlatform.toUpperCase()} variant="inverse" style={{ marginRight: 6 }} />
+                        ) : null}
+                        {bItem.siteName ? (
+                          <Badge label={bItem.siteName} variant="outline" style={{ marginRight: 6 }} />
+                        ) : bItem.sourceDomain ? (
+                          <Badge label={bItem.sourceDomain} variant="outline" style={{ marginRight: 6 }} />
+                        ) : null}
+                        <Badge label={isPinned ? 'PINNED IN CONTEXT' : 'IN DUMP'} variant={isPinned ? 'inverse' : 'grade'} />
+                      </View>
+
+                      {bItem.remotePreviewImageUrl ? (
+                        <Image
+                          source={{ uri: bItem.remotePreviewImageUrl }}
+                          style={styles.dumpPullThumb}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+
+                      <Text style={styles.dumpPullTitle} numberOfLines={2}>
+                        {bItem.title}
+                      </Text>
+
+                      {bItem.editorialContext ? (
+                        <Text style={styles.dumpPullContext} numberOfLines={2}>
+                          {bItem.editorialContext}
+                        </Text>
+                      ) : bItem.previewDescription ? (
+                        <Text style={styles.dumpPullContext} numberOfLines={2}>
+                          {bItem.previewDescription}
+                        </Text>
+                      ) : null}
+
+                      {bItem.tags && bItem.tags.length > 0 ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 }}>
+                          {bItem.tags.slice(0, 5).map((t) => (
+                            <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
+                          ))}
+                        </View>
+                      ) : null}
+
+                      <View style={styles.dumpPullActionRow}>
+                        <Button
+                          title="💬 ASK AI ABOUT THIS"
+                          variant="primary"
+                          onPress={() => {
+                            setPullDumpModalOpen(false);
+                            handleSendMessage(
+                              `Check and analyze this inspiration from my dump: "${bItem.title}" (${bItem.url || bItem.sourceDomain || 'saved item'}). Context: ${bItem.editorialContext || bItem.previewDescription || bItem.userNote || 'none'}. Auto-tags: ${(bItem.tags || []).join(', ')}. How can we apply its aesthetic and spatial principles to this thought train?`
+                            );
+                          }}
+                          style={{ height: 34, paddingHorizontal: 12, marginRight: spacing.xs }}
+                        />
+                        <Button
+                          title={isPinned ? 'UNPIN' : '+ PIN CONTEXT'}
+                          variant="secondary"
+                          onPress={() => handleTogglePin(bItem.id)}
+                          style={{ height: 34, paddingHorizontal: 10 }}
+                        />
+                      </View>
+                    </Card>
+                  );
+                })}
             </ScrollView>
           </View>
         </SafeAreaView>
@@ -878,5 +1015,36 @@ const getStyles = (colors: ThemeColors) =>
     color: colors.ink,
     flex: 1,
     marginRight: spacing.xs,
+  },
+  dumpPullCard: {
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    padding: spacing.base,
+  },
+  dumpPullThumb: {
+    width: '100%',
+    height: 120,
+    backgroundColor: colors.canvas,
+    marginVertical: spacing.xs,
+  },
+  dumpPullTitle: {
+    ...typography.bodyMd,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  dumpPullContext: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginBottom: spacing.xs,
+  },
+  dumpPullActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
   },
 });

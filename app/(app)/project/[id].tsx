@@ -817,8 +817,20 @@ export default function ProjectDetailScreen() {
                         <Text style={styles.linkTitle} numberOfLines={2}>
                           {item ? item.title : `Reference ${link.inspirationId}`}
                         </Text>
-                        {link.reason ? (
+                        {item?.editorialContext ? (
+                          <Text style={styles.linkReason} numberOfLines={2}>
+                            {item.editorialContext}
+                          </Text>
+                        ) : link.reason ? (
                           <Text style={styles.linkReason}>💡 {link.reason}</Text>
+                        ) : null}
+
+                        {item?.tags && item.tags.length > 0 ? (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+                            {item.tags.slice(0, 4).map((t) => (
+                              <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
+                            ))}
+                          </View>
                         ) : null}
                       </View>
 

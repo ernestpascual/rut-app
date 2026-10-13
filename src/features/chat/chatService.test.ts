@@ -155,5 +155,54 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     chats = await getLocalChats();
     expect(chats.some((c) => c.id === session.id)).toBe(false);
   });
+
+  test('actively pulls and checks inspirations from dump when asked in chat', async () => {
+    const session = await createChatSession('Dump Inspection Chat');
+    const dumpItems: InspirationItem[] = [
+      {
+        id: 'dump-arch-1',
+        ownerUid: 'test',
+        kind: 'link',
+        title: 'Monolithic Basalt Pavilion',
+        url: 'https://archdaily.com/123/monolithic-basalt-pavilion',
+        normalizedUrl: 'https://archdaily.com/123/monolithic-basalt-pavilion',
+        sharedText: null,
+        userNote: 'Monolithic proportions with dark basalt',
+        sourcePlatform: 'web',
+        sourceDomain: 'archdaily.com',
+        sourceApp: 'ArchDaily',
+        previewDescription: 'Dark basalt pavilion',
+        remotePreviewImageUrl: null,
+        editorialContext: '💡 ArchDaily • Context: architecture, basalt, pavilion',
+        tags: ['architecture', 'basalt', 'pavilion', 'monolith'],
+        aiTags: ['architecture', 'monolith'],
+        concepts: ['architecture', 'basalt'],
+        aiSummary: 'Basalt architecture',
+        processingStatus: 'ready',
+        processingErrorCode: null,
+        duplicateOf: null,
+        archived: false,
+        createdAt: 1000,
+        updatedAt: 1000,
+        capturedAt: 1000,
+      },
+    ];
+
+    const { assistantMessage } = await sendChatMessage(
+      session.id,
+      'Check my dump and pull inspirations about basalt and monolith',
+      {
+        ideaContext: {
+          title: 'Basalt Sanctuary',
+        },
+        allInspirations: dumpItems,
+      }
+    );
+
+    expect(assistantMessage.content).toContain('PULLED FROM YOUR DUMP');
+    expect(assistantMessage.content).toContain('Monolithic Basalt Pavilion');
+    expect(assistantMessage.sourceInspirationIds).toContain('dump-arch-1');
+  });
 });
+
 

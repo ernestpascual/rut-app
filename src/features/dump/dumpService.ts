@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InspirationItem, Project, ProjectInspirationLink, SourcePlatform } from '../../types';
 import { detectPlatform, extractDomain, generateContentHash, normalizeUrl } from '../../utils/url';
+import { enrichUrlMetadata, extractUrlMetadataFromUrl } from '../../utils/urlMetadata';
 
 export type DumpSortOption =
   | 'newest'
@@ -25,8 +26,25 @@ async function cleanupOldStorageKeys() {
 }
 cleanupOldStorageKeys();
 
+export function enrichInspirationItem(item: InspirationItem): InspirationItem {
+  if (!item.url) return item;
+  const meta = extractUrlMetadataFromUrl(item.url);
+  const combinedTags = Array.from(new Set([...(item.tags || []), ...meta.autoTags]));
+  return {
+    ...item,
+    siteName: item.siteName || meta.siteName,
+    sourcePlatform: item.sourcePlatform || meta.platform,
+    sourceDomain: item.sourceDomain || meta.domain,
+    tags: combinedTags,
+    aiTags: item.aiTags && item.aiTags.length > 0 ? item.aiTags : meta.autoTags,
+    concepts: item.concepts && item.concepts.length > 0 ? item.concepts : meta.concepts,
+    editorialContext: item.editorialContext || meta.editorialContext,
+    previewDescription: item.previewDescription || meta.description,
+  };
+}
+
 /**
- * Loads dump inspirations from storage or returns empty array.
+ * Loads dump inspirations from storage, ensuring auto-enrichment on any missing metadata.
  */
 export async function getDumpInspirations(): Promise<InspirationItem[]> {
   try {
@@ -34,7 +52,7 @@ export async function getDumpInspirations(): Promise<InspirationItem[]> {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return parsed.map(enrichInspirationItem);
       }
     }
   } catch (e) {
@@ -73,44 +91,39 @@ export async function quickDumpLinkOrNote(
 ): Promise<InspirationItem> {
   const trimmed = rawInput.trim();
   const normalized = normalizeUrl(trimmed);
-  const platform = normalized ? detectPlatform(normalized) : 'other';
-  const domain = normalized ? extractDomain(normalized) : null;
   const hash = generateContentHash(normalized || trimmed);
 
-  let fallbackTitle = domain ? `Saved from ${domain}` : trimmed.slice(0, 60);
-  if (platform === 'pinterest') {
-    fallbackTitle = domain ? `Pinterest Inspiration (${domain})` : 'Pinterest Pin Reference';
-  } else if (platform === 'instagram') {
-    fallbackTitle = domain ? `Instagram Visual (${domain})` : 'Instagram Reel / Post';
-  } else if (platform === 'tiktok') {
-    fallbackTitle = 'TikTok Motion Clip';
+  let meta;
+  if (normalized) {
+    meta = await enrichUrlMetadata(normalized, undefined, userNote);
   }
 
-  // Auto-detect tags based on platform and URL
-  const autoTags = [...tags];
-  if (platform && platform !== 'other' && !autoTags.includes(platform)) {
-    autoTags.push(platform);
-  }
+  const combinedTags = Array.from(new Set([...tags, ...(meta?.autoTags || [])]));
+  const platform = meta?.platform || (normalized ? detectPlatform(normalized) : 'other');
+  const domain = meta?.domain || (normalized ? extractDomain(normalized) : null);
+  const title = meta?.title || (domain ? `Saved from ${domain}` : trimmed.slice(0, 60));
 
   const newItem: InspirationItem = {
     id: `dump-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     ownerUid: 'test',
     kind: normalized ? 'link' : 'note',
     folder: 'dump',
-    title: fallbackTitle,
+    title,
     url: normalized ? trimmed : null,
     normalizedUrl: normalized,
     sharedText: normalized ? null : trimmed,
     userNote: userNote?.trim() || null,
     sourcePlatform: platform,
     sourceDomain: domain,
-    sourceApp: platform !== 'other' ? platform.toUpperCase() : 'Web',
-    previewDescription: normalized ? `Dumped link from ${domain || platform}` : trimmed,
-    remotePreviewImageUrl: null,
-    tags: autoTags,
-    aiTags: [platform, 'saved-inspiration'],
-    concepts: [platform, 'reference'],
-    aiSummary: userNote || `Saved reference link from ${platform}. Added to inspiration dump.`,
+    sourceApp: meta?.siteName || (platform !== 'other' ? platform.toUpperCase() : 'Web'),
+    siteName: meta?.siteName || null,
+    previewDescription: meta?.description || trimmed,
+    remotePreviewImageUrl: meta?.previewImageUrl || null,
+    editorialContext: meta?.editorialContext || null,
+    tags: combinedTags,
+    aiTags: meta?.autoTags || [platform, 'saved-inspiration'],
+    concepts: meta?.concepts || [platform, 'reference'],
+    aiSummary: meta?.editorialContext || userNote || `Saved reference link from ${platform}. Added to inspiration dump.`,
     processingStatus: 'ready',
     processingErrorCode: null,
     duplicateOf: hash,

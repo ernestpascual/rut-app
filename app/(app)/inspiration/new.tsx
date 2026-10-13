@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  Alert,
+  Image,
+  Pressable
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
@@ -19,8 +21,10 @@ import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
 import { Badge } from '../../../src/components/ui/Badge';
+import { Card } from '../../../src/components/ui/Card';
 import { InspirationCreateSchema } from '../../../src/lib/validation/schemas';
 import { normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../../src/utils/url';
+import { enrichUrlMetadata, extractUrlMetadataFromUrl, ExtractedUrlMetadata } from '../../../src/utils/urlMetadata';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
 import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
@@ -40,11 +44,42 @@ export default function NewInspirationScreen() {
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleAddTag = () => {
-    const trimmed = tagInput.trim().toLowerCase();
+  // Extracted URL metadata state
+  const [urlMeta, setUrlMeta] = useState<ExtractedUrlMetadata | null>(null);
+
+  // Detect and extract metadata whenever URL changes
+  useEffect(() => {
+    if (kind !== 'link' || !url.trim()) {
+      setUrlMeta(null);
+      return;
+    }
+
+    const normalized = normalizeUrl(url.trim());
+    if (normalized) {
+      const fastMeta = extractUrlMetadataFromUrl(normalized);
+      setUrlMeta(fastMeta);
+
+      // Async live fetch
+      let isCurrent = true;
+      enrichUrlMetadata(normalized, title, userNote).then((enriched) => {
+        if (isCurrent) {
+          setUrlMeta(enriched);
+        }
+      });
+
+      return () => {
+        isCurrent = false;
+      };
+    } else {
+      setUrlMeta(null);
+    }
+  }, [url, kind]);
+
+  const handleAddTag = (customTag?: string) => {
+    const trimmed = (customTag !== undefined ? customTag : tagInput).trim().toLowerCase();
     if (trimmed && !tags.includes(trimmed) && tags.length < 30) {
       setTags([...tags, trimmed]);
-      setTagInput('');
+      if (customTag === undefined) setTagInput('');
     }
   };
 
@@ -53,18 +88,24 @@ export default function NewInspirationScreen() {
   };
 
   const handleSave = async () => {
-    if (!user) return;
     setValidationError(null);
 
     const normalized = url.trim() ? normalizeUrl(url.trim()) : null;
-    const computedTitle = title.trim() || (normalized ? `Saved link from ${extractDomain(normalized)}` : 'Personal Note');
+    const computedTitle =
+      title.trim() ||
+      urlMeta?.title ||
+      (normalized ? `Saved link from ${extractDomain(normalized)}` : 'Personal Note');
+
+    // Combine user tags with auto-tags
+    const autoTags = urlMeta?.autoTags || [];
+    const combinedTags = Array.from(new Set([...tags, ...autoTags]));
 
     const validation = InspirationCreateSchema.safeParse({
       title: computedTitle,
       url: normalized,
       userNote: userNote.trim() || null,
       kind,
-      tags,
+      tags: combinedTags,
     });
 
     if (!validation.success) {
@@ -74,76 +115,13 @@ export default function NewInspirationScreen() {
 
     setLoading(true);
     try {
-      const platform = normalized ? detectPlatform(normalized) : null;
-      const domain = normalized ? extractDomain(normalized) : null;
+      const platform = urlMeta?.platform || (normalized ? detectPlatform(normalized) : null);
+      const domain = urlMeta?.domain || (normalized ? extractDomain(normalized) : null);
       const hash = generateContentHash(normalized || userNote.trim());
-      if (!user) {
-        const newItem: InspirationItem = {
-          id: `dump-${Date.now()}`,
-          ownerUid: 'test',
-          kind,
-          folder: 'dump',
-          title: computedTitle,
-          url: url.trim() || null,
-          normalizedUrl: normalized,
-          sharedText: kind === 'note' ? userNote.trim() : null,
-          userNote: userNote.trim() || null,
-          sourcePlatform: platform,
-          sourceDomain: domain,
-          sourceApp: platform ? platform.toUpperCase() : 'Manual',
-          previewDescription: computedTitle,
-          remotePreviewImageUrl: null,
-          tags,
-          aiTags: platform ? [platform] : [],
-          concepts: tags,
-          aiSummary: userNote.trim() || null,
-          processingStatus: 'ready',
-          processingErrorCode: null,
-          duplicateOf: hash,
-          archived: false,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          capturedAt: Date.now(),
-        };
+      const previewDesc = urlMeta?.description || computedTitle;
+      const editorialContext = urlMeta?.editorialContext || (userNote.trim() ? `Note: ${userNote.trim()}` : null);
+      const concepts = urlMeta?.concepts || combinedTags.slice(0, 4);
 
-        const existing = await getDumpInspirations();
-        await setDumpInspirations([newItem, ...existing]);
-        router.back();
-        return;
-      }
-
-      await addDoc(collection(db, 'users', user.uid, 'inspirations'), {
-        ownerUid: user.uid,
-        kind,
-        folder: 'dump',
-        title: computedTitle,
-        url: url.trim() || null,
-        normalizedUrl: normalized,
-        sharedText: kind === 'note' ? userNote.trim() : null,
-        userNote: userNote.trim() || null,
-        sourcePlatform: platform,
-        sourceDomain: domain,
-        sourceApp: platform ? platform.toUpperCase() : 'Manual',
-        previewDescription: null,
-        remotePreviewImageUrl: null,
-        tags,
-        aiTags: [],
-        concepts: [],
-        aiSummary: null,
-        processingStatus: 'ready',
-        processingErrorCode: null,
-        duplicateOf: hash,
-        archived: false,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        capturedAt: Date.now(),
-      });
-
-      router.back();
-    } catch (err: any) {
-      // Local fallback
-      const platform = normalized ? detectPlatform(normalized) : null;
-      const domain = normalized ? extractDomain(normalized) : null;
       const newItem: InspirationItem = {
         id: `dump-${Date.now()}`,
         ownerUid: user?.uid || DUMMY_USER_UID,
@@ -156,23 +134,37 @@ export default function NewInspirationScreen() {
         userNote: userNote.trim() || null,
         sourcePlatform: platform,
         sourceDomain: domain,
-        sourceApp: platform ? platform.toUpperCase() : 'Manual',
-        previewDescription: computedTitle,
-        remotePreviewImageUrl: null,
-        tags,
-        aiTags: platform ? [platform] : [],
-        concepts: tags,
-        aiSummary: userNote.trim() || null,
+        sourceApp: urlMeta?.siteName || (platform ? platform.toUpperCase() : 'Manual'),
+        siteName: urlMeta?.siteName || null,
+        previewDescription: previewDesc,
+        remotePreviewImageUrl: urlMeta?.previewImageUrl || null,
+        editorialContext,
+        tags: combinedTags,
+        aiTags: autoTags.length > 0 ? autoTags : (platform ? [platform] : []),
+        concepts,
+        aiSummary: editorialContext || userNote.trim() || null,
         processingStatus: 'ready',
         processingErrorCode: null,
-        duplicateOf: null,
+        duplicateOf: hash,
         archived: false,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         capturedAt: Date.now(),
       };
+
+      if (!user || user.uid === DUMMY_USER_UID) {
+        const existing = await getDumpInspirations();
+        await setDumpInspirations([newItem, ...existing]);
+        router.back();
+        return;
+      }
+
+      await addDoc(collection(db, 'users', user.uid, 'inspirations'), newItem);
       const existing = await getDumpInspirations();
       await setDumpInspirations([newItem, ...existing]);
+      router.back();
+    } catch (err: any) {
+      // Local fallback
       router.back();
     } finally {
       setLoading(false);
@@ -181,10 +173,10 @@ export default function NewInspirationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="MANUAL" message="Add a link or idea note to your dump" />
+      <AnnouncementBar pillText="DUMP INSPIRATION" message="Raw link or note into your bank" />
       <TopNav
         title="rut"
-        subtitle="New Inspiration"
+        subtitle="New Dump Material"
         onBack={() => {
           if (router.canGoBack()) {
             router.back();
@@ -192,7 +184,7 @@ export default function NewInspirationScreen() {
             router.replace('/(app)/(tabs)/bank');
           }
         }}
-        backTitle="DUMP"
+        backTitle="BANK"
         rightAction={
           <Button
             title="✕ CLOSE"
@@ -229,22 +221,72 @@ export default function NewInspirationScreen() {
           </View>
 
           {kind === 'link' ? (
-            <Input
-              label="WEB URL"
-              value={url}
-              onChangeText={setUrl}
-              placeholder="https://example.com/article"
-              keyboardType="url"
-              autoCapitalize="none"
-              error={validationError && validationError.includes('URL') ? validationError : undefined}
-            />
+            <View>
+              <Input
+                label="WEB URL"
+                value={url}
+                onChangeText={setUrl}
+                placeholder="https://example.com/article"
+                keyboardType="url"
+                autoCapitalize="none"
+                error={validationError && validationError.includes('URL') ? validationError : undefined}
+              />
+
+              {/* Rich Real-Time Metadata & Auto-Tags Preview */}
+              {urlMeta ? (
+                <Card style={styles.metaPreviewCard}>
+                  <View style={styles.metaPreviewHeader}>
+                    <Badge label={urlMeta.platform.toUpperCase()} variant="inverse" style={{ marginRight: 6 }} />
+                    <Badge label={urlMeta.siteName || 'WEB'} variant="outline" />
+                  </View>
+
+                  {urlMeta.previewImageUrl ? (
+                    <Image
+                      source={{ uri: urlMeta.previewImageUrl }}
+                      style={styles.previewThumb}
+                      resizeMode="cover"
+                    />
+                  ) : null}
+
+                  <Text style={styles.metaPreviewTitle} numberOfLines={2}>
+                    {urlMeta.title}
+                  </Text>
+
+                  <Text style={styles.metaPreviewContext}>
+                    {urlMeta.editorialContext}
+                  </Text>
+
+                  {urlMeta.autoTags.length > 0 ? (
+                    <View style={styles.autoTagSection}>
+                      <Text style={styles.autoTagHeader}>DETECTED AUTO-TAGS:</Text>
+                      <View style={styles.autoTagRow}>
+                        {urlMeta.autoTags.map((t) => (
+                          <Badge
+                            key={t}
+                            label={`#${t}`}
+                            variant="inverse"
+                            style={{ marginRight: 6, marginBottom: 4 }}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                </Card>
+              ) : null}
+            </View>
           ) : null}
 
           <Input
             label="TITLE"
             value={title}
             onChangeText={setTitle}
-            placeholder={kind === 'link' ? 'Optional title (defaults to domain)' : 'Note headline'}
+            placeholder={
+              urlMeta?.title
+                ? `Auto: ${urlMeta.title.slice(0, 45)}...`
+                : kind === 'link'
+                ? 'Optional title (auto-detected from URL)'
+                : 'Note headline'
+            }
             error={validationError && validationError.includes('Title') ? validationError : undefined}
           />
 
@@ -260,27 +302,28 @@ export default function NewInspirationScreen() {
 
           <View style={styles.tagSection}>
             <Input
-              label="TAGS"
+              label="ADDITIONAL CUSTOM TAGS"
               value={tagInput}
               onChangeText={setTagInput}
               placeholder="Add tag and press Enter"
-              onSubmitEditing={handleAddTag}
+              onSubmitEditing={() => handleAddTag()}
             />
             <Button
               title="+ ADD TAG"
               variant="secondary"
-              onPress={handleAddTag}
+              onPress={() => handleAddTag()}
               style={{ marginBottom: spacing.xs }}
             />
 
             <View style={styles.tagWrap}>
               {tags.map((t) => (
-                <Badge
-                  key={t}
-                  label={`${t} ✕`}
-                  variant="outline"
-                  style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
-                />
+                <Pressable key={t} onPress={() => handleRemoveTag(t)}>
+                  <Badge
+                    label={`${t} ✕`}
+                    variant="outline"
+                    style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
+                  />
+                </Pressable>
               ))}
             </View>
           </View>
@@ -308,16 +351,64 @@ const getStyles = (colors: ThemeColors) =>
     maxWidth: 600,
     width: '100%',
     alignSelf: 'center',
+    paddingBottom: spacing['2xl'],
   },
   kindSelector: {
     flexDirection: 'row',
     marginBottom: spacing.base,
   },
-  tagSection: {
+  metaPreviewCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    padding: spacing.base,
+    marginBottom: spacing.base,
+  },
+  metaPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  metaPreviewTitle: {
+    ...typography.bodyMd,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  metaPreviewContext: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
+  },
+  previewThumb: {
+    width: '100%',
+    height: 120,
+    backgroundColor: colors.canvas,
+    marginBottom: spacing.xs,
+  },
+  autoTagSection: {
     marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineGrade,
+  },
+  autoTagHeader: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    marginBottom: 4,
+  },
+  autoTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tagSection: {
+    marginVertical: spacing.sm,
   },
   tagWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginTop: spacing.xs,
   },
 });

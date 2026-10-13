@@ -15,6 +15,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../lib/firebase/client';
 import { DUMMY_USER_UID } from '../auth/AuthContext';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../types';
+import { getDumpInspirations } from '../dump/dumpService';
 
 const CHATS_STORAGE_KEY = '@rut_chats_v2';
 const MESSAGES_STORAGE_PREFIX = '@rut_chat_messages_v2:';
@@ -318,8 +319,16 @@ export function synthesizeThoughtTrain(params: {
 } {
   const { userQuery, ideaContext, pinnedInspirations = [], allInspirations = [] } = params;
   const q = userQuery.toLowerCase();
+  const isDumpPullQuery =
+    q.includes('dump') ||
+    q.includes('pull') ||
+    q.includes('check') ||
+    q.includes('inspiration') ||
+    q.includes('bank') ||
+    q.includes('saved') ||
+    q.includes('reference');
 
-  // Combine reference candidates
+  // Combine reference candidates: pinned first, then all dump items
   const candidatePool = [...pinnedInspirations];
   for (const item of allInspirations) {
     if (!candidatePool.some((c) => c.id === item.id)) {
@@ -338,7 +347,7 @@ export function synthesizeThoughtTrain(params: {
 
   const scoredCandidates = candidatePool.map((item) => {
     let score = 0;
-    const itemText = `${item.title} ${item.previewDescription || ''} ${item.userNote || ''} ${item.tags?.join(' ') || ''} ${item.aiTags?.join(' ') || ''} ${item.concepts?.join(' ') || ''}`.toLowerCase();
+    const itemText = `${item.title} ${item.previewDescription || ''} ${item.userNote || ''} ${item.editorialContext || ''} ${item.sourceDomain || ''} ${item.siteName || ''} ${item.tags?.join(' ') || ''} ${item.aiTags?.join(' ') || ''} ${item.concepts?.join(' ') || ''}`.toLowerCase();
 
     for (const t of queryTokens) {
       if (itemText.includes(t)) score += 3;
@@ -354,21 +363,39 @@ export function synthesizeThoughtTrain(params: {
   });
 
   scoredCandidates.sort((a, b) => b.score - a.score);
-  const topMatches = scoredCandidates.slice(0, 3).filter((sc) => sc.score > 0);
-  const citedIds = topMatches.map((m) => m.item.id);
+  let topMatches = scoredCandidates.slice(0, 4).filter((sc) => sc.score > 0);
 
-  // Formulate editorial thought train synthesis
+  // If user specifically asked to check/pull from dump and no match scored, pull newest from dump
+  if (topMatches.length === 0 && allInspirations.length > 0 && isDumpPullQuery) {
+    topMatches = allInspirations.slice(0, 3).map((item) => ({ item, score: 1 }));
+  }
+
+  const citedIds = topMatches.map((m) => m.item.id);
   const ideaTitle = ideaContext?.title || 'This Concept';
-  const citationsText = topMatches.length > 0
-    ? `\n\n**REFERENCED INSPIRATIONS:**\n` +
-      topMatches
-        .map((m) => `• [ID: ${m.item.id}] "${m.item.title}" (${m.item.sourcePlatform ? m.item.sourcePlatform.toUpperCase() : 'WEB'})`)
-        .join('\n')
-    : '';
 
   let body = '';
 
-  if (q.includes('variation') || q.includes('angle') || q.includes('alternative') || q.includes('different')) {
+  if (isDumpPullQuery && topMatches.length > 0) {
+    body = `### 📥 PULLED FROM YOUR DUMP & INSPIRATION BANK
+
+We searched your inspiration bank and pulled the following reference materials for "${ideaTitle}":
+
+${topMatches
+  .map((m, idx) => {
+    const item = m.item;
+    const tagList = (item.tags || []).length > 0 ? `#${item.tags.join(' #')}` : 'none';
+    const domainStr = item.siteName || item.sourceDomain || (item.sourcePlatform ? item.sourcePlatform.toUpperCase() : 'Web');
+    return `${idx + 1}. **"${item.title}"** [ID: ${item.id}]
+   • **Source**: ${domainStr}${item.url ? ` (${item.url})` : ''}
+   • **Auto-Tags**: ${tagList}
+   • **Context**: ${item.editorialContext || item.previewDescription || item.userNote || 'Visual design reference'}
+   • **Relevance**: Informs the design direction for "${ideaTitle}" with structural clarity and aesthetic focus.`;
+  })
+  .join('\n\n')}
+
+### STRATEGIC NEXT MOVE
+Use these pulled references to ground your design decisions. Tap any source card below to view details in your Bank.`;
+  } else if (q.includes('variation') || q.includes('angle') || q.includes('alternative') || q.includes('different')) {
     body = `### CONCEPTUAL ANGLES FOR "${ideaTitle.toUpperCase()}"
 
 1. **Monolithic & Minimalist Approach**:
@@ -416,6 +443,17 @@ Exploring "${ideaTitle}":
   Consider how this element will interact with the editorial baseline—maintaining hard 0px geometry and rigorous contrast.`;
   }
 
+  const citationsText =
+    topMatches.length > 0 && !isDumpPullQuery
+      ? `\n\n**REFERENCED INSPIRATIONS:**\n` +
+        topMatches
+          .map(
+            (m) =>
+              `• [ID: ${m.item.id}] "${m.item.title}" (${m.item.siteName || m.item.sourcePlatform || 'WEB'})`
+          )
+          .join('\n')
+      : '';
+
   const fullResponse = `${body}${citationsText}`;
 
   return {
@@ -447,6 +485,12 @@ export async function sendChatMessage(
 ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> {
   const cleanContent = messageContent.trim();
   const uid = options?.uid || DUMMY_USER_UID;
+
+  // Ensure all inspirations are available for dump inspection
+  let allInspirations = options?.allInspirations || [];
+  if (allInspirations.length === 0) {
+    allInspirations = await getDumpInspirations();
+  }
 
   // 1. Create and save user message locally
   const userMessageId = `msg-user-${Date.now()}`;

@@ -7,6 +7,13 @@ export type SourcePlatform =
   | 'x'
   | 'threads'
   | 'youtube'
+  | 'behance'
+  | 'dribbble'
+  | 'arena'
+  | 'github'
+  | 'vimeo'
+  | 'medium'
+  | 'substack'
   | 'web'
   | 'other';
 
@@ -25,8 +32,11 @@ export interface InspirationItem {
   sourcePlatform: SourcePlatform | null;
   sourceDomain: string | null;
   sourceApp: string | null;
+  siteName?: string | null;
+  author?: string | null;
   previewDescription: string | null;
   remotePreviewImageUrl: string | null;
+  editorialContext?: string | null;
   tags: string[];
   aiTags: string[];
   concepts: string[];

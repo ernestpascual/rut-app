@@ -36,6 +36,7 @@ import {
   setDumpInspirations,
   sortDumpItems,
   DumpSortOption,
+  enrichInspirationItem,
 } from '../../../../src/features/dump/dumpService';
 
 export default function BankScreen() {
@@ -84,7 +85,8 @@ export default function BankScreen() {
           if (!isMounted) return;
           const fetched: InspirationItem[] = [];
           snapshot.forEach((docSnap) => {
-            fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
+            const rawItem = { id: docSnap.id, ...(docSnap.data() as any) } as InspirationItem;
+            fetched.push(enrichInspirationItem(rawItem));
           });
           setItems(fetched);
           setLoading(false);
@@ -159,7 +161,20 @@ export default function BankScreen() {
     }
   };
 
-  const platforms = ['ALL', 'PINTEREST', 'INSTAGRAM', 'TIKTOK', 'X', 'THREADS', 'YOUTUBE', 'WEB'];
+  const platforms = [
+    'ALL',
+    'BEHANCE',
+    'ARE.NA',
+    'DRIBBBLE',
+    'PINTEREST',
+    'INSTAGRAM',
+    'TIKTOK',
+    'X',
+    'THREADS',
+    'YOUTUBE',
+    'GITHUB',
+    'WEB',
+  ];
 
   const sortOptionsList: Array<{ label: string; value: DumpSortOption }> = [
     { label: 'NEWEST', value: 'newest' },
@@ -480,12 +495,15 @@ export default function BankScreen() {
                     <Badge
                       label={item.sourcePlatform.toUpperCase()}
                       variant="inverse"
+                      style={{ marginRight: 4 }}
                     />
                   ) : (
-                    <Badge label={item.kind.toUpperCase()} variant="grade" />
+                    <Badge label={item.kind.toUpperCase()} variant="grade" style={{ marginRight: 4 }} />
                   )}
-                  {item.sourceDomain ? (
-                    <Badge label={item.sourceDomain} variant="outline" />
+                  {item.siteName ? (
+                    <Badge label={item.siteName} variant="outline" style={{ marginRight: 4 }} />
+                  ) : item.sourceDomain ? (
+                    <Badge label={item.sourceDomain} variant="outline" style={{ marginRight: 4 }} />
                   ) : null}
                 </View>
 
@@ -511,17 +529,20 @@ export default function BankScreen() {
 
               <Text style={styles.itemTitle}>{item.title}</Text>
 
-              {item.aiSummary ? (
+              {/* Rich Context & Auto-Summary */}
+              {item.editorialContext ? (
+                <View style={styles.contextContainer}>
+                  <Text style={styles.contextText} numberOfLines={2}>
+                    {item.editorialContext}
+                  </Text>
+                </View>
+              ) : item.aiSummary ? (
                 <Text style={styles.aiSummary} numberOfLines={2}>
                   {item.aiSummary}
                 </Text>
               ) : item.userNote ? (
                 <Text style={styles.userNote} numberOfLines={2}>
                   {item.userNote}
-                </Text>
-              ) : item.sharedText ? (
-                <Text style={styles.userNote} numberOfLines={2}>
-                  {item.sharedText}
                 </Text>
               ) : null}
 
@@ -533,13 +554,10 @@ export default function BankScreen() {
                 </Pressable>
               ) : null}
 
-              {/* Tags */}
+              {/* Tags & Auto-Tags */}
               <View style={styles.itemTagRow}>
-                {(item.tags || []).slice(0, 4).map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" />
-                ))}
-                {(item.aiTags || []).slice(0, 3).map((t) => (
-                  <Badge key={t} label={`*${t}`} variant="outline" />
+                {(item.tags || []).slice(0, 6).map((t) => (
+                  <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
                 ))}
               </View>
             </Card>
@@ -753,6 +771,20 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: spacing.xxs,
+  },
+  contextContainer: {
+    backgroundColor: colors.surfaceGrade,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.ink,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
+    marginBottom: spacing.xs,
+  },
+  contextText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    lineHeight: 18,
+    fontStyle: 'italic',
   },
   centerBox: {
     flex: 1,
