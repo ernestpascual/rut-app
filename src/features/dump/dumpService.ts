@@ -46,6 +46,8 @@ export function enrichInspirationItem(item: InspirationItem): InspirationItem {
   if (!item.url) return item;
   const meta = extractUrlMetadataFromUrl(item.url, item.sharedText || item.userNote || undefined);
   const combinedTags = Array.from(new Set([...(item.tags || []), ...meta.autoTags]));
+  const deduplicatedAiTags = Array.from(new Set(item.aiTags && item.aiTags.length > 0 ? item.aiTags : meta.autoTags));
+  const deduplicatedConcepts = Array.from(new Set(item.concepts && item.concepts.length > 0 ? item.concepts : meta.concepts));
   return {
     ...item,
     author: item.author || meta.author || null,
@@ -56,8 +58,8 @@ export function enrichInspirationItem(item: InspirationItem): InspirationItem {
     remotePreviewImageUrl: item.remotePreviewImageUrl || meta.previewImageUrl || null,
     userNote: item.userNote || (meta.author || meta.caption ? formatNotesWithCaption(meta.author, meta.caption) : null),
     tags: combinedTags,
-    aiTags: item.aiTags && item.aiTags.length > 0 ? item.aiTags : meta.autoTags,
-    concepts: item.concepts && item.concepts.length > 0 ? item.concepts : meta.concepts,
+    aiTags: deduplicatedAiTags,
+    concepts: deduplicatedConcepts,
     editorialContext: item.editorialContext || meta.editorialContext,
     previewDescription: item.previewDescription || meta.caption || meta.description,
   };

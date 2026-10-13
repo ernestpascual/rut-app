@@ -206,8 +206,8 @@ export default function ShareTargetScreen() {
           {extractedMeta?.autoTags && extractedMeta.autoTags.length > 0 ? (
             <View style={styles.autoTagRow}>
               <Text style={[styles.autoTagLabel, { color: colors.inkSoft }]}>AUTO TAGS: </Text>
-              {extractedMeta.autoTags.slice(0, 6).map((tag) => (
-                <Badge key={tag} label={`#${tag}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
+              {Array.from(new Set(extractedMeta.autoTags)).slice(0, 6).map((tag, idx) => (
+                <Badge key={`share-meta-tag-${tag}-${idx}`} label={`#${tag}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
               ))}
             </View>
           ) : null}
@@ -252,9 +252,9 @@ export default function ShareTargetScreen() {
           />
 
           <View style={styles.tagWrap}>
-            {tags.map((tag) => (
+            {Array.from(new Set(tags)).map((tag, idx) => (
               <Badge
-                key={tag}
+                key={`share-tag-${tag}-${idx}`}
                 label={`${tag} ✕`}
                 variant="outline"
                 style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}

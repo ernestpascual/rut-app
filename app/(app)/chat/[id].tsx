@@ -828,8 +828,8 @@ export default function ChatWorkspaceScreen() {
 
                       {bItem.tags && bItem.tags.length > 0 ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 }}>
-                          {bItem.tags.slice(0, 5).map((t) => (
-                            <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
+                          {Array.from(new Set(bItem.tags)).slice(0, 5).map((t, idx) => (
+                            <Badge key={`dump-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
                           ))}
                         </View>
                       ) : null}

@@ -630,9 +630,9 @@ export default function ProjectDetailScreen() {
             </View>
 
             <View style={styles.tagRow}>
-              {editTags.map((t) => (
+              {Array.from(new Set(editTags)).map((t, idx) => (
                 <Pressable
-                  key={t}
+                  key={`edit-tag-${t}-${idx}`}
                   onPress={() => setEditTags(editTags.filter((tag) => tag !== t))}
                 >
                   <Badge label={`#${t} ✕`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
@@ -672,8 +672,8 @@ export default function ProjectDetailScreen() {
             {/* TAGS */}
             {(project.tags || []).length > 0 ? (
               <View style={[styles.tagRow, { marginBottom: spacing.base }]}>
-                {project.tags.map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4 }} />
+                {Array.from(new Set(project.tags)).map((t, idx) => (
+                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4 }} />
                 ))}
               </View>
             ) : null}
@@ -867,8 +867,8 @@ export default function ProjectDetailScreen() {
 
                         {item?.tags && item.tags.length > 0 ? (
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                            {item.tags.slice(0, 4).map((t) => (
-                              <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
+                            {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
+                              <Badge key={`item-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
                             ))}
                           </View>
                         ) : null}

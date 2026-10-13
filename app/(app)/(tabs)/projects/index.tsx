@@ -170,8 +170,8 @@ export default function ProjectsListScreen() {
               <View style={styles.tagRow}>
                 <Badge label="INSPIRATION MATCHER" variant="outline" />
                 <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
-                {(item.tags || []).map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" />
+                {Array.from(new Set(item.tags || [])).map((t, idx) => (
+                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
                 ))}
               </View>
 
@@ -225,8 +225,8 @@ export default function ProjectsListScreen() {
               <View style={styles.tagRow}>
                 <Badge label="INSPIRATION MATCHER" variant="outline" />
                 <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
-                {(item.tags || []).map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" />
+                {Array.from(new Set(item.tags || [])).map((t, idx) => (
+                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
                 ))}
               </View>
 

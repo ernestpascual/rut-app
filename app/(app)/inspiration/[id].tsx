@@ -290,9 +290,9 @@ export default function InspirationDetailScreen() {
                 style={{ marginBottom: spacing.xs }}
               />
               <View style={styles.tagRow}>
-                {editTags.map((t) => (
+                {Array.from(new Set(editTags)).map((t, idx) => (
                   <Badge
-                    key={t}
+                    key={`edit-${t}-${idx}`}
                     label={`${t} ✕`}
                     variant="outline"
                     style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
@@ -389,8 +389,8 @@ export default function InspirationDetailScreen() {
                   <View style={styles.conceptSection}>
                     <Text style={styles.conceptHeading}>EXTRACTED CONCEPTS:</Text>
                     <View style={styles.tagRow}>
-                      {item.concepts.map((c) => (
-                        <Badge key={c} label={c} variant="outline" />
+                      {Array.from(new Set(item.concepts)).map((c, idx) => (
+                        <Badge key={`concept-${c}-${idx}`} label={c} variant="outline" />
                       ))}
                     </View>
                   </View>
@@ -416,8 +416,8 @@ export default function InspirationDetailScreen() {
             <View style={styles.tagSection}>
               <Text style={styles.noteHeading}>TAGS</Text>
               <View style={styles.tagRow}>
-                {[...(item.tags || []), ...(item.aiTags || [])].map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" />
+                {Array.from(new Set([...(item.tags || []), ...(item.aiTags || [])])).map((t, idx) => (
+                  <Badge key={`tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
                 ))}
               </View>
             </View>

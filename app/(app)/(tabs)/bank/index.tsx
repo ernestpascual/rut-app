@@ -338,8 +338,8 @@ export default function BankScreen() {
         ) : null}
 
         <View style={styles.itemTagRow}>
-          {(item.tags || []).slice(0, 6).map((t) => (
-            <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
+          {Array.from(new Set(item.tags || [])).slice(0, 6).map((t, idx) => (
+            <Badge key={`tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
           ))}
         </View>
       </View>
@@ -603,9 +603,9 @@ export default function BankScreen() {
               <>
                 <Text style={[styles.panelSectionLabel, { marginTop: spacing.xs }]}>TAGS</Text>
                 <View style={styles.tagFilterRow}>
-                  {allTags.map((tag) => (
+                  {allTags.map((tag, idx) => (
                     <Pressable
-                      key={tag}
+                      key={`filter-tag-${tag}-${idx}`}
                       onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
                     >
                       <Badge

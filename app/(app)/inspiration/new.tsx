@@ -306,9 +306,9 @@ export default function NewInspirationScreen() {
                     <View style={styles.autoTagSection}>
                       <Text style={styles.autoTagHeader}>DETECTED AUTO-TAGS:</Text>
                       <View style={styles.autoTagRow}>
-                        {urlMeta.autoTags.map((t) => (
+                        {Array.from(new Set(urlMeta.autoTags)).map((t, idx) => (
                           <Badge
-                            key={t}
+                            key={`auto-tag-${t}-${idx}`}
                             label={`#${t}`}
                             variant="inverse"
                             style={{ marginRight: 6, marginBottom: 4 }}
@@ -362,8 +362,8 @@ export default function NewInspirationScreen() {
             />
 
             <View style={styles.tagWrap}>
-              {tags.map((t) => (
-                <Pressable key={t} onPress={() => handleRemoveTag(t)}>
+              {Array.from(new Set(tags)).map((t, idx) => (
+                <Pressable key={`new-tag-${t}-${idx}`} onPress={() => handleRemoveTag(t)}>
                   <Badge
                     label={`${t} ✕`}
                     variant="outline"

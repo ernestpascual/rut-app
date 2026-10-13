@@ -191,9 +191,9 @@ export default function NewProjectScreen() {
             style={{ marginBottom: spacing.xs }}
           />
           <View style={styles.tagWrap}>
-            {tags.map((t) => (
+            {Array.from(new Set(tags)).map((t, idx) => (
               <Badge
-                key={t}
+                key={`new-proj-tag-${t}-${idx}`}
                 label={`${t} ✕`}
                 variant="outline"
                 style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
