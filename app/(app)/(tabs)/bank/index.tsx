@@ -9,6 +9,7 @@ import {
   Linking,
   Image,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -776,9 +777,23 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
   listContent: {
     padding: spacing.base,
     paddingBottom: 100,
+    ...(Platform.OS === 'web'
+      ? {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: spacing.base,
+          alignItems: 'flex-start',
+        }
+      : {}),
   },
   itemCard: {
     marginBottom: spacing.sm,
+    ...(Platform.OS === 'web'
+      ? {
+          width: 400,
+          maxWidth: '100%',
+        }
+      : {}),
   },
   cardHeader: {
     flexDirection: 'row',
