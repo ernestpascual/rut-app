@@ -6,6 +6,9 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Platform,
+  useWindowDimensions,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -30,7 +33,9 @@ export default function ProjectsListScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors } = useTheme();
-  const styles = useMemo(() => getStyles(colors), [colors]);
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth >= 640;
+  const styles = useMemo(() => getStyles(colors, isDesktop), [colors, isDesktop]);
   const isDummy = !user || user.uid === DUMMY_USER_UID;
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -135,6 +140,62 @@ export default function ProjectsListScreen() {
             style={{ marginTop: spacing.base }}
           />
         </View>
+      ) : isDesktop ? (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator
+        >
+          {projects.map((item) => (
+            <Card
+              key={item.id}
+              onPress={() => router.push(`/(app)/project/${item.id}`)}
+              style={styles.projectCard}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.projectTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Badge
+                  label={item.status.toUpperCase()}
+                  variant={item.status === 'active' ? 'inverse' : 'grade'}
+                />
+              </View>
+
+              {item.brief ? (
+                <Text style={styles.briefText} numberOfLines={3}>
+                  {item.brief}
+                </Text>
+              ) : null}
+
+              <View style={styles.tagRow}>
+                <Badge label="INSPIRATION MATCHER" variant="outline" />
+                <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
+                {(item.tags || []).map((t) => (
+                  <Badge key={t} label={`#${t}`} variant="grade" />
+                ))}
+              </View>
+
+              <View style={styles.cardFooterRow}>
+                <Text style={styles.cardFooterSub}>
+                  {item.thoughtCount ? `${item.thoughtCount} THOUGHTS LOGGED` : 'CONNECTED TO BANK'}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Button
+                    title="DELETE"
+                    variant="text"
+                    onPress={() => handleDeleteProject(item.id, item.title)}
+                    style={{ marginRight: spacing.xs }}
+                  />
+                  <Button
+                    title="THINK →"
+                    variant="text"
+                    onPress={() => router.push(`/(app)/project/${item.id}`)}
+                  />
+                </View>
+              </View>
+            </Card>
+          ))}
+        </ScrollView>
       ) : (
         <FlatList
           data={projects}
@@ -195,8 +256,8 @@ export default function ProjectsListScreen() {
   );
 }
 
-const getStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const getStyles = (colors: ThemeColors, isDesktop: boolean) =>
+  StyleSheet.create<any>({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -204,9 +265,19 @@ const getStyles = (colors: ThemeColors) =>
   listContent: {
     padding: spacing.base,
     paddingBottom: 100,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
+    ...(Platform.OS === 'web' && isDesktop
+      ? {
+          display: 'grid' as any,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+          gap: spacing.base,
+        }
+      : {}),
   },
   projectCard: {
-    marginBottom: spacing.sm,
+    marginBottom: isDesktop ? 0 : spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',

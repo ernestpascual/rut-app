@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   useWindowDimensions,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,6 +49,7 @@ export default function BankScreen() {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && windowWidth >= 640;
+  const canSpan2 = isDesktop && windowWidth >= 1024;
   const styles = useMemo(() => getStyles(colors, isDark, isDesktop), [colors, isDark, isDesktop]);
   const isDummy = !user || user.uid === DUMMY_USER_UID;
 
@@ -252,6 +254,150 @@ export default function BankScreen() {
 
   // Apply sorting
   const sortedAndFilteredItems = sortDumpItems(filtered, sortOption);
+
+  const renderCardContent = (item: InspirationItem, isBento = false, index = 0) => {
+    const hasImage = Boolean(showImages && item.remotePreviewImageUrl);
+    const hasRichText = Boolean(item.caption || item.editorialContext || item.aiSummary || item.userNote);
+    const isFeatured = isBento && canSpan2 && hasImage && hasRichText && (index % 5 === 0 || index % 7 === 0);
+
+    const badgeHeader = (
+      <View style={styles.cardHeader}>
+        <View style={styles.badgeRow}>
+          <Badge label="📁 DUMP" variant="grade" style={{ marginRight: 4 }} />
+          {item.sourcePlatform ? (
+            <Badge
+              label={item.sourcePlatform.toUpperCase()}
+              variant="inverse"
+              style={{ marginRight: 4 }}
+            />
+          ) : (
+            <Badge label={item.kind.toUpperCase()} variant="grade" style={{ marginRight: 4 }} />
+          )}
+          {item.author ? (
+            <Badge
+              label={item.author.startsWith('@') ? item.author : `@${item.author}`}
+              variant="grade"
+              style={{ marginRight: 4 }}
+            />
+          ) : null}
+          {item.siteName ? (
+            <Badge label={item.siteName} variant="outline" style={{ marginRight: 4 }} />
+          ) : item.sourceDomain ? (
+            <Badge label={item.sourceDomain} variant="outline" style={{ marginRight: 4 }} />
+          ) : null}
+        </View>
+
+        {item.processingStatus === 'pending' || item.processingStatus === 'processing' ? (
+          <Badge label="AI INDEXING..." variant="grade" />
+        ) : item.processingStatus === 'failed' ? (
+          <Pressable onPress={() => handleRetryIndexing(item.id)}>
+            <Badge label="FAILED (RETRY)" variant="outline" />
+          </Pressable>
+        ) : null}
+      </View>
+    );
+
+    const titleAndContext = (
+      <>
+        <Text style={styles.itemTitle}>{item.title}</Text>
+
+        {item.caption ? (
+          <View style={styles.captionContainer}>
+            <Text style={styles.captionText} numberOfLines={isFeatured ? 3 : 2}>
+              📝 "{item.caption}"
+            </Text>
+          </View>
+        ) : null}
+
+        {item.editorialContext ? (
+          <View style={styles.contextContainer}>
+            <Text style={styles.contextText} numberOfLines={isFeatured ? 4 : 2}>
+              {item.editorialContext}
+            </Text>
+          </View>
+        ) : item.aiSummary ? (
+          <Text style={styles.aiSummary} numberOfLines={isFeatured ? 4 : 2}>
+            {item.aiSummary}
+          </Text>
+        ) : item.userNote ? (
+          <Text style={styles.userNote} numberOfLines={isFeatured ? 3 : 2}>
+            {item.userNote}
+          </Text>
+        ) : null}
+      </>
+    );
+
+    const footerTagsAndUrl = (
+      <View style={styles.cardFooterArea}>
+        {item.url ? (
+          <Pressable onPress={() => Linking.openURL(item.url!)}>
+            <Text style={styles.sourceUrl} numberOfLines={1}>
+              ↗ {item.url}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <View style={styles.itemTagRow}>
+          {(item.tags || []).slice(0, 6).map((t) => (
+            <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
+          ))}
+        </View>
+      </View>
+    );
+
+    if (isFeatured) {
+      // High-impact 2-column horizontal Bento card
+      return (
+        <Card
+          key={item.id}
+          onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
+          style={styles.bentoCardFeatured}
+        >
+          <View style={styles.bentoFeaturedImageContainer}>
+            <Image
+              source={{ uri: item.remotePreviewImageUrl! }}
+              style={styles.previewImage}
+              resizeMode="cover"
+            />
+          </View>
+          <View style={styles.bentoFeaturedContent}>
+            <View>
+              {badgeHeader}
+              {titleAndContext}
+            </View>
+            {footerTagsAndUrl}
+          </View>
+        </Card>
+      );
+    }
+
+    // Standard modular card (Bento grid cell or mobile feed item)
+    return (
+      <Card
+        key={item.id}
+        onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
+        style={isBento ? styles.bentoCardStandard : styles.itemCard}
+      >
+        <View style={{ flex: 1 }}>
+          {badgeHeader}
+
+          {hasImage ? (
+            <View style={isBento ? styles.bentoImageContainer : styles.imageContainer}>
+              <Image
+                source={{ uri: item.remotePreviewImageUrl! }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
+            </View>
+          ) : null}
+
+          {titleAndContext}
+        </View>
+
+        {footerTagsAndUrl}
+      </Card>
+    );
+  };
 
 
   return (
@@ -520,106 +666,19 @@ export default function BankScreen() {
             style={{ marginTop: spacing.base }}
           />
         </View>
+      ) : isDesktop ? (
+        <ScrollView
+          contentContainerStyle={styles.bentoGridContainer}
+          showsVerticalScrollIndicator
+        >
+          {sortedAndFilteredItems.map((item, index) => renderCardContent(item, true, index))}
+        </ScrollView>
       ) : (
         <FlatList
           data={sortedAndFilteredItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <Card
-              onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
-              style={styles.itemCard}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.badgeRow}>
-                  <Badge label="📁 DUMP" variant="grade" style={{ marginRight: 4 }} />
-                  {item.sourcePlatform ? (
-                    <Badge
-                      label={item.sourcePlatform.toUpperCase()}
-                      variant="inverse"
-                      style={{ marginRight: 4 }}
-                    />
-                  ) : (
-                    <Badge label={item.kind.toUpperCase()} variant="grade" style={{ marginRight: 4 }} />
-                  )}
-                  {item.author ? (
-                    <Badge
-                      label={item.author.startsWith('@') ? item.author : `@${item.author}`}
-                      variant="grade"
-                      style={{ marginRight: 4 }}
-                    />
-                  ) : null}
-                  {item.siteName ? (
-                    <Badge label={item.siteName} variant="outline" style={{ marginRight: 4 }} />
-                  ) : item.sourceDomain ? (
-                    <Badge label={item.sourceDomain} variant="outline" style={{ marginRight: 4 }} />
-                  ) : null}
-                </View>
-
-                {item.processingStatus === 'pending' || item.processingStatus === 'processing' ? (
-                  <Badge label="AI INDEXING..." variant="grade" />
-                ) : item.processingStatus === 'failed' ? (
-                  <Pressable onPress={() => handleRetryIndexing(item.id)}>
-                    <Badge label="FAILED (RETRY)" variant="outline" />
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {/* Preview image if available and toggled ON */}
-              {showImages && item.remotePreviewImageUrl ? (
-                <View style={styles.imageContainer}>
-                  <Image
-                    source={{ uri: item.remotePreviewImageUrl }}
-                    style={styles.previewImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              ) : null}
-
-              <Text style={styles.itemTitle}>{item.title}</Text>
-
-              {/* Caption */}
-              {item.caption ? (
-                <View style={styles.captionContainer}>
-                  <Text style={styles.captionText} numberOfLines={2}>
-                    📝 "{item.caption}"
-                  </Text>
-                </View>
-              ) : null}
-
-              {/* Rich Context & Auto-Summary */}
-              {item.editorialContext ? (
-                <View style={styles.contextContainer}>
-                  <Text style={styles.contextText} numberOfLines={2}>
-                    {item.editorialContext}
-                  </Text>
-                </View>
-              ) : item.aiSummary ? (
-                <Text style={styles.aiSummary} numberOfLines={2}>
-                  {item.aiSummary}
-                </Text>
-              ) : item.userNote ? (
-                <Text style={styles.userNote} numberOfLines={2}>
-                  {item.userNote}
-                </Text>
-              ) : null}
-
-              {item.url ? (
-                <Pressable onPress={() => Linking.openURL(item.url!)}>
-                  <Text style={styles.sourceUrl} numberOfLines={1}>
-                    ↗ {item.url}
-                  </Text>
-                </Pressable>
-              ) : null}
-
-              {/* Tags & Auto-Tags */}
-              <View style={styles.itemTagRow}>
-                {(item.tags || []).slice(0, 6).map((t) => (
-                  <Badge key={t} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
-                ))}
-              </View>
-            </Card>
-          )}
+          renderItem={({ item, index }) => renderCardContent(item, false, index)}
         />
       )}
     </SafeAreaView>
@@ -627,7 +686,7 @@ export default function BankScreen() {
 }
 
 const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
-  StyleSheet.create({
+  StyleSheet.create<any>({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -637,6 +696,9 @@ const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
     paddingTop: spacing.xs,
     paddingBottom: spacing.xxs,
     backgroundColor: colors.canvas,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
   },
   controlTabsRow: {
     flexDirection: 'row',
@@ -778,28 +840,76 @@ const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
     flexWrap: 'wrap',
     marginTop: spacing.xs,
   },
-  listContent: {
+  bentoGridContainer: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
     paddingBottom: 100,
-    ...(isDesktop
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
+    ...(Platform.OS === 'web'
       ? {
+          display: 'grid' as any,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gridAutoFlow: 'dense',
+          gap: spacing.base,
+        }
+      : {
           flexDirection: 'row',
           flexWrap: 'wrap',
           gap: spacing.base,
           justifyContent: 'center',
-          alignItems: 'flex-start',
-        }
-      : {
-          flexDirection: 'column',
-          alignItems: 'stretch',
         }),
+  },
+  bentoCardFeatured: {
+    gridColumn: 'span 2' as any,
+    flexDirection: 'row',
+    gap: spacing.base,
+    padding: spacing.base,
+    minHeight: 250,
+  },
+  bentoFeaturedImageContainer: {
+    width: '42%',
+    minHeight: 230,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
+  },
+  bentoFeaturedContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  bentoCardStandard: {
+    gridColumn: 'span 1' as any,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    padding: spacing.base,
+  },
+  bentoImageContainer: {
+    width: '100%',
+    height: 180,
+    backgroundColor: colors.surfaceGrade,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
+  },
+  cardFooterArea: {
+    marginTop: spacing.xs,
+  },
+  listContent: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: 100,
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   itemCard: {
     marginBottom: spacing.base,
-    width: isDesktop ? 400 : 'auto',
-    maxWidth: isDesktop ? 400 : '100%',
-    alignSelf: isDesktop ? 'center' : 'stretch',
+    width: 'auto',
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     padding: spacing.base,
   },
   cardHeader: {

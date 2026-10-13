@@ -22,10 +22,11 @@ export const Card: React.FC<CardProps> = ({
     return (
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [
+        style={({ pressed, hovered }: any) => [
           styles.card,
           { backgroundColor: colors.canvas },
           bordered && { borderWidth: 1, borderColor: colors.hairline },
+          hovered && { borderColor: colors.ink },
           pressed && { backgroundColor: colors.surfaceGrade },
           style,
         ]}
