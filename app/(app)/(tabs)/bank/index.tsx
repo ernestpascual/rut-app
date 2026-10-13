@@ -779,7 +779,7 @@ const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
     marginTop: spacing.xs,
   },
   listContent: {
-    paddingHorizontal: isDesktop ? spacing.base : spacing.sm,
+    paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
     paddingBottom: 100,
     ...(isDesktop
@@ -792,26 +792,30 @@ const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
         }
       : {
           flexDirection: 'column',
-          alignItems: 'center',
-          width: '100%',
+          alignItems: 'stretch',
         }),
   },
   itemCard: {
-    marginBottom: spacing.sm,
-    width: isDesktop ? 400 : '100%',
+    marginBottom: spacing.base,
+    width: isDesktop ? 400 : 'auto',
     maxWidth: isDesktop ? 400 : '100%',
-    alignSelf: 'center',
+    alignSelf: isDesktop ? 'center' : 'stretch',
     padding: spacing.base,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.xs,
+    flexWrap: 'wrap',
+    gap: spacing.xxs,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+    gap: 4,
   },
   imageContainer: {
     width: '100%',
