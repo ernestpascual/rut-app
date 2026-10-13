@@ -8,8 +8,6 @@ import {
   Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../../../src/lib/firebase/client';
 import { useAuth } from '../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
@@ -17,32 +15,25 @@ import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { createChatSession } from '../../../src/features/chat/chatService';
 
 export default function NewChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => getStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!user) return;
     const cleanTitle = title.trim() || 'New Train of Thought';
-
     setLoading(true);
     try {
-      const docRef = await addDoc(collection(db, 'users', user.uid, 'chats'), {
-        ownerUid: user.uid,
-        title: cleanTitle,
-        pinnedInspirationIds: [],
-        summary: null,
-        archived: false,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+      const session = await createChatSession(cleanTitle, {
+        uid: user?.uid,
       });
 
-      router.replace(`/(app)/chat/${docRef.id}`);
+      router.replace(`/(app)/chat/${session.id}`);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Could not start chat session.');
       setLoading(false);
@@ -110,14 +101,14 @@ const getStyles = (colors: ThemeColors) =>
   },
   content: {
     padding: spacing.base,
-    maxWidth: 540,
+    maxWidth: 600,
     width: '100%',
     alignSelf: 'center',
-    paddingTop: spacing.xl,
   },
   promptText: {
     ...typography.bodyMd,
     color: colors.inkSoft,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.base,
+    lineHeight: 22,
   },
 });

@@ -59,6 +59,8 @@ export interface ChatSession {
   title: string;
   pinnedInspirationIds: string[];
   summary: string | null;
+  projectId?: string | null;
+  projectTitle?: string | null;
   archived: boolean;
   createdAt: number;
   updatedAt: number;
@@ -83,6 +85,8 @@ export interface Project {
   tags: string[];
   autoLinkEnabled: boolean;
   autoLinkConfidenceThreshold: number;
+  chatId?: string | null;
+  thoughtCount?: number;
   createdAt: number;
   updatedAt: number;
 }

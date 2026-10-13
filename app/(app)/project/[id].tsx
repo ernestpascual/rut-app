@@ -32,7 +32,7 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
-import { Project, ProjectInspirationLink, InspirationItem } from '../../../src/types';
+import { Project, ProjectInspirationLink, InspirationItem, ChatMessage, ChatSession } from '../../../src/types';
 import {
   getDumpInspirations,
   getProjects,
@@ -43,6 +43,11 @@ import {
   detachInspirationFromProject,
 } from '../../../src/features/dump/dumpService';
 import { matchIdeaWithDump, IdeaMatchResult } from '../../../src/features/ideas/ideaMatcher';
+import {
+  getOrCreateIdeaChat,
+  getChatMessages,
+  sendChatMessage,
+} from '../../../src/features/chat/chatService';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -72,6 +77,12 @@ export default function ProjectDetailScreen() {
 
   // Manual picker toggle
   const [showManualPicker, setShowManualPicker] = useState(false);
+
+  // Train of Thought Chat state
+  const [ideaChat, setIdeaChat] = useState<ChatSession | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInputText, setChatInputText] = useState('');
+  const [sendingThought, setSendingThought] = useState(false);
 
   // Load project & inspiration links
   useEffect(() => {
@@ -401,6 +412,76 @@ export default function ProjectDetailScreen() {
         },
       },
     ]);
+  };
+
+  // Synchronize dedicated Train of Thought for this Idea
+  useEffect(() => {
+    if (!project) return;
+    let isMounted = true;
+
+    const attachedItems = links
+      .map((l) => bankMap[l.inspirationId])
+      .filter(Boolean) as InspirationItem[];
+
+    getOrCreateIdeaChat(project, attachedItems, user?.uid).then(async (chat) => {
+      if (!isMounted) return;
+      setIdeaChat(chat);
+      const msgs = await getChatMessages(chat.id, user?.uid);
+      if (isMounted) {
+        setChatMessages(msgs);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [project?.id, project?.title, links.length, user?.uid]);
+
+  // Send a thought or query in the idea's train of thought
+  const handleSendThought = async (customPrompt?: string) => {
+    const promptToSend = (customPrompt !== undefined ? customPrompt : chatInputText).trim();
+    if (!promptToSend || !ideaChat || sendingThought || !project) return;
+
+    setChatInputText('');
+    setSendingThought(true);
+
+    try {
+      const attachedItems = links
+        .map((l) => bankMap[l.inspirationId])
+        .filter(Boolean) as InspirationItem[];
+
+      const result = await sendChatMessage(ideaChat.id, promptToSend, {
+        uid: user?.uid,
+        ideaContext: {
+          title: project.title,
+          brief: project.brief,
+          notes: project.notes,
+          tags: project.tags,
+        },
+        pinnedInspirations: attachedItems,
+        allInspirations: allDumpItems,
+      });
+
+      setChatMessages((prev) => {
+        const filtered = prev.filter(
+          (m) => m.id !== result.userMessage.id && m.id !== result.assistantMessage.id
+        );
+        return [...filtered, result.userMessage, result.assistantMessage];
+      });
+
+      const updatedProj: Project = {
+        ...project,
+        thoughtCount: (project.thoughtCount || 0) + 1,
+        chatId: ideaChat.id,
+        updatedAt: Date.now(),
+      };
+      setProject(updatedProj);
+      saveProject(updatedProj).catch(() => {});
+    } catch (err: any) {
+      Alert.alert('Notice', err.message || 'Could not complete thought train.');
+    } finally {
+      setSendingThought(false);
+    }
   };
 
   if (loading || !project) {
@@ -778,6 +859,126 @@ export default function ProjectDetailScreen() {
               })
             )}
 
+            {/* TRAIN OF THOUGHT CHAT SECTION */}
+            <View style={styles.thoughtSection}>
+              <View style={styles.thoughtHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.xs }}>
+                  <Text style={styles.sectionHeading}>TRAIN OF THOUGHT</Text>
+                  <Badge
+                    label={`${chatMessages.length} THOUGHTS`}
+                    variant={chatMessages.length > 0 ? 'inverse' : 'grade'}
+                    style={{ marginLeft: spacing.xs }}
+                  />
+                </View>
+                {ideaChat ? (
+                  <Button
+                    title="↗ FULL CHAT"
+                    variant="secondary"
+                    onPress={() => router.push(`/(app)/chat/${ideaChat.id}`)}
+                    style={{ height: 32, paddingHorizontal: 10 }}
+                  />
+                ) : null}
+              </View>
+
+              <Card style={styles.thoughtCard}>
+                <Text style={styles.thoughtBannerText}>
+                  Explore, critique, and iterate on &ldquo;{project.title}&rdquo;. Attached inspirations ({links.length}) are automatically incorporated into context.
+                </Text>
+
+                {/* QUICK PROMPT CHIPS */}
+                <View style={styles.quickPromptRow}>
+                  <Pressable
+                    style={styles.quickChip}
+                    onPress={() => handleSendThought(`Explore conceptual variations and bold angles for ${project.title}`)}
+                  >
+                    <Text style={styles.quickChipText}>💡 Concept Variations</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.quickChip}
+                    onPress={() => handleSendThought(`Suggest materiality, textures, and color palette for ${project.title}`)}
+                  >
+                    <Text style={styles.quickChipText}>🎨 Material & Palette</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.quickChip}
+                    onPress={() => handleSendThought(`Synthesize this idea with all attached inspirations`)}
+                  >
+                    <Text style={styles.quickChipText}>🔗 Synthesize References</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.quickChip}
+                    onPress={() => handleSendThought(`Critique and sharpen the editorial brief for ${project.title}`)}
+                  >
+                    <Text style={styles.quickChipText}>✍️ Polish Brief</Text>
+                  </Pressable>
+                </View>
+
+                {/* MESSAGE STREAM */}
+                {chatMessages.length > 0 ? (
+                  <View style={styles.thoughtStream}>
+                    {chatMessages.slice(-6).map((msg) => (
+                      <View
+                        key={msg.id}
+                        style={[
+                          styles.inlineBubble,
+                          msg.role === 'user' ? styles.inlineUserBubble : styles.inlineAssistantBubble,
+                        ]}
+                      >
+                        <View style={styles.bubbleHeader}>
+                          <Text
+                            style={[
+                              styles.inlineRoleLabel,
+                              msg.role === 'user' ? styles.inlineUserRole : styles.inlineAssistantRole,
+                            ]}
+                          >
+                            {msg.role === 'user' ? 'YOU' : `RUT ASSISTANT (${msg.model || 'gemini-3.5-flash-lite'})`}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.inlineMessageText,
+                            msg.role === 'user' ? styles.inlineUserText : styles.inlineAssistantText,
+                          ]}
+                        >
+                          {msg.content}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyThoughtBox}>
+                    <Text style={styles.emptyThoughtText}>
+                      No thoughts logged for this idea yet. Tap a quick prompt above or ask a question below to start the train of thought.
+                    </Text>
+                  </View>
+                )}
+
+                {sendingThought ? (
+                  <View style={styles.thinkingIndicator}>
+                    <ActivityIndicator size="small" color={colors.ink} />
+                    <Text style={styles.thinkingText}>DEVELOPING TRAIN OF THOUGHT...</Text>
+                  </View>
+                ) : null}
+
+                {/* INLINE CHAT INPUT */}
+                <View style={styles.thoughtInputRow}>
+                  <Input
+                    value={chatInputText}
+                    onChangeText={setChatInputText}
+                    placeholder="Brainstorm an angle or question..."
+                    containerStyle={{ flex: 1, marginVertical: 0 }}
+                    onSubmitEditing={() => handleSendThought()}
+                  />
+                  <Button
+                    title="THINK →"
+                    onPress={() => handleSendThought()}
+                    disabled={!chatInputText.trim() || sendingThought}
+                    style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 14 }}
+                  />
+                </View>
+              </Card>
+            </View>
+
             {/* DELETE IDEA BUTTON */}
             <View style={styles.footerSection}>
               <Button
@@ -1015,6 +1216,123 @@ const getStyles = (colors: ThemeColors) =>
   centerBox: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thoughtSection: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.base,
+  },
+  thoughtHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  thoughtCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    padding: spacing.base,
+  },
+  thoughtBannerText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  quickPromptRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.base,
+  },
+  quickChip: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.canvas,
+  },
+  quickChipText: {
+    ...typography.captionCap,
+    color: colors.ink,
+    fontWeight: '600',
+    fontSize: 10,
+  },
+  thoughtStream: {
+    marginBottom: spacing.base,
+  },
+  inlineBubble: {
+    marginBottom: spacing.xs,
+    padding: spacing.sm,
+  },
+  bubbleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  inlineUserBubble: {
+    backgroundColor: colors.ink,
+    alignSelf: 'flex-end',
+    maxWidth: '90%',
+  },
+  inlineAssistantBubble: {
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    alignSelf: 'flex-start',
+    maxWidth: '95%',
+  },
+  inlineRoleLabel: {
+    ...typography.captionCap,
+    fontSize: 8,
+    marginBottom: 2,
+  },
+  inlineUserRole: {
+    color: colors.inkMid,
+  },
+  inlineAssistantRole: {
+    color: colors.inkSoft,
+  },
+  inlineMessageText: {
+    ...typography.bodyMd,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  inlineUserText: {
+    color: colors.onInk,
+  },
+  inlineAssistantText: {
+    color: colors.ink,
+  },
+  emptyThoughtBox: {
+    padding: spacing.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.hairline,
+    marginBottom: spacing.base,
+  },
+  emptyThoughtText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  thinkingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  thinkingText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    marginLeft: spacing.xs,
+  },
+  thoughtInputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
 });

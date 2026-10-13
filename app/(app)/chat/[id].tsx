@@ -20,15 +20,10 @@ import {
   query,
   orderBy,
   onSnapshot,
-  getDoc,
   getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../../src/lib/firebase/client';
-import { useAuth } from '../../../src/features/auth/AuthContext';
+import { db } from '../../../src/lib/firebase/client';
+import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
@@ -38,13 +33,28 @@ import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { SourceCard } from '../../../src/components/ui/SourceCard';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
-import { ChatMessage, ChatSession, InspirationItem } from '../../../src/types';
+import { ChatMessage, ChatSession, InspirationItem, Project } from '../../../src/types';
+import {
+  getChatSession,
+  getChatMessages,
+  sendChatMessage,
+  saveChatSession,
+  getLocalChats,
+} from '../../../src/features/chat/chatService';
+import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
+
+const AVAILABLE_MODELS = [
+  { id: 'gemini-3.5-flash-lite', label: '3.5 FLASH LITE (DEFAULT)' },
+  { id: 'gemini-3.6-flash', label: '3.6 FLASH' },
+  { id: 'gemini-3.8-flash', label: '3.8 FLASH' },
+  { id: 'gemini-4', label: 'GEMINI 4' },
+];
 
 export default function ChatWorkspaceScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => getStyles(colors), [colors]);
 
   const [session, setSession] = useState<ChatSession | null>(null);
@@ -52,219 +62,236 @@ export default function ChatWorkspaceScreen() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash-lite');
+  const [showModelModal, setShowModelModal] = useState(false);
 
   // Pinning modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [bankItems, setBankItems] = useState<InspirationItem[]>([]);
   const [pinnedMap, setPinnedMap] = useState<Record<string, InspirationItem>>({});
 
+  // Create Project Modal state (cross-platform alternative to Alert.prompt)
+  const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);
+  const [createProjectTitle, setCreateProjectTitle] = useState('');
+  const [createProjectContent, setCreateProjectContent] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
 
+  // Load session & messages with dual-mode fallback (local + Firestore)
   useEffect(() => {
-    if (!user || !id) return;
+    if (!id) return;
+    let isMounted = true;
 
-    // Listen to session doc
-    const sessionRef = doc(db, 'users', user.uid, 'chats', id);
-    const unsubSession = onSnapshot(sessionRef, (snap) => {
-      if (snap.exists()) {
-        const data = { id: snap.id, ...(snap.data() as any) } as ChatSession;
-        setSession(data);
+    const loadLocalInitial = async () => {
+      const sess = await getChatSession(id, user?.uid);
+      if (sess && isMounted) {
+        setSession(sess);
+        const msgs = await getChatMessages(id, user?.uid);
+        if (isMounted) {
+          setMessages(msgs);
+          setLoading(false);
+        }
       } else {
-        router.replace('/(app)/(tabs)/chats');
+        const localList = await getLocalChats();
+        const found = localList.find((c) => c.id === id);
+        if (found && isMounted) {
+          setSession(found);
+          const msgs = await getChatMessages(id, user?.uid);
+          if (isMounted) {
+            setMessages(msgs);
+            setLoading(false);
+          }
+        } else if (isMounted) {
+          setLoading(false);
+        }
       }
-    });
-
-    // Listen to messages subcollection
-    const messagesQuery = query(
-      collection(db, 'users', user.uid, 'chats', id, 'messages'),
-      orderBy('createdAt', 'asc')
-    );
-    const unsubMessages = onSnapshot(messagesQuery, (snap) => {
-      const msgs: ChatMessage[] = [];
-      snap.forEach((d) => msgs.push({ id: d.id, ...(d.data() as any) }));
-      setMessages(msgs);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubSession();
-      unsubMessages();
     };
+
+    loadLocalInitial();
+
+    if (!user || user.uid === DUMMY_USER_UID) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    try {
+      const sessionRef = doc(db, 'users', user.uid, 'chats', id);
+      const unsubSession = onSnapshot(sessionRef, (snap) => {
+        if (!isMounted) return;
+        if (snap.exists()) {
+          const data = { id: snap.id, ...(snap.data() as any) } as ChatSession;
+          setSession(data);
+        }
+      });
+
+      const messagesQuery = query(
+        collection(db, 'users', user.uid, 'chats', id, 'messages'),
+        orderBy('createdAt', 'asc')
+      );
+      const unsubMessages = onSnapshot(messagesQuery, (snap) => {
+        if (!isMounted) return;
+        if (!snap.empty) {
+          const msgs: ChatMessage[] = [];
+          snap.forEach((d) => msgs.push({ id: d.id, ...(d.data() as any) }));
+          setMessages(msgs);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        unsubSession();
+        unsubMessages();
+      };
+    } catch {
+      // Local mode fallback
+      return () => {
+        isMounted = false;
+      };
+    }
   }, [user, id]);
 
-  // Load user inspirations to populate pinned details and picker
+  // Load bank items for references and pinning
   useEffect(() => {
-    if (!user) return;
+    let isMounted = true;
     const fetchBank = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'users', user.uid, 'inspirations'));
-        const items: InspirationItem[] = [];
-        const map: Record<string, InspirationItem> = {};
-        snap.forEach((d) => {
-          const item = { id: d.id, ...(d.data() as any) } as InspirationItem;
-          items.push(item);
-          map[item.id] = item;
-        });
-        setBankItems(items);
-        setPinnedMap(map);
-      } catch (err) {
-        console.warn('Error fetching bank for chat:', err);
+      let items: InspirationItem[] = [];
+      if (user && user.uid !== DUMMY_USER_UID) {
+        try {
+          const snap = await getDocs(collection(db, 'users', user.uid, 'inspirations'));
+          snap.forEach((d) => {
+            items.push({ id: d.id, ...(d.data() as any) } as InspirationItem);
+          });
+        } catch {}
       }
+
+      if (items.length === 0) {
+        items = await getDumpInspirations();
+      }
+
+      if (!isMounted) return;
+      setBankItems(items);
+      const map: Record<string, InspirationItem> = {};
+      items.forEach((item) => {
+        map[item.id] = item;
+      });
+      setPinnedMap(map);
     };
+
     fetchBank();
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
-  const handleSendMessage = async () => {
-    if (!inputText.trim() || !user || !id || sending) return;
-    const messageContent = inputText.trim();
+  const handleSendMessage = async (customText?: string) => {
+    const textToSend = (customText !== undefined ? customText : inputText).trim();
+    if (!textToSend || !id || sending) return;
     setInputText('');
     setSending(true);
 
     try {
-      // 1. Save user message locally
-      await addDoc(
-        collection(db, 'users', user.uid, 'chats', id, 'messages'),
-        {
-          role: 'user',
-          content: messageContent,
-          sourceInspirationIds: [],
-          model: null,
-          inputTokens: null,
-          outputTokens: null,
-          estimatedCostMicros: null,
-          status: 'complete',
-          createdAt: Date.now(),
-        }
-      );
+      const pinnedItems = (session?.pinnedInspirationIds || [])
+        .map((pid) => pinnedMap[pid])
+        .filter(Boolean);
 
-      // 2. Call server function to generate assistant response with inspiration retrieval
-      const chatFn = httpsCallable<
-        { chatId: string; message: string },
-        {
-          response: string;
-          sourceInspirationIds: string[];
-          model: string;
-          inputTokens: number;
-          outputTokens: number;
-          estimatedCostMicros: number;
-        }
-      >(functions, 'chatWithBank');
+      const ideaContext = session?.projectId
+        ? {
+            title: session.projectTitle || session.title,
+            brief: session.summary,
+          }
+        : null;
 
-      const result = await chatFn({
-        chatId: id,
-        message: messageContent,
+      const result = await sendChatMessage(id, textToSend, {
+        uid: user?.uid,
+        ideaContext,
+        pinnedInspirations: pinnedItems,
+        allInspirations: bankItems,
+        model: selectedModel,
       });
 
-      // 3. Save assistant message
-      await addDoc(
-        collection(db, 'users', user.uid, 'chats', id, 'messages'),
-        {
-          role: 'assistant',
-          content: result.data.response,
-          sourceInspirationIds: result.data.sourceInspirationIds || [],
-          model: result.data.model || 'mock-model',
-          inputTokens: result.data.inputTokens || 0,
-          outputTokens: result.data.outputTokens || 0,
-          estimatedCostMicros: result.data.estimatedCostMicros || 0,
-          status: 'complete',
-          createdAt: Date.now(),
-        }
-      );
-
-      // 4. Update session updatedAt and rolling summary preview
-      await updateDoc(doc(db, 'users', user.uid, 'chats', id), {
-        summary: messageContent.slice(0, 100),
-        updatedAt: Date.now(),
+      // Update state immediately
+      setMessages((prev) => {
+        const withoutDups = prev.filter(
+          (m) => m.id !== result.userMessage.id && m.id !== result.assistantMessage.id
+        );
+        return [...withoutDups, result.userMessage, result.assistantMessage];
       });
+
+      // Update session summary in local state
+      if (session) {
+        setSession({
+          ...session,
+          summary: textToSend.slice(0, 100),
+          updatedAt: Date.now(),
+        });
+      }
     } catch (err: any) {
-      Alert.alert('AI Error', err.message || 'Could not generate AI response.');
-      // Save failed notice message
-      await addDoc(
-        collection(db, 'users', user.uid, 'chats', id, 'messages'),
-        {
-          role: 'assistant',
-          content: 'Unable to complete response. Please verify AI provider configuration.',
-          sourceInspirationIds: [],
-          model: null,
-          inputTokens: null,
-          outputTokens: null,
-          estimatedCostMicros: null,
-          status: 'failed',
-          createdAt: Date.now(),
-        }
-      );
+      Alert.alert('AI Notice', err.message || 'Could not complete thought train response.');
     } finally {
       setSending(false);
     }
   };
 
   const handleTogglePin = async (inspirationId: string) => {
-    if (!user || !session) return;
+    if (!session) return;
     const existing = session.pinnedInspirationIds || [];
     const updated = existing.includes(inspirationId)
       ? existing.filter((pid) => pid !== inspirationId)
       : [...existing, inspirationId];
 
+    const updatedSession: ChatSession = {
+      ...session,
+      pinnedInspirationIds: updated,
+      updatedAt: Date.now(),
+    };
+
+    setSession(updatedSession);
+    await saveChatSession(updatedSession, user?.uid);
+  };
+
+  const openCreateProjectModal = (content: string) => {
+    setCreateProjectContent(content);
+    const suggestedTitle = session?.projectTitle
+      ? `${session.projectTitle} — Extended Idea`
+      : `Idea: ${session?.title || 'Thought Train'}`;
+    setCreateProjectTitle(suggestedTitle);
+    setCreateProjectModalOpen(true);
+  };
+
+  const handleConfirmCreateProject = async () => {
+    if (!createProjectTitle.trim()) return;
+    setCreatingProject(true);
+
     try {
-      await updateDoc(doc(db, 'users', user.uid, 'chats', session.id), {
-        pinnedInspirationIds: updated,
+      const newIdea: Project = {
+        id: `idea-${Date.now()}`,
+        ownerUid: user?.uid || DUMMY_USER_UID,
+        title: createProjectTitle.trim(),
+        brief: createProjectContent.slice(0, 300),
+        notes: createProjectContent,
+        status: 'active',
+        tags: ['from-thought-train'],
+        autoLinkEnabled: true,
+        autoLinkConfidenceThreshold: 0.75,
+        chatId: id,
+        thoughtCount: messages.length,
+        createdAt: Date.now(),
         updatedAt: Date.now(),
-      });
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to update pinned inspirations.');
+      };
+
+      await saveProject(newIdea);
+      setCreateProjectModalOpen(false);
+      router.push(`/(app)/project/${newIdea.id}`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to create idea.');
+    } finally {
+      setCreatingProject(false);
     }
   };
 
-  const handleCreateProjectFromMessage = async (content: string) => {
-    if (!user) return;
-    Alert.prompt
-      ? Alert.prompt(
-          'Create Project',
-          'Enter a project title:',
-          async (projectTitle) => {
-            if (!projectTitle?.trim()) return;
-            try {
-              const projRef = await addDoc(collection(db, 'users', user.uid, 'projects'), {
-                ownerUid: user.uid,
-                title: projectTitle.trim(),
-                brief: content.slice(0, 500),
-                notes: content,
-                status: 'active',
-                tags: ['from-chat'],
-                autoLinkEnabled: true,
-                autoLinkConfidenceThreshold: 0.75,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-              });
-              router.push(`/(app)/project/${projRef.id}`);
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-            }
-          }
-        )
-      : (async () => {
-          // Fallback on web/Android
-          try {
-            const projRef = await addDoc(collection(db, 'users', user.uid, 'projects'), {
-              ownerUid: user.uid,
-              title: `Project: ${session?.title || 'Idea Exploration'}`,
-              brief: content.slice(0, 500),
-              notes: content,
-              status: 'active',
-              tags: ['from-chat'],
-              autoLinkEnabled: true,
-              autoLinkConfidenceThreshold: 0.75,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            });
-            router.push(`/(app)/project/${projRef.id}`);
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          }
-        })();
-  };
-
-  if (loading || !session) {
+  if (loading && !session) {
     return (
       <SafeAreaView style={styles.container}>
         <TopNav
@@ -286,7 +313,8 @@ export default function ChatWorkspaceScreen() {
     );
   }
 
-  const pinnedItems = (session.pinnedInspirationIds || [])
+  const activeTitle = session?.title || 'Train of Thought';
+  const pinnedItems = (session?.pinnedInspirationIds || [])
     .map((pid) => pinnedMap[pid])
     .filter(Boolean);
 
@@ -294,11 +322,11 @@ export default function ChatWorkspaceScreen() {
     <SafeAreaView style={styles.container}>
       <AnnouncementBar
         pillText="TRAIN OF THOUGHT"
-        message={session.title}
+        message={activeTitle}
       />
       <TopNav
         title="rut"
-        subtitle={session.title}
+        subtitle={activeTitle}
         onBack={() => {
           if (router.canGoBack()) {
             router.back();
@@ -308,14 +336,38 @@ export default function ChatWorkspaceScreen() {
         }}
         backTitle="CHATS"
         rightAction={
-          <Button
-            title={`PIN (${(session.pinnedInspirationIds || []).length})`}
-            variant="secondary"
-            onPress={() => setPinModalOpen(true)}
-            style={{ height: 36, paddingHorizontal: 12 }}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Button
+              title={`PIN (${(session?.pinnedInspirationIds || []).length})`}
+              variant="secondary"
+              onPress={() => setPinModalOpen(true)}
+              style={{ height: 34, paddingHorizontal: 10, marginRight: spacing.xs }}
+            />
+            <Button
+              title="MODEL"
+              variant="secondary"
+              onPress={() => setShowModelModal(true)}
+              style={{ height: 34, paddingHorizontal: 10 }}
+            />
+          </View>
         }
       />
+
+      {/* Linked Idea Banner if connected to an Idea */}
+      {session?.projectId ? (
+        <Pressable
+          style={styles.linkedIdeaBanner}
+          onPress={() => router.push(`/(app)/project/${session.projectId}`)}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Badge label="LINKED IDEA" variant="inverse" style={{ marginRight: spacing.xs }} />
+            <Text style={styles.linkedIdeaTitle} numberOfLines={1}>
+              {session.projectTitle || 'Idea Studio'}
+            </Text>
+          </View>
+          <Text style={styles.linkedIdeaLink}>↗ VIEW IDEA</Text>
+        </Pressable>
+      ) : null}
 
       {/* Pinned inspirations banner if any */}
       {pinnedItems.length > 0 ? (
@@ -325,7 +377,7 @@ export default function ChatWorkspaceScreen() {
             {pinnedItems.map((pi) => (
               <Badge
                 key={pi.id}
-                label={`${pi.title.slice(0, 20)}... ✕`}
+                label={`${pi.title.slice(0, 24)}... ✕`}
                 variant="inverse"
                 style={{ marginRight: spacing.xs }}
               />
@@ -345,6 +397,40 @@ export default function ChatWorkspaceScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>START THIS TRAIN OF THOUGHT</Text>
+              <Text style={styles.emptySubtitle}>
+                Pose a design query, ask for conceptual angles, or synthesize with your bank inspirations.
+              </Text>
+              <View style={styles.promptChipsContainer}>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Explore conceptual variations and bold angles')}
+                >
+                  <Text style={styles.promptChipText}>💡 Concept Variations</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Suggest materiality, textures, and color palette')}
+                >
+                  <Text style={styles.promptChipText}>🎨 Material & Palette</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Synthesize this concept with attached inspirations')}
+                >
+                  <Text style={styles.promptChipText}>🔗 Synthesize References</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Critique and sharpen the editorial brief')}
+                >
+                  <Text style={styles.promptChipText}>✍️ Polish Brief</Text>
+                </Pressable>
+              </View>
+            </View>
+          }
           renderItem={({ item }) => (
             <View
               style={[
@@ -359,7 +445,7 @@ export default function ChatWorkspaceScreen() {
                     item.role === 'user' ? styles.userRoleLabel : styles.assistantRoleLabel,
                   ]}
                 >
-                  {item.role === 'user' ? 'YOU' : 'RUT ASSISTANT'}
+                  {item.role === 'user' ? 'YOU' : `RUT ASSISTANT (${item.model || selectedModel})`}
                 </Text>
                 {item.estimatedCostMicros ? (
                   <Text style={styles.costBadge}>
@@ -380,7 +466,7 @@ export default function ChatWorkspaceScreen() {
               {/* Clickable Source Cards for Assistant citations */}
               {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
                 <View style={styles.sourcesContainer}>
-                  <Text style={styles.sourcesHeader}>SOURCES RETRIEVED:</Text>
+                  <Text style={styles.sourcesHeader}>REFERENCED INSPIRATIONS:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {item.sourceInspirationIds.map((sid: string) => {
                       const sourceItem = pinnedMap[sid];
@@ -401,13 +487,13 @@ export default function ChatWorkspaceScreen() {
                 </View>
               ) : null}
 
-              {/* Action to convert useful response to Project */}
+              {/* Action to convert useful response to Project Idea */}
               {item.role === 'assistant' && item.status !== 'failed' ? (
                 <View style={styles.messageActions}>
                   <Button
-                    title="→ CREATE PROJECT FROM THIS"
+                    title="→ SAVE AS NEW IDEA"
                     variant="text"
-                    onPress={() => handleCreateProjectFromMessage(item.content)}
+                    onPress={() => openCreateProjectModal(item.content)}
                   />
                 </View>
               ) : null}
@@ -418,7 +504,7 @@ export default function ChatWorkspaceScreen() {
         {sending ? (
           <View style={styles.generatingIndicator}>
             <ActivityIndicator size="small" color={colors.ink} />
-            <Text style={styles.generatingText}>THINKING &amp; RETRIEVING FROM BANK...</Text>
+            <Text style={styles.generatingText}>DEVELOPING TRAIN OF THOUGHT...</Text>
           </View>
         ) : null}
 
@@ -427,18 +513,66 @@ export default function ChatWorkspaceScreen() {
           <Input
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask AI to connect, compare, or expand your inspiration..."
+            placeholder="Ask AI to brainstorm, critique, or expand ideas..."
             containerStyle={{ flex: 1, marginVertical: 0 }}
-            onSubmitEditing={handleSendMessage}
+            onSubmitEditing={() => handleSendMessage()}
           />
           <Button
-            title="SEND"
-            onPress={handleSendMessage}
+            title="THINK →"
+            onPress={() => handleSendMessage()}
             disabled={!inputText.trim() || sending}
-            style={{ marginLeft: spacing.xs, height: 46 }}
+            style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 16 }}
           />
         </View>
       </KeyboardAvoidingView>
+
+      {/* Model Selection Modal */}
+      <Modal visible={showModelModal} animationType="slide" transparent>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TopNav
+              title="rut"
+              subtitle="Select Gemini Model"
+              rightAction={
+                <Button
+                  title="DONE"
+                  variant="text"
+                  onPress={() => setShowModelModal(false)}
+                />
+              }
+            />
+            <ScrollView style={{ padding: spacing.base }}>
+              <Text style={styles.modalSubhead}>
+                Select the model used for Train of Thought synthesis and inspiration retrieval.
+              </Text>
+              {AVAILABLE_MODELS.map((m) => {
+                const isSelected = selectedModel === m.id;
+                return (
+                  <Card
+                    key={m.id}
+                    onPress={() => {
+                      setSelectedModel(m.id);
+                      setShowModelModal(false);
+                    }}
+                    style={[
+                      styles.pinItemCard,
+                      isSelected ? styles.pinItemCardActive : null,
+                    ]}
+                  >
+                    <View style={styles.pinRow}>
+                      <Text style={styles.pinItemTitle}>{m.label}</Text>
+                      <Badge
+                        label={isSelected ? 'ACTIVE ✓' : 'SELECT'}
+                        variant={isSelected ? 'inverse' : 'outline'}
+                      />
+                    </View>
+                  </Card>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       {/* Modal to Pin Inspirations to this Chat */}
       <Modal visible={pinModalOpen} animationType="slide" transparent>
@@ -459,26 +593,75 @@ export default function ChatWorkspaceScreen() {
               <Text style={styles.modalSubhead}>
                 Pinned inspirations are actively injected into the AI context for every prompt in this train of thought.
               </Text>
-              {bankItems.map((bItem) => {
-                const isPinned = (session.pinnedInspirationIds || []).includes(bItem.id);
-                return (
-                  <Card
-                    key={bItem.id}
-                    onPress={() => handleTogglePin(bItem.id)}
-                    style={isPinned ? [styles.pinItemCard, styles.pinItemCardActive] : styles.pinItemCard}
-                  >
-                    <View style={styles.pinRow}>
-                      <Text style={styles.pinItemTitle} numberOfLines={1}>
-                        {bItem.title}
-                      </Text>
-                      <Badge
-                        label={isPinned ? 'PINNED ✓' : '+ PIN'}
-                        variant={isPinned ? 'inverse' : 'outline'}
-                      />
-                    </View>
-                  </Card>
-                );
-              })}
+              {bankItems.length === 0 ? (
+                <Text style={styles.emptySubtitle}>No inspirations saved in your Bank yet.</Text>
+              ) : (
+                bankItems.map((bItem) => {
+                  const isPinned = (session?.pinnedInspirationIds || []).includes(bItem.id);
+                  return (
+                    <Card
+                      key={bItem.id}
+                      onPress={() => handleTogglePin(bItem.id)}
+                      style={[
+                        styles.pinItemCard,
+                        isPinned ? styles.pinItemCardActive : null,
+                      ]}
+                    >
+                      <View style={styles.pinRow}>
+                        <Text style={styles.pinItemTitle} numberOfLines={1}>
+                          {bItem.title}
+                        </Text>
+                        <Badge
+                          label={isPinned ? 'PINNED ✓' : '+ PIN'}
+                          variant={isPinned ? 'inverse' : 'outline'}
+                        />
+                      </View>
+                    </Card>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal to Create New Idea from Message (Cross-platform) */}
+      <Modal visible={createProjectModalOpen} animationType="slide" transparent>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TopNav
+              title="rut"
+              subtitle="Save to Ideas Studio"
+              rightAction={
+                <Button
+                  title="✕"
+                  variant="text"
+                  onPress={() => setCreateProjectModalOpen(false)}
+                />
+              }
+            />
+            <ScrollView style={{ padding: spacing.base }}>
+              <Text style={styles.modalSubhead}>
+                Save this train of thought insight as a standalone Idea with matching inspiration references.
+              </Text>
+              <Input
+                label="IDEA TITLE"
+                value={createProjectTitle}
+                onChangeText={setCreateProjectTitle}
+                placeholder="Title for your new Idea"
+              />
+              <Card style={{ marginVertical: spacing.base, backgroundColor: colors.surfaceGrade }}>
+                <Text style={styles.sourcesHeader}>INSIGHT EXCERPT:</Text>
+                <Text style={styles.bodyText} numberOfLines={6}>
+                  {createProjectContent}
+                </Text>
+              </Card>
+              <Button
+                title={creatingProject ? 'CREATING...' : 'CREATE IDEA & OPEN STUDIO'}
+                onPress={handleConfirmCreateProject}
+                loading={creatingProject}
+                style={{ marginTop: spacing.sm }}
+              />
             </ScrollView>
           </View>
         </SafeAreaView>
@@ -492,6 +675,28 @@ const getStyles = (colors: ThemeColors) =>
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
+  },
+  linkedIdeaBanner: {
+    backgroundColor: colors.surfaceGrade,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  linkedIdeaTitle: {
+    ...typography.captionCap,
+    color: colors.ink,
+    fontWeight: '700',
+    flex: 1,
+  },
+  linkedIdeaLink: {
+    ...typography.captionCap,
+    color: colors.ink,
+    textDecorationLine: 'underline',
+    fontWeight: '700',
   },
   pinnedBanner: {
     backgroundColor: colors.surfaceGrade,
@@ -511,6 +716,43 @@ const getStyles = (colors: ThemeColors) =>
   messagesList: {
     padding: spacing.base,
     paddingBottom: spacing.xl,
+  },
+  emptyContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    ...typography.displayMd,
+    color: colors.ink,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    ...typography.bodyMd,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    marginBottom: spacing.base,
+    lineHeight: 22,
+  },
+  promptChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  promptChip: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.canvas,
+  },
+  promptChipText: {
+    ...typography.captionCap,
+    color: colors.ink,
+    fontWeight: '600',
   },
   messageBubble: {
     marginBottom: spacing.base,
@@ -558,6 +800,11 @@ const getStyles = (colors: ThemeColors) =>
   },
   assistantText: {
     color: colors.ink,
+  },
+  bodyText: {
+    ...typography.bodyMd,
+    color: colors.ink,
+    lineHeight: 20,
   },
   sourcesContainer: {
     marginTop: spacing.sm,

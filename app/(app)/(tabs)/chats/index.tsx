@@ -4,7 +4,8 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,7 +16,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../../../src/lib/firebase/client';
-import { useAuth } from '../../../../src/features/auth/AuthContext';
+import { useAuth, DUMMY_USER_UID } from '../../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
@@ -24,6 +25,7 @@ import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { ChatSession } from '../../../../src/types';
+import { getChatSessions, deleteChatSession } from '../../../../src/features/chat/chatService';
 
 export default function ChatsListScreen() {
   const router = useRouter();
@@ -34,30 +36,71 @@ export default function ChatsListScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'users', user.uid, 'chats'),
-      orderBy('updatedAt', 'desc')
-    );
+    let isMounted = true;
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetched: ChatSession[] = [];
-        snapshot.forEach((docSnap) => {
-          fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        setChats(fetched);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('Chats snapshot error:', err);
+    // Load local and remote sessions
+    getChatSessions(user?.uid).then((list) => {
+      if (isMounted) {
+        setChats(list);
         setLoading(false);
       }
-    );
+    });
 
-    return unsubscribe;
+    if (!user || user.uid === DUMMY_USER_UID) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'chats'),
+        orderBy('updatedAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!isMounted) return;
+          const fetched: ChatSession[] = [];
+          snapshot.forEach((docSnap) => {
+            fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
+          });
+          if (fetched.length > 0) {
+            setChats(fetched);
+          }
+          setLoading(false);
+        },
+        (err) => {
+          console.warn('Chats snapshot error:', err);
+          setLoading(false);
+        }
+      );
+
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
+    } catch {
+      return () => {
+        isMounted = false;
+      };
+    }
   }, [user]);
+
+  const handleDeleteChat = (chatId: string, title: string) => {
+    Alert.alert('Delete Train of Thought', `Are you sure you want to delete "${title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteChatSession(chatId, user?.uid);
+          setChats((prev) => prev.filter((c) => c.id !== chatId));
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -101,9 +144,20 @@ export default function ChatsListScreen() {
               style={styles.chatCard}
             >
               <View style={styles.chatHeader}>
-                <Text style={styles.chatTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
+                <View style={{ flex: 1, marginRight: spacing.xs }}>
+                  <Text style={styles.chatTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  {item.projectId ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                      <Badge
+                        label={`IDEA: ${item.projectTitle || 'LINKED'}`}
+                        variant="inverse"
+                      />
+                    </View>
+                  ) : null}
+                </View>
+
                 {item.pinnedInspirationIds && item.pinnedInspirationIds.length > 0 ? (
                   <Badge
                     label={`${item.pinnedInspirationIds.length} PINNED`}
@@ -119,6 +173,17 @@ export default function ChatsListScreen() {
               ) : (
                 <Text style={styles.emptySummaryText}>No recent messages</Text>
               )}
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.dateText}>
+                  {new Date(item.updatedAt).toLocaleDateString()}
+                </Text>
+                <Button
+                  title="DELETE"
+                  variant="text"
+                  onPress={() => handleDeleteChat(item.id, item.title)}
+                />
+              </View>
             </Card>
           )}
         />
@@ -143,24 +208,38 @@ const getStyles = (colors: ThemeColors) =>
   chatHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xxs,
+    alignItems: 'flex-start',
+    marginBottom: spacing.xs,
   },
   chatTitle: {
     ...typography.bodyLg,
     color: colors.ink,
-    flex: 1,
-    marginRight: spacing.xs,
   },
   summaryText: {
-    ...typography.captionSm,
+    ...typography.bodyMd,
     color: colors.inkSoft,
-    lineHeight: 18,
+    lineHeight: 20,
+    marginBottom: spacing.xs,
   },
   emptySummaryText: {
     ...typography.captionSm,
-    color: colors.inkMid,
+    color: colors.inkSoft,
     fontStyle: 'italic',
+    marginBottom: spacing.xs,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineGrade,
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  dateText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    fontSize: 10,
   },
   centerBox: {
     flex: 1,
@@ -172,11 +251,13 @@ const getStyles = (colors: ThemeColors) =>
     ...typography.displayMd,
     color: colors.ink,
     marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   emptySubtitle: {
     ...typography.bodyMd,
     color: colors.inkSoft,
     textAlign: 'center',
-    maxWidth: 340,
+    marginBottom: spacing.base,
+    lineHeight: 22,
   },
 });

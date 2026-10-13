@@ -162,9 +162,21 @@ export default function ProjectsListScreen() {
 
               <View style={styles.tagRow}>
                 <Badge label="INSPIRATION MATCHER" variant="outline" />
+                <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
                 {(item.tags || []).map((t) => (
                   <Badge key={t} label={`#${t}`} variant="grade" />
                 ))}
+              </View>
+
+              <View style={styles.cardFooterRow}>
+                <Text style={styles.cardFooterSub}>
+                  {item.thoughtCount ? `${item.thoughtCount} THOUGHTS LOGGED` : 'CONNECTED TO BANK'}
+                </Text>
+                <Button
+                  title="THINK →"
+                  variant="text"
+                  onPress={() => router.push(`/(app)/project/${item.id}`)}
+                />
               </View>
             </Card>
           )}
@@ -209,6 +221,21 @@ const getStyles = (colors: ThemeColors) =>
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: spacing.xxs,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineGrade,
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  cardFooterSub: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
   },
   centerBox: {
     flex: 1,
