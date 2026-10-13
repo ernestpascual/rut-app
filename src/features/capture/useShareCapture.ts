@@ -12,7 +12,8 @@ import { useAuth } from '../auth/AuthContext';
 import { extractUrlFromText, normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../utils/url';
 import { stagePendingShare } from './stagingStorage';
 import { IncomingSharePayload, InspirationItem } from '../../types';
-import { quickDumpLinkOrNote } from '../dump/dumpService';
+import { quickDumpLinkOrNote, getDumpInspirations, setDumpInspirations } from '../dump/dumpService';
+import { enrichUrlMetadata } from '../../utils/urlMetadata';
 
 export function useShareCapture() {
   const { user } = useAuth();
@@ -91,36 +92,66 @@ export function useShareCapture() {
     }
 
     try {
+      let meta: any = null;
+      if (processed.rawUrl || processed.normalizedUrl) {
+        meta = await enrichUrlMetadata(
+          processed.rawUrl || processed.normalizedUrl || '',
+          customTitle,
+          userNote
+        );
+      }
+
+      const platform = meta?.platform || processed.platform || 'other';
+      const domain = meta?.domain || processed.domain || null;
+      const siteName = meta?.siteName || (domain ? domain.charAt(0).toUpperCase() + domain.slice(1) : null);
+      const finalTitle = (customTitle || meta?.title || processed.title).trim();
+      const combinedTags = Array.from(new Set([...tags, ...(meta?.autoTags || [])]));
+      const concepts = meta?.concepts || combinedTags.slice(0, 4);
+      const editorialContext = meta?.editorialContext || (userNote?.trim() ? `💡 Note: ${userNote.trim()}` : null);
+      const previewDesc = meta?.description || processed.sharedText || finalTitle;
+      const previewImg = meta?.previewImageUrl || null;
       const kind = processed.normalizedUrl ? 'link' : 'note';
+
+      const newItemData: Omit<InspirationItem, 'id'> = {
+        ownerUid: user.uid,
+        kind,
+        folder: 'dump',
+        title: finalTitle,
+        url: processed.rawUrl || null,
+        normalizedUrl: processed.normalizedUrl || null,
+        sharedText: processed.sharedText || null,
+        userNote: userNote?.trim() || null,
+        sourcePlatform: platform,
+        sourceDomain: domain,
+        sourceApp: siteName || (platform !== 'other' ? platform.toUpperCase() : 'Web'),
+        siteName,
+        previewDescription: previewDesc,
+        remotePreviewImageUrl: previewImg,
+        editorialContext,
+        tags: combinedTags,
+        aiTags: meta?.autoTags || (platform !== 'other' ? [platform] : ['saved-inspiration']),
+        concepts,
+        aiSummary: editorialContext || userNote?.trim() || `Saved reference link from ${siteName || platform}. Added to inspiration dump.`,
+        processingStatus: 'ready',
+        processingErrorCode: null,
+        duplicateOf: processed.contentHash,
+        archived: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        capturedAt: Date.now(),
+      };
+
       const docRef = await addDoc(
         collection(db, 'users', user.uid, 'inspirations'),
-        {
-          ownerUid: user.uid,
-          kind,
-          folder: 'dump',
-          title: (customTitle || processed.title).trim(),
-          url: processed.rawUrl || null,
-          normalizedUrl: processed.normalizedUrl || null,
-          sharedText: processed.sharedText || null,
-          userNote: userNote?.trim() || null,
-          sourcePlatform: processed.platform,
-          sourceDomain: processed.domain,
-          sourceApp: processed.platform,
-          previewDescription: null,
-          remotePreviewImageUrl: null,
-          tags: tags || [],
-          aiTags: [],
-          concepts: [],
-          aiSummary: null,
-          processingStatus: 'pending', // Trigger will process AI enrichment
-          processingErrorCode: null,
-          duplicateOf: processed.contentHash,
-          archived: false,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          capturedAt: Date.now(),
-        }
+        newItemData
       );
+
+      const localItem: InspirationItem = {
+        id: docRef.id,
+        ...newItemData,
+      };
+      const existing = await getDumpInspirations();
+      await setDumpInspirations([localItem, ...existing]);
 
       setLoading(false);
       return { id: docRef.id, staged: false };

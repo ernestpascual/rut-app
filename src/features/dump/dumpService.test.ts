@@ -1,5 +1,6 @@
 import {
   sortDumpItems,
+  quickDumpLinkOrNote,
 } from './dumpService';
 import { InspirationItem } from '../../types';
 
@@ -78,5 +79,21 @@ describe('dumpService sorting', () => {
   test('sorts by platform', () => {
     const byPlatform = sortDumpItems(TEST_SORT_FIXTURES, 'platform');
     expect(byPlatform.length).toBe(TEST_SORT_FIXTURES.length);
+  });
+
+  test('quickDumpLinkOrNote captures full metadata for shared URLs', async () => {
+    const item = await quickDumpLinkOrNote(
+      'https://www.behance.net/gallery/999/Brutalist-Architecture-Identity',
+      'Incredible use of concrete materials'
+    );
+    expect(item.kind).toBe('link');
+    expect(item.sourcePlatform).toBe('behance');
+    expect(item.siteName).toBe('Behance');
+    expect(item.sourceDomain).toBe('behance.net');
+    expect(item.title).toContain('Brutalist Architecture Identity');
+    expect(item.tags).toEqual(expect.arrayContaining(['behance', 'architecture', 'brutalist']));
+    expect(item.concepts.length).toBeGreaterThan(0);
+    expect(item.editorialContext).toContain('Behance');
+    expect(item.editorialContext).toContain('Incredible use of concrete materials');
   });
 });

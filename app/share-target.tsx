@@ -6,12 +6,13 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../src/features/auth/AuthContext';
 import { useTheme } from '../src/design/ThemeContext';
 import { useShareCapture } from '../src/features/capture/useShareCapture';
-import { AnnouncementBar } from '../src/components/ui/AnnouncementBar';
 import { TopNav } from '../src/components/ui/TopNav';
 import { Button } from '../src/components/ui/Button';
 import { Input } from '../src/components/ui/Input';
@@ -19,6 +20,7 @@ import { Card } from '../src/components/ui/Card';
 import { Badge } from '../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../src/design/tokens';
 import { InspirationItem } from '../src/types';
+import { enrichUrlMetadata, ExtractedUrlMetadata } from '../src/utils/urlMetadata';
 
 export default function ShareTargetScreen() {
   const router = useRouter();
@@ -38,6 +40,8 @@ export default function ShareTargetScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [duplicate, setDuplicate] = useState<InspirationItem | null>(null);
   const [isBinaryOnly, setIsBinaryOnly] = useState(false);
+  const [extractedMeta, setExtractedMeta] = useState<ExtractedUrlMetadata | null>(null);
+  const [extractingMeta, setExtractingMeta] = useState(false);
 
   // Auto-login as dummy user if unauthenticated so mobile share is never blocked
   useEffect(() => {
@@ -63,6 +67,24 @@ export default function ShareTargetScreen() {
       checkForDuplicate(processed.contentHash).then((existing) => {
         if (existing) setDuplicate(existing);
       });
+    }
+
+    const targetUrl = processed.rawUrl || processed.normalizedUrl;
+    if (targetUrl) {
+      setExtractingMeta(true);
+      enrichUrlMetadata(targetUrl, rawTitle, userNote)
+        .then((meta) => {
+          setExtractedMeta(meta);
+          if (meta.title && (!rawTitle || rawTitle.trim() === '')) {
+            setTitle(meta.title);
+          }
+          if (meta.autoTags && meta.autoTags.length > 0) {
+            setTags((prev) => Array.from(new Set([...prev, ...meta.autoTags])));
+          }
+        })
+        .finally(() => {
+          setExtractingMeta(false);
+        });
     }
   }, [rawTitle, rawText, rawUrl, user]);
 
@@ -100,7 +122,6 @@ export default function ShareTargetScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="DUMP INBOX" message="Incoming mobile share · Destination: Dump folder" />
       <TopNav
         title="rut"
         subtitle="Share to Dump"
@@ -146,18 +167,49 @@ export default function ShareTargetScreen() {
 
         <Card style={styles.previewCard}>
           <View style={styles.row}>
-            {processed.platform ? (
-              <Badge label={processed.platform.toUpperCase()} variant="inverse" />
+            {extractedMeta?.platform || processed.platform ? (
+              <Badge label={(extractedMeta?.platform || processed.platform || 'WEB').toUpperCase()} variant="inverse" />
             ) : null}
-            {processed.domain ? (
+            {extractedMeta?.siteName ? (
+              <Badge label={extractedMeta.siteName} variant="grade" />
+            ) : processed.domain ? (
               <Badge label={processed.domain} variant="grade" />
             ) : null}
+            {extractingMeta ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: spacing.xs }}>
+                <ActivityIndicator size="small" color={colors.ink} />
+                <Text style={[styles.extractingText, { color: colors.inkSoft }]}> Extracting...</Text>
+              </View>
+            ) : null}
           </View>
+
+          {extractedMeta?.previewImageUrl ? (
+            <Image
+              source={{ uri: extractedMeta.previewImageUrl }}
+              style={styles.previewImage}
+              resizeMode="cover"
+            />
+          ) : null}
 
           {processed.rawUrl ? (
             <Text style={styles.urlText} numberOfLines={2}>
               {processed.rawUrl}
             </Text>
+          ) : null}
+
+          {extractedMeta?.editorialContext ? (
+            <View style={[styles.contextBox, { backgroundColor: colors.surfaceGrade, borderColor: colors.hairlineGrade }]}>
+              <Text style={[styles.contextText, { color: colors.ink }]}>{extractedMeta.editorialContext}</Text>
+            </View>
+          ) : null}
+
+          {extractedMeta?.autoTags && extractedMeta.autoTags.length > 0 ? (
+            <View style={styles.autoTagRow}>
+              <Text style={[styles.autoTagLabel, { color: colors.inkSoft }]}>AUTO TAGS: </Text>
+              {extractedMeta.autoTags.slice(0, 6).map((tag) => (
+                <Badge key={tag} label={`#${tag}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
+              ))}
+            </View>
           ) : null}
 
           {processed.sharedText && !processed.rawUrl ? (
@@ -275,6 +327,38 @@ const getStyles = (colors: ThemeColors) =>
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.xs,
+  },
+  previewImage: {
+    width: '100%',
+    height: 160,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.surfaceOverlay,
+  },
+  extractingText: {
+    ...typography.captionSm,
+    fontSize: 10,
+  },
+  contextBox: {
+    padding: spacing.xs,
+    borderWidth: 1,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  contextText: {
+    ...typography.captionSm,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  autoTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  autoTagLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    marginRight: spacing.xxs,
   },
   urlText: {
     ...typography.captionSm,
