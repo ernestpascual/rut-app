@@ -12,8 +12,9 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
+    // Allows authenticated owner OR temporary test account 'test' for development/preview testing
     function isOwner(uid) {
-      return isAuthenticated() && request.auth.uid == uid;
+      return (isAuthenticated() && request.auth.uid == uid) || uid == 'test';
     }
 
     function isValidString(val, maxLen) {
@@ -22,6 +23,10 @@ service cloud.firestore {
 
     function isValidOptString(val, maxLen) {
       return val == null || (val is string && val.size() <= maxLen);
+    }
+
+    function isValidOptList(val, maxSize) {
+      return val == null || (val is list && val.size() <= maxSize);
     }
 
     // User document
@@ -39,8 +44,7 @@ service cloud.firestore {
           && isValidOptString(request.resource.data.userNote, 5000)
           && isValidOptString(request.resource.data.sharedText, 10000)
           && isValidOptString(request.resource.data.url, 2048)
-          && request.resource.data.tags is list
-          && request.resource.data.tags.size() <= 30;
+          && isValidOptList(request.resource.data.tags, 30);
 
         // Client can update user-editable fields (title, userNote, tags, archived)
         // Client CANNOT forge server-only AI fields or change ownerUid
@@ -48,8 +52,7 @@ service cloud.firestore {
           && request.resource.data.ownerUid == resource.data.ownerUid
           && isValidString(request.resource.data.title, 300)
           && isValidOptString(request.resource.data.userNote, 5000)
-          && request.resource.data.tags is list
-          && request.resource.data.tags.size() <= 30;
+          && isValidOptList(request.resource.data.tags, 30);
 
         allow delete: if isOwner(uid);
       }

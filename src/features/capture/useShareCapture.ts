@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext';
 import { extractUrlFromText, normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../utils/url';
 import { stagePendingShare } from './stagingStorage';
 import { IncomingSharePayload, InspirationItem } from '../../types';
+import { quickDumpLinkOrNote } from '../dump/dumpService';
 
 export function useShareCapture() {
   const { user } = useAuth();
@@ -80,10 +81,13 @@ export function useShareCapture() {
     }
 
     if (!user) {
-      // Stage locally for sign-in restoration
-      await stagePendingShare(payload);
+      const newItem = await quickDumpLinkOrNote(
+        processed.rawUrl || processed.sharedText || '',
+        userNote,
+        tags
+      );
       setLoading(false);
-      return { staged: true };
+      return { id: newItem.id, staged: false };
     }
 
     try {
@@ -93,6 +97,7 @@ export function useShareCapture() {
         {
           ownerUid: user.uid,
           kind,
+          folder: 'dump',
           title: (customTitle || processed.title).trim(),
           url: processed.rawUrl || null,
           normalizedUrl: processed.normalizedUrl || null,
@@ -120,9 +125,14 @@ export function useShareCapture() {
       setLoading(false);
       return { id: docRef.id, staged: false };
     } catch (err: any) {
+      // Local fallback
+      const newItem = await quickDumpLinkOrNote(
+        processed.rawUrl || processed.sharedText || '',
+        userNote,
+        tags
+      );
       setLoading(false);
-      setError(err.message || 'Failed to save inspiration item.');
-      throw err;
+      return { id: newItem.id, staged: false };
     }
   };
 

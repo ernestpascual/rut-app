@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  TouchableOpacity,
   Text,
   StyleSheet,
   ActivityIndicator,
@@ -8,7 +7,8 @@ import {
   TextStyle,
   Pressable
 } from 'react-native';
-import { colors, rounded, typography, spacing } from '../../design/tokens';
+import { rounded, typography, spacing } from '../../design/tokens';
+import { useTheme } from '../../design/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -29,17 +29,23 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
 }) => {
+  const { colors } = useTheme();
+
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
-        variant === 'primary' && styles.primary,
-        variant === 'secondary' && styles.secondary,
+        variant === 'primary' && { backgroundColor: colors.ink, borderWidth: 0 },
+        variant === 'secondary' && {
+          backgroundColor: colors.canvas,
+          borderWidth: 1,
+          borderColor: colors.ink,
+        },
         variant === 'text' && styles.textButton,
-        pressed && variant === 'primary' && styles.primaryActive,
-        pressed && variant === 'secondary' && styles.secondaryActive,
+        pressed && variant === 'primary' && { backgroundColor: colors.inkSoft },
+        pressed && variant === 'secondary' && { backgroundColor: colors.surfaceGrade },
         disabled && styles.disabled,
         style,
       ]}
@@ -55,9 +61,9 @@ export const Button: React.FC<ButtonProps> = ({
         <Text
           style={[
             styles.baseText,
-            variant === 'primary' && styles.primaryText,
-            variant === 'secondary' && styles.secondaryText,
-            variant === 'text' && styles.textButtonText,
+            variant === 'primary' && { color: colors.onInk },
+            variant === 'secondary' && { color: colors.ink },
+            variant === 'text' && [styles.textButtonText, { color: colors.ink }],
             textStyle,
           ]}
         >
@@ -76,21 +82,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  primary: {
-    backgroundColor: colors.ink, // Pure black #000000
-    borderWidth: 0,
-  },
-  primaryActive: {
-    backgroundColor: colors.inkSoft, // #767676 on press
-  },
-  secondary: {
-    backgroundColor: colors.canvas, // Pure white #ffffff
-    borderWidth: 1,
-    borderColor: colors.ink,
-  },
-  secondaryActive: {
-    backgroundColor: colors.surfaceGrade,
-  },
   textButton: {
     backgroundColor: 'transparent',
     height: 'auto',
@@ -103,14 +94,7 @@ const styles = StyleSheet.create({
   baseText: {
     ...typography.bodyMd,
   },
-  primaryText: {
-    color: colors.onInk, // Pure white
-  },
-  secondaryText: {
-    color: colors.ink, // Pure black
-  },
   textButtonText: {
-    color: colors.ink,
     textDecorationLine: 'underline',
   },
 });

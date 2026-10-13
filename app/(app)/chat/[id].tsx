@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../../src/lib/firebase/client';
 import { useAuth } from '../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
@@ -36,13 +37,15 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { SourceCard } from '../../../src/components/ui/SourceCard';
-import { colors, rounded, typography, spacing } from '../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { ChatMessage, ChatSession, InspirationItem } from '../../../src/types';
 
 export default function ChatWorkspaceScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
 
   const [session, setSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -264,7 +267,18 @@ export default function ChatWorkspaceScreen() {
   if (loading || !session) {
     return (
       <SafeAreaView style={styles.container}>
-        <TopNav title="rut" subtitle="Loading train of thought..." />
+        <TopNav
+          title="rut"
+          subtitle="Loading train of thought..."
+          onBack={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(app)/(tabs)/chats');
+            }
+          }}
+          backTitle="CHATS"
+        />
         <View style={styles.centerBox}>
           <ActivityIndicator color={colors.ink} size="small" />
         </View>
@@ -285,6 +299,14 @@ export default function ChatWorkspaceScreen() {
       <TopNav
         title="rut"
         subtitle={session.title}
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/chats');
+          }
+        }}
+        backTitle="CHATS"
         rightAction={
           <Button
             title={`PIN (${(session.pinnedInspirationIds || []).length})`}
@@ -465,7 +487,8 @@ export default function ChatWorkspaceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

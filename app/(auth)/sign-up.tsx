@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/AuthContext';
+import { useTheme } from '../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../src/components/ui/TopNav';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
-import { colors, typography, spacing } from '../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../src/design/tokens';
 
 export default function SignUpScreen() {
   const router = useRouter();
   const { signUp, stagedShare, authError, clearAuthError } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -48,6 +51,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       await signUp(email, password);
+      if (stagedShare) {
+        router.replace('/share-target');
+      } else {
+        router.replace('/(app)/(tabs)/bank');
+      }
     } catch (e) {
       // Handled in context
     } finally {
@@ -58,7 +66,19 @@ export default function SignUpScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <AnnouncementBar pillText="REGISTER" message="Start your private inspiration dump" />
-      <TopNav title="rut" subtitle="Sign Up" />
+      <TopNav
+        title="rut"
+        subtitle="Sign Up"
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(auth)/login');
+          }
+        }}
+        backTitle="LOGIN"
+        showThemeToggle
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -143,7 +163,8 @@ export default function SignUpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

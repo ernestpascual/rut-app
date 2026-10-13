@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,20 +18,25 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
-import { useAuth } from '../../../src/features/auth/AuthContext';
+import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
-import { colors, rounded, typography, spacing } from '../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
+import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
 
 export default function InspirationDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+  const isDummy = !user || user.uid === DUMMY_USER_UID;
 
   const [item, setItem] = useState<InspirationItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,68 +48,100 @@ export default function InspirationDetailScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user || !id) return;
+    if (!id) return;
     const fetchDoc = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'users', user.uid, 'inspirations', id));
-        if (snap.exists()) {
-          const data = { id: snap.id, ...(snap.data() as any) } as InspirationItem;
-          setItem(data);
-          setEditTitle(data.title);
-          setEditNote(data.userNote || '');
-          setEditTags(data.tags || []);
-        } else {
-          Alert.alert('Not Found', 'Inspiration item does not exist.');
-          router.back();
-        }
-      } catch (err: any) {
-        Alert.alert('Error', err.message || 'Could not load item.');
-      } finally {
-        setLoading(false);
+      if (user) {
+        try {
+          const snap = await getDoc(doc(db, 'users', user.uid, 'inspirations', id));
+          if (snap.exists()) {
+            const data = { id: snap.id, ...(snap.data() as any) } as InspirationItem;
+            setItem(data);
+            setEditTitle(data.title);
+            setEditNote(data.userNote || '');
+            setEditTags(data.tags || []);
+            setLoading(false);
+            return;
+          }
+        } catch {}
       }
+
+      // Check local dump
+      const localItems = await getDumpInspirations();
+      const found = localItems.find((i) => i.id === id);
+      if (found) {
+        setItem(found);
+        setEditTitle(found.title);
+        setEditNote(found.userNote || '');
+        setEditTags(found.tags || []);
+      } else {
+        Alert.alert('Not Found', 'Inspiration item does not exist.');
+        router.back();
+      }
+      setLoading(false);
     };
     fetchDoc();
-  }, [user, id]);
+  }, [user, id, isDummy]);
 
   const handleSaveEdits = async () => {
-    if (!user || !item) return;
+    if (!item) return;
     setSaving(true);
+    const updated: InspirationItem = {
+      ...item,
+      title: editTitle.trim(),
+      userNote: editNote.trim() || null,
+      tags: editTags,
+      updatedAt: Date.now(),
+    };
+
     try {
-      await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
-        title: editTitle.trim(),
-        userNote: editNote.trim() || null,
-        tags: editTags,
-        updatedAt: Date.now(),
-      });
-      setItem({
-        ...item,
-        title: editTitle.trim(),
-        userNote: editNote.trim() || null,
-        tags: editTags,
-      });
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
+          title: updated.title,
+          userNote: updated.userNote,
+          tags: updated.tags,
+          updatedAt: Date.now(),
+        });
+      }
+      const local = await getDumpInspirations();
+      const updatedLocal = local.map((i) => (i.id === item.id ? updated : i));
+      await setDumpInspirations(updatedLocal);
+      setItem(updated);
       setEditing(false);
-    } catch (err: any) {
-      Alert.alert('Save Failed', err.message || 'Could not update item.');
+    } catch {
+      const local = await getDumpInspirations();
+      const updatedLocal = local.map((i) => (i.id === item.id ? updated : i));
+      await setDumpInspirations(updatedLocal);
+      setItem(updated);
+      setEditing(false);
     } finally {
       setSaving(false);
     }
   };
 
   const handleToggleArchive = async () => {
-    if (!user || !item) return;
+    if (!item) return;
+    const nextArchived = !item.archived;
+    const updated: InspirationItem = { ...item, archived: nextArchived, updatedAt: Date.now() };
+
     try {
-      await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
-        archived: !item.archived,
-        updatedAt: Date.now(),
-      });
-      setItem({ ...item, archived: !item.archived });
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not update archive state.');
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
+          archived: nextArchived,
+          updatedAt: Date.now(),
+        });
+      }
+      const local = await getDumpInspirations();
+      await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+      setItem(updated);
+    } catch {
+      const local = await getDumpInspirations();
+      await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+      setItem(updated);
     }
   };
 
   const handleDelete = async () => {
-    if (!user || !item) return;
+    if (!item) return;
     Alert.alert(
       'Delete Inspiration',
       'Are you sure you want to permanently remove this inspiration from your bank?',
@@ -115,7 +152,11 @@ export default function InspirationDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, 'users', user.uid, 'inspirations', item.id));
+              if (user) {
+                await deleteDoc(doc(db, 'users', user.uid, 'inspirations', item.id)).catch(() => {});
+              }
+              const local = await getDumpInspirations();
+              await setDumpInspirations(local.filter((i) => i.id !== item.id));
               router.back();
             } catch (err: any) {
               Alert.alert('Delete Failed', err.message);
@@ -137,7 +178,18 @@ export default function InspirationDetailScreen() {
   if (loading || !item) {
     return (
       <SafeAreaView style={styles.container}>
-        <TopNav title="rut" subtitle="Loading..." />
+        <TopNav
+          title="rut"
+          subtitle="Loading..."
+          onBack={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(app)/(tabs)/bank');
+            }
+          }}
+          backTitle="DUMP"
+        />
         <View style={styles.centerBox}>
           <ActivityIndicator color={colors.ink} size="small" />
         </View>
@@ -154,6 +206,14 @@ export default function InspirationDetailScreen() {
       <TopNav
         title="rut"
         subtitle="Inspiration Detail"
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/bank');
+          }
+        }}
+        backTitle="BACK"
         rightAction={
           <Button
             title={editing ? 'CANCEL' : 'EDIT'}
@@ -306,7 +366,8 @@ export default function InspirationDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

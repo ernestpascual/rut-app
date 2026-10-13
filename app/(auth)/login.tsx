@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,18 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/AuthContext';
-import { AnnouncementBar } from '../../src/components/ui/AnnouncementBar';
+import { useTheme } from '../../src/design/ThemeContext';
 import { TopNav } from '../../src/components/ui/TopNav';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
-import { colors, typography, spacing } from '../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../src/design/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn, stagedShare, authError, clearAuthError } = useAuth();
+  const { signIn, signInAsDummy, stagedShare, authError, clearAuthError } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +39,29 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
-      // NavigationGuard will automatically direct to bank or share-target
+      if (stagedShare) {
+        router.replace('/share-target');
+      } else {
+        router.replace('/(app)/(tabs)/bank');
+      }
+    } catch (e) {
+      // Handled in context
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDummySignIn = async () => {
+    clearAuthError();
+    setValidationError(null);
+    setLoading(true);
+    try {
+      await signInAsDummy();
+      if (stagedShare) {
+        router.replace('/share-target');
+      } else {
+        router.replace('/(app)/(tabs)/bank');
+      }
     } catch (e) {
       // Handled in context
     } finally {
@@ -47,8 +71,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="RUT" message="Private AI-indexed inspiration bank" />
-      <TopNav title="rut" subtitle="Login" />
+      <TopNav title="rut" subtitle="Login" showThemeToggle />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -116,6 +139,14 @@ export default function LoginScreen() {
             style={{ marginTop: spacing.base }}
           />
 
+          <Button
+            title="⚡ ENTER WITH DEMO ACCOUNT (TEST)"
+            variant="secondary"
+            onPress={handleDummySignIn}
+            disabled={loading}
+            style={{ marginTop: spacing.xs }}
+          />
+
           <View style={styles.switchRow}>
             <Text style={styles.switchText}>Don&apos;t have an account? </Text>
             <Button
@@ -130,7 +161,8 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,23 @@ import {
 import { useRouter } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
-import { useAuth } from '../../../src/features/auth/AuthContext';
+import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
 import { Badge } from '../../../src/components/ui/Badge';
 import { ProjectCreateSchema } from '../../../src/lib/validation/schemas';
-import { colors, typography, spacing } from '../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { Project } from '../../../src/types';
+import { saveProject } from '../../../src/features/dump/dumpService';
 
 export default function NewProjectScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
 
   const [title, setTitle] = useState('');
   const [brief, setBrief] = useState('');
@@ -60,6 +65,25 @@ export default function NewProjectScreen() {
 
     setLoading(true);
     try {
+      if (!user) {
+        const newProj: Project = {
+          id: `idea-${Date.now()}`,
+          ownerUid: 'test',
+          title: title.trim(),
+          brief: brief.trim() || null,
+          notes: notes.trim(),
+          status: 'active',
+          tags,
+          autoLinkEnabled: autoLink,
+          autoLinkConfidenceThreshold: 0.75,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        await saveProject(newProj);
+        router.replace(`/(app)/project/${newProj.id}`);
+        return;
+      }
+
       const docRef = await addDoc(collection(db, 'users', user.uid, 'projects'), {
         ownerUid: user.uid,
         title: title.trim(),
@@ -75,7 +99,22 @@ export default function NewProjectScreen() {
 
       router.replace(`/(app)/project/${docRef.id}`);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not create project.');
+      // Local fallback
+      const fallbackProj: Project = {
+        id: `idea-${Date.now()}`,
+        ownerUid: user?.uid || DUMMY_USER_UID,
+        title: title.trim(),
+        brief: brief.trim() || null,
+        notes: notes.trim(),
+        status: 'active',
+        tags,
+        autoLinkEnabled: autoLink,
+        autoLinkConfidenceThreshold: 0.75,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await saveProject(fallbackProj);
+      router.replace(`/(app)/project/${fallbackProj.id}`);
     } finally {
       setLoading(false);
     }
@@ -87,7 +126,27 @@ export default function NewProjectScreen() {
       <TopNav
         title="rut"
         subtitle="New Project"
-        rightAction={<Button title="✕ CLOSE" variant="text" onPress={() => router.back()} />}
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/projects');
+          }
+        }}
+        backTitle="IDEAS"
+        rightAction={
+          <Button
+            title="✕ CLOSE"
+            variant="text"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(app)/(tabs)/projects');
+              }
+            }}
+          />
+        }
       />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -165,7 +224,8 @@ export default function NewProjectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

@@ -2,6 +2,7 @@ export type InspirationKind = 'link' | 'note' | 'quote';
 
 export type SourcePlatform =
   | 'instagram'
+  | 'pinterest'
   | 'tiktok'
   | 'x'
   | 'threads'
@@ -15,6 +16,7 @@ export interface InspirationItem {
   id: string;
   ownerUid: string;
   kind: InspirationKind;
+  folder?: string; // Default: 'dump' (Everything starts in the dump folder)
   title: string;
   url: string | null;
   normalizedUrl: string | null;
@@ -112,3 +114,13 @@ export interface IncomingSharePayload {
   url?: string | null;
   hasBinaryAttachment?: boolean;
 }
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  role: 'user' | string;
+  createdAt: number;
+  updatedAt: number;
+  lastSignInAt?: number;
+}
+

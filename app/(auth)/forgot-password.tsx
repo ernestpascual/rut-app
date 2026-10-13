@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/AuthContext';
+import { useTheme } from '../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../src/components/ui/TopNav';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
-import { colors, typography, spacing } from '../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../src/design/tokens';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { sendReset, authError, clearAuthError } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,7 +51,19 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <AnnouncementBar pillText="RECOVERY" message="Reset your account password" />
-      <TopNav title="rut" subtitle="Reset Password" />
+      <TopNav
+        title="rut"
+        subtitle="Reset Password"
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(auth)/login');
+          }
+        }}
+        backTitle="LOGIN"
+        showThemeToggle
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -116,7 +131,8 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

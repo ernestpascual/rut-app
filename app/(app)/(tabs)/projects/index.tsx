@@ -1,70 +1,117 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  SafeAreaView,
-  ActivityIndicator
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   collection,
   query,
   orderBy,
-  onSnapshot
+  onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../../../../src/lib/firebase/client';
-import { useAuth } from '../../../../src/features/auth/AuthContext';
+import { useAuth, DUMMY_USER_UID } from '../../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
-import { colors, rounded, typography, spacing } from '../../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { Project } from '../../../../src/types';
+import { getProjects } from '../../../../src/features/dump/dumpService';
 
 export default function ProjectsListScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+  const isDummy = !user || user.uid === DUMMY_USER_UID;
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'users', user.uid, 'projects'),
-      orderBy('updatedAt', 'desc')
-    );
+    let isMounted = true;
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetched: Project[] = [];
-        snapshot.forEach((docSnap) => {
-          fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        setProjects(fetched);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('Projects snapshot error:', err);
-        setLoading(false);
-      }
-    );
+    if (!user) {
+      getProjects().then((loaded) => {
+        if (isMounted) {
+          setProjects(loaded);
+          setLoading(false);
+        }
+      });
+      return;
+    }
 
-    return unsubscribe;
-  }, [user]);
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'projects'),
+        orderBy('updatedAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!isMounted) return;
+          if (snapshot.empty) {
+            getProjects().then((loaded) => {
+              if (isMounted) {
+                setProjects(loaded);
+                setLoading(false);
+              }
+            });
+          } else {
+            const fetched: Project[] = [];
+            snapshot.forEach((docSnap) => {
+              fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
+            });
+            setProjects(fetched);
+            setLoading(false);
+          }
+        },
+        (err) => {
+          console.warn('Projects snapshot error, using local ideas:', err);
+          getProjects().then((loaded) => {
+            if (isMounted) {
+              setProjects(loaded);
+              setLoading(false);
+            }
+          });
+        }
+      );
+
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
+    } catch {
+      getProjects().then((loaded) => {
+        if (isMounted) {
+          setProjects(loaded);
+          setLoading(false);
+        }
+      });
+    }
+  }, [user, isDummy]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="PROJECTS" message="Combine notes and AI-suggested inspiration" />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <AnnouncementBar
+        pillText="IDEAS STUDIO"
+        message="Write your idea and match & attach inspirations from your dump as references"
+      />
       <TopNav
         title="rut"
-        subtitle="Projects Workspace"
+        subtitle="Ideas & Projects"
         rightAction={
           <Button
-            title="+ NEW PROJECT"
+            title="+ WRITE IDEA"
             onPress={() => router.push('/(app)/project/new')}
             style={{ height: 36, paddingHorizontal: 16 }}
           />
@@ -77,12 +124,12 @@ export default function ProjectsListScreen() {
         </View>
       ) : projects.length === 0 ? (
         <View style={styles.centerBox}>
-          <Text style={styles.emptyTitle}>NO ACTIVE PROJECTS</Text>
+          <Text style={styles.emptyTitle}>NO IDEAS YET</Text>
           <Text style={styles.emptySubtitle}>
-            Projects aggregate your notes with relevant inspiration items matched automatically by AI.
+            Write an idea concept, brief, or notes, and discover matching references from your saved dump.
           </Text>
           <Button
-            title="+ CREATE FIRST PROJECT"
+            title="+ WRITE FIRST IDEA"
             onPress={() => router.push('/(app)/project/new')}
             style={{ marginTop: spacing.base }}
           />
@@ -114,9 +161,7 @@ export default function ProjectsListScreen() {
               ) : null}
 
               <View style={styles.tagRow}>
-                {item.autoLinkEnabled ? (
-                  <Badge label="AI AUTO-LINK ON" variant="outline" />
-                ) : null}
+                <Badge label="INSPIRATION MATCHER" variant="outline" />
                 {(item.tags || []).map((t) => (
                   <Badge key={t} label={`#${t}`} variant="grade" />
                 ))}
@@ -129,13 +174,15 @@ export default function ProjectsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
   },
   listContent: {
     padding: spacing.base,
+    paddingBottom: 100,
   },
   projectCard: {
     marginBottom: spacing.sm,
@@ -178,6 +225,6 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.inkSoft,
     textAlign: 'center',
-    maxWidth: 340,
+    maxWidth: 320,
   },
 });

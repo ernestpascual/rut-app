@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, rounded, typography, spacing } from '../../design/tokens';
+import { rounded, typography, spacing } from '../../design/tokens';
+import { useTheme } from '../../design/ThemeContext';
 
 interface AnnouncementBarProps {
   pillText?: string;
@@ -11,14 +12,43 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({
   pillText = 'AI INDEXED',
   message,
 }) => {
+  const { colors, isDark } = useTheme();
+
   return (
-    <View style={styles.bar}>
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: isDark ? colors.surfaceGrade : colors.surfaceOverlay,
+          borderBottomWidth: isDark ? 1 : 0,
+          borderBottomColor: colors.hairline,
+        },
+      ]}
+    >
       {pillText ? (
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>{pillText}</Text>
+        <View
+          style={[
+            styles.pill,
+            { backgroundColor: isDark ? colors.ink : colors.canvas },
+          ]}
+        >
+          <Text
+            style={[
+              styles.pillText,
+              { color: isDark ? colors.onInk : colors.ink },
+            ]}
+          >
+            {pillText}
+          </Text>
         </View>
       ) : null}
-      <Text style={styles.message} numberOfLines={1}>
+      <Text
+        style={[
+          styles.message,
+          { color: isDark ? colors.ink : colors.onInk },
+        ]}
+        numberOfLines={1}
+      >
         {message}
       </Text>
     </View>
@@ -28,14 +58,12 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({
 const styles = StyleSheet.create({
   bar: {
     height: 32,
-    backgroundColor: colors.surfaceOverlay, // #000000
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.base,
   },
   pill: {
-    backgroundColor: colors.canvas, // Pure white #ffffff
     borderRadius: rounded.pill, // 24px - the single rounded element in the system
     height: 20,
     paddingHorizontal: spacing.xs,
@@ -45,12 +73,10 @@ const styles = StyleSheet.create({
   },
   pillText: {
     ...typography.captionCap,
-    color: colors.ink,
     fontSize: 10,
     lineHeight: 14,
   },
   message: {
     ...typography.captionMd,
-    color: colors.onInk, // White on black
   },
 });

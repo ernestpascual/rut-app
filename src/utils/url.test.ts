@@ -26,6 +26,8 @@ describe('URL Utilities', () => {
 
   test('detects social platforms accurately', () => {
     expect(detectPlatform('https://www.instagram.com/p/123')).toBe('instagram');
+    expect(detectPlatform('https://www.pinterest.com/pin/12345/')).toBe('pinterest');
+    expect(detectPlatform('https://pin.it/abcd123')).toBe('pinterest');
     expect(detectPlatform('https://www.tiktok.com/@user/video/123')).toBe('tiktok');
     expect(detectPlatform('https://x.com/username/status/123')).toBe('x');
     expect(detectPlatform('https://t.co/abc')).toBe('x');

@@ -7,7 +7,8 @@ import {
   ViewStyle,
   TextInputProps
 } from 'react-native';
-import { colors, rounded, typography, spacing } from '../../design/tokens';
+import { rounded, typography, spacing } from '../../design/tokens';
+import { useTheme } from '../../design/ThemeContext';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -22,20 +23,29 @@ export const Input: React.FC<InputProps> = ({
   style,
   ...rest
 }) => {
+  const { colors } = useTheme();
+
   return (
     <View style={[styles.container, containerStyle]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text style={[styles.label, { color: colors.ink }]}>{label}</Text> : null}
       <TextInput
         style={[
           styles.input,
-          error ? styles.inputError : null,
+          {
+            backgroundColor: colors.canvas,
+            borderColor: colors.ink,
+            color: colors.ink,
+          },
+          error ? { borderColor: colors.statusErrorBorder, color: colors.statusErrorText } : null,
           style,
         ]}
         placeholderTextColor={colors.inkSoft}
         selectionColor={colors.ink}
         {...rest}
       />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <Text style={[styles.errorText, { color: colors.statusErrorText }]}>{error}</Text>
+      ) : null}
     </View>
   );
 };
@@ -46,27 +56,18 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.captionCap, // Uppercase 12px
-    color: colors.ink,
     marginBottom: spacing.xxs,
   },
   input: {
     height: 46,
-    backgroundColor: colors.canvas, // Pure white #ffffff
-    borderColor: colors.ink, // Pure black #000000
     borderWidth: 1,
     borderRadius: rounded.none, // 0px corners strictly per DESIGN.md
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
     ...typography.inputMd,
-    color: colors.ink,
-  },
-  inputError: {
-    borderColor: colors.statusErrorBorder, // #db1215 validation escape hatch
-    color: colors.statusErrorText,
   },
   errorText: {
     ...typography.captionSm,
-    color: colors.statusErrorText, // #db1215
     marginTop: spacing.xxs,
   },
 });

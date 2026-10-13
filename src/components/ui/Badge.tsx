@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { colors, rounded, typography, spacing } from '../../design/tokens';
+import { rounded, typography, spacing } from '../../design/tokens';
+import { useTheme } from '../../design/ThemeContext';
 
 interface BadgeProps {
   label: string;
@@ -13,20 +14,32 @@ export const Badge: React.FC<BadgeProps> = ({
   variant = 'grade',
   style,
 }) => {
+  const { colors } = useTheme();
+
   return (
     <View
       style={[
         styles.badge,
-        variant === 'outline' && styles.outline,
-        variant === 'grade' && styles.grade,
-        variant === 'inverse' && styles.inverse,
+        variant === 'outline' && {
+          backgroundColor: colors.canvas,
+          borderWidth: 1,
+          borderColor: colors.hairline,
+        },
+        variant === 'grade' && {
+          backgroundColor: colors.surfaceGrade,
+          borderWidth: 1,
+          borderColor: colors.hairlineSoft,
+        },
+        variant === 'inverse' && {
+          backgroundColor: colors.ink,
+        },
         style,
       ]}
     >
       <Text
         style={[
           styles.text,
-          variant === 'inverse' ? styles.textInverse : styles.textDark,
+          { color: variant === 'inverse' ? colors.onInk : colors.ink },
         ]}
       >
         {label}
@@ -44,28 +57,9 @@ const styles = StyleSheet.create({
     marginRight: spacing.xxs,
     marginBottom: spacing.xxs,
   },
-  outline: {
-    backgroundColor: colors.canvas,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-  },
-  grade: {
-    backgroundColor: colors.surfaceGrade, // #f4f4f4
-    borderWidth: 1,
-    borderColor: colors.hairlineSoft, // #cccccc
-  },
-  inverse: {
-    backgroundColor: colors.ink, // #000000
-  },
   text: {
     ...typography.captionCap,
     fontSize: 10,
     lineHeight: 14,
-  },
-  textDark: {
-    color: colors.ink,
-  },
-  textInverse: {
-    color: colors.onInk,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
 import { useRouter } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
-import { useAuth } from '../../../src/features/auth/AuthContext';
+import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
@@ -20,11 +21,15 @@ import { Button } from '../../../src/components/ui/Button';
 import { Badge } from '../../../src/components/ui/Badge';
 import { InspirationCreateSchema } from '../../../src/lib/validation/schemas';
 import { normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../../src/utils/url';
-import { colors, rounded, typography, spacing } from '../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { InspirationItem } from '../../../src/types';
+import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
 
 export default function NewInspirationScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
 
   const [kind, setKind] = useState<'link' | 'note'>('link');
   const [url, setUrl] = useState('');
@@ -72,25 +77,60 @@ export default function NewInspirationScreen() {
       const platform = normalized ? detectPlatform(normalized) : null;
       const domain = normalized ? extractDomain(normalized) : null;
       const hash = generateContentHash(normalized || userNote.trim());
+      if (!user) {
+        const newItem: InspirationItem = {
+          id: `dump-${Date.now()}`,
+          ownerUid: 'test',
+          kind,
+          folder: 'dump',
+          title: computedTitle,
+          url: url.trim() || null,
+          normalizedUrl: normalized,
+          sharedText: kind === 'note' ? userNote.trim() : null,
+          userNote: userNote.trim() || null,
+          sourcePlatform: platform,
+          sourceDomain: domain,
+          sourceApp: platform ? platform.toUpperCase() : 'Manual',
+          previewDescription: computedTitle,
+          remotePreviewImageUrl: null,
+          tags,
+          aiTags: platform ? [platform] : [],
+          concepts: tags,
+          aiSummary: userNote.trim() || null,
+          processingStatus: 'ready',
+          processingErrorCode: null,
+          duplicateOf: hash,
+          archived: false,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          capturedAt: Date.now(),
+        };
+
+        const existing = await getDumpInspirations();
+        await setDumpInspirations([newItem, ...existing]);
+        router.back();
+        return;
+      }
 
       await addDoc(collection(db, 'users', user.uid, 'inspirations'), {
         ownerUid: user.uid,
         kind,
+        folder: 'dump',
         title: computedTitle,
         url: url.trim() || null,
         normalizedUrl: normalized,
-        sharedText: null,
+        sharedText: kind === 'note' ? userNote.trim() : null,
         userNote: userNote.trim() || null,
         sourcePlatform: platform,
         sourceDomain: domain,
-        sourceApp: null,
+        sourceApp: platform ? platform.toUpperCase() : 'Manual',
         previewDescription: null,
         remotePreviewImageUrl: null,
         tags,
         aiTags: [],
         concepts: [],
         aiSummary: null,
-        processingStatus: 'pending',
+        processingStatus: 'ready',
         processingErrorCode: null,
         duplicateOf: hash,
         archived: false,
@@ -101,7 +141,39 @@ export default function NewInspirationScreen() {
 
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save inspiration item.');
+      // Local fallback
+      const platform = normalized ? detectPlatform(normalized) : null;
+      const domain = normalized ? extractDomain(normalized) : null;
+      const newItem: InspirationItem = {
+        id: `dump-${Date.now()}`,
+        ownerUid: user?.uid || DUMMY_USER_UID,
+        kind,
+        folder: 'dump',
+        title: computedTitle,
+        url: url.trim() || null,
+        normalizedUrl: normalized,
+        sharedText: kind === 'note' ? userNote.trim() : null,
+        userNote: userNote.trim() || null,
+        sourcePlatform: platform,
+        sourceDomain: domain,
+        sourceApp: platform ? platform.toUpperCase() : 'Manual',
+        previewDescription: computedTitle,
+        remotePreviewImageUrl: null,
+        tags,
+        aiTags: platform ? [platform] : [],
+        concepts: tags,
+        aiSummary: userNote.trim() || null,
+        processingStatus: 'ready',
+        processingErrorCode: null,
+        duplicateOf: null,
+        archived: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        capturedAt: Date.now(),
+      };
+      const existing = await getDumpInspirations();
+      await setDumpInspirations([newItem, ...existing]);
+      router.back();
     } finally {
       setLoading(false);
     }
@@ -113,7 +185,27 @@ export default function NewInspirationScreen() {
       <TopNav
         title="rut"
         subtitle="New Inspiration"
-        rightAction={<Button title="✕ CLOSE" variant="text" onPress={() => router.back()} />}
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/bank');
+          }
+        }}
+        backTitle="DUMP"
+        rightAction={
+          <Button
+            title="✕ CLOSE"
+            variant="text"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(app)/(tabs)/bank');
+              }
+            }}
+          />
+        }
       />
 
       <KeyboardAvoidingView
@@ -205,7 +297,8 @@ export default function NewInspirationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

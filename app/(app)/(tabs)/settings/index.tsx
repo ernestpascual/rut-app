@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   collection,
   query,
@@ -18,17 +18,20 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../../src/lib/firebase/client';
 import { useAuth } from '../../../../src/features/auth/AuthContext';
+import { useTheme, ThemeMode } from '../../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
 import { Input } from '../../../../src/components/ui/Input';
-import { colors, rounded, typography, spacing } from '../../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { UsageEvent, UsageSummary } from '../../../../src/types';
 
 export default function SettingsScreen() {
-  const { user, signOut, deleteAccount } = useAuth();
+  const { user, userProfile, signOut, deleteAccount } = useAuth();
+  const { colors, isDark, themeMode, setThemeMode } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [todaySummary, setTodaySummary] = useState<UsageSummary | null>(null);
   const [monthSummary, setMonthSummary] = useState<UsageSummary | null>(null);
@@ -159,9 +162,9 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="AUDIT" message="Runtime AI Usage &amp; Settings" />
-      <TopNav title="rut" subtitle="Settings &amp; Ledger" />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <AnnouncementBar pillText="AUDIT" message="Runtime AI Usage & Settings" />
+      <TopNav title="rut" subtitle="Settings & Ledger" />
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* Account Info */}
@@ -169,6 +172,9 @@ export default function SettingsScreen() {
           <Text style={styles.sectionHeading}>ACCOUNT</Text>
           <Text style={styles.accountEmail}>{user?.email || 'Authenticated User'}</Text>
           <Text style={styles.accountUid}>UID: {user?.uid || '—'}</Text>
+          <Text style={[styles.accountUid, { marginTop: spacing.xxs }]}>
+            ROLE: {(userProfile?.role || 'user').toUpperCase()}
+          </Text>
 
           <Button
             title="SIGN OUT"
@@ -176,6 +182,42 @@ export default function SettingsScreen() {
             onPress={signOut}
             style={{ marginTop: spacing.base }}
           />
+        </Card>
+
+        {/* Appearance / Theme Mode */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.auditHeader}>
+            <Text style={styles.sectionHeading}>APPEARANCE</Text>
+            <Badge label={isDark ? 'DARK MODE' : 'LIGHT MODE'} variant="inverse" />
+          </View>
+          <Text style={styles.disclaimerText}>
+            Select your preferred visual aesthetic. Both modes preserve rut's strict high-contrast editorial typography and zero-radius corners.
+          </Text>
+
+          <View style={styles.appearanceRow}>
+            <Button
+              title={themeMode === 'light' ? 'LIGHT ✓' : 'LIGHT'}
+              variant={themeMode === 'light' ? 'primary' : 'secondary'}
+              onPress={() => setThemeMode('light')}
+              style={styles.appearanceBtn}
+            />
+            <Button
+              title={themeMode === 'dark' ? 'DARK ✓' : 'DARK'}
+              variant={themeMode === 'dark' ? 'primary' : 'secondary'}
+              onPress={() => setThemeMode('dark')}
+              style={styles.appearanceBtn}
+            />
+            <Button
+              title={themeMode === 'system' ? 'SYSTEM ✓' : 'SYSTEM'}
+              variant={themeMode === 'system' ? 'primary' : 'secondary'}
+              onPress={() => setThemeMode('system')}
+              style={styles.appearanceBtn}
+            />
+          </View>
+          <Text style={[styles.disclaimerText, { marginTop: spacing.xs, marginBottom: 0 }]}>
+            Active Theme: {isDark ? 'Dark (Inverted Editorial)' : 'Light (Editorial White)'}
+            {themeMode === 'system' ? ' • Following Device System' : ' • Manual Preference'}
+          </Text>
         </Card>
 
         {/* Gemini Flash Model Selection */}
@@ -336,134 +378,145 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.canvas,
-  },
-  content: {
-    padding: spacing.base,
-    maxWidth: 680,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  sectionCard: {
-    marginBottom: spacing.base,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-  },
-  sectionHeading: {
-    ...typography.captionCap,
-    color: colors.ink,
-    fontWeight: '700',
-    marginBottom: spacing.xs,
-  },
-  accountEmail: {
-    ...typography.bodyLg,
-    color: colors.ink,
-    marginBottom: spacing.xxs,
-  },
-  accountUid: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-  },
-  auditHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xxs,
-  },
-  disclaimerText: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-    lineHeight: 16,
-    marginBottom: spacing.base,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    borderTopWidth: 1,
-    borderTopColor: colors.hairline,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.hairline,
-  },
-  statBox: {
-    width: '50%',
-    padding: spacing.sm,
-    borderRightWidth: 1,
-    borderRightColor: colors.hairline,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairline,
-    backgroundColor: colors.surfaceGrade,
-  },
-  statLabel: {
-    ...typography.captionCap,
-    fontSize: 9,
-    color: colors.inkSoft,
-    marginBottom: spacing.xxs,
-  },
-  statValue: {
-    ...typography.displayMd,
-    fontSize: 20,
-    color: colors.ink,
-    fontWeight: '700',
-  },
-  subHeading: {
-    ...typography.captionCap,
-    fontSize: 10,
-    color: colors.inkSoft,
-    marginBottom: spacing.xs,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.xxs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairlineGrade,
-  },
-  metricLabel: {
-    ...typography.captionSm,
-    color: colors.ink,
-  },
-  metricValue: {
-    ...typography.captionSm,
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  emptyMetricText: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-    fontStyle: 'italic',
-  },
-  privacyBody: {
-    ...typography.bodyMd,
-    color: colors.inkSoft,
-    lineHeight: 22,
-    fontSize: 13,
-  },
-  dangerCard: {
-    marginBottom: spacing.base,
-    borderWidth: 1,
-    borderColor: colors.statusErrorBorder,
-    padding: spacing.base,
-  },
-  dangerHeading: {
-    ...typography.captionCap,
-    color: colors.statusErrorText,
-    fontWeight: '700',
-    marginBottom: spacing.xxs,
-  },
-  dangerBody: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-    marginBottom: spacing.base,
-  },
-  versionFooter: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-  },
-  versionText: {
-    ...typography.captionSm,
-    color: colors.inkSoft,
-  },
-});
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.canvas,
+    },
+    content: {
+      padding: spacing.base,
+      maxWidth: 680,
+      width: '100%',
+      alignSelf: 'center',
+    },
+    sectionCard: {
+      marginBottom: spacing.base,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+    },
+    sectionHeading: {
+      ...typography.captionCap,
+      color: colors.ink,
+      fontWeight: '700',
+      marginBottom: spacing.xs,
+    },
+    accountEmail: {
+      ...typography.bodyLg,
+      color: colors.ink,
+      marginBottom: spacing.xxs,
+    },
+    accountUid: {
+      ...typography.captionSm,
+      color: colors.inkSoft,
+    },
+    auditHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.xxs,
+    },
+    disclaimerText: {
+      ...typography.captionSm,
+      color: colors.inkSoft,
+      lineHeight: 16,
+      marginBottom: spacing.base,
+    },
+    appearanceRow: {
+      flexDirection: 'row',
+      marginBottom: spacing.xs,
+    },
+    appearanceBtn: {
+      flex: 1,
+      height: 40,
+      marginRight: spacing.xs,
+      paddingHorizontal: spacing.xs,
+    },
+    statsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      borderTopWidth: 1,
+      borderTopColor: colors.hairline,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.hairline,
+    },
+    statBox: {
+      width: '50%',
+      padding: spacing.sm,
+      borderRightWidth: 1,
+      borderRightColor: colors.hairline,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.hairline,
+      backgroundColor: colors.surfaceGrade,
+    },
+    statLabel: {
+      ...typography.captionCap,
+      fontSize: 9,
+      color: colors.inkSoft,
+      marginBottom: spacing.xxs,
+    },
+    statValue: {
+      ...typography.displayMd,
+      fontSize: 20,
+      color: colors.ink,
+      fontWeight: '700',
+    },
+    subHeading: {
+      ...typography.captionCap,
+      fontSize: 10,
+      color: colors.inkSoft,
+      marginBottom: spacing.xs,
+    },
+    metricRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.xxs,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.hairlineGrade,
+    },
+    metricLabel: {
+      ...typography.captionSm,
+      color: colors.ink,
+    },
+    metricValue: {
+      ...typography.captionSm,
+      color: colors.ink,
+      fontWeight: '600',
+    },
+    emptyMetricText: {
+      ...typography.captionSm,
+      color: colors.inkSoft,
+      fontStyle: 'italic',
+    },
+    privacyBody: {
+      ...typography.bodyMd,
+      color: colors.inkSoft,
+      lineHeight: 22,
+      fontSize: 13,
+    },
+    dangerCard: {
+      marginBottom: spacing.base,
+      borderWidth: 1,
+      borderColor: colors.statusErrorBorder,
+      padding: spacing.base,
+    },
+    dangerHeading: {
+      ...typography.captionCap,
+      color: colors.statusErrorText,
+      fontWeight: '700',
+      marginBottom: spacing.xxs,
+    },
+    dangerBody: {
+      ...typography.captionSm,
+      color: colors.inkSoft,
+      marginBottom: spacing.base,
+    },
+    versionFooter: {
+      alignItems: 'center',
+      paddingVertical: spacing.xl,
+    },
+    versionText: {
+      ...typography.captionSm,
+      color: colors.inkSoft,
+    },
+  });

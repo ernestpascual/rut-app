@@ -1,29 +1,59 @@
 // Design tokens strictly conforming to DESIGN.md
 import { TextStyle, ViewStyle } from 'react-native';
 
-export const colors = {
+export const lightColors = {
   ink: '#000000',
-  inkSoft: '#767676',
+  inkSoft: '#666666',
   inkMid: '#cccccc',
   inkPure: '#000000',
   canvas: '#ffffff',
   surfaceContent: '#ffffff',
-  surfaceGrade: '#f4f4f4',
+  surfaceGrade: '#ffffff',
   surfaceOnInk: '#ffffff',
-  surfaceOverlay: '#000000',
+  surfaceOverlay: '#ffffff',
   hairline: '#000000',
-  hairlineSoft: '#cccccc',
-  hairlineGrade: '#f4f4f4',
+  hairlineSoft: '#000000',
+  hairlineGrade: '#000000',
   onInk: '#ffffff',
   onCanvas: '#000000',
-  gradeDivider: '#767676',
+  gradeDivider: '#cccccc',
   gradeMute: '#cccccc',
-  gradeBand: '#f4f4f4',
+  gradeBand: '#ffffff',
   // Error red is reserved strictly for validation errors and out-of-stock badges. Never on CTAs.
   statusError: '#db1215',
   statusErrorText: '#db1215',
   statusErrorBorder: '#db1215',
 } as const;
+
+export const darkColors = {
+  ink: '#ffffff',
+  inkSoft: '#a0a0a0',
+  inkMid: '#444444',
+  inkPure: '#ffffff',
+  canvas: '#000000',
+  surfaceContent: '#000000',
+  surfaceGrade: '#000000',
+  surfaceOnInk: '#000000',
+  surfaceOverlay: '#000000',
+  hairline: '#ffffff',
+  hairlineSoft: '#ffffff',
+  hairlineGrade: '#ffffff',
+  onInk: '#000000',
+  onCanvas: '#ffffff',
+  gradeDivider: '#444444',
+  gradeMute: '#444444',
+  gradeBand: '#000000',
+  statusError: '#ff453a',
+  statusErrorText: '#ff453a',
+  statusErrorBorder: '#ff453a',
+} as const;
+
+export type ThemeColors = {
+  [K in keyof typeof lightColors]: string;
+};
+
+// Default export for backwards-compatibility
+export const colors = lightColors;
 
 export const rounded = {
   none: 0,

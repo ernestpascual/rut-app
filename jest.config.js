@@ -7,5 +7,8 @@ module.exports = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }]
   },
+  moduleNameMapper: {
+    '^@react-native-async-storage/async-storage$': '<rootDir>/src/__mocks__/async-storage.ts'
+  },
   modulePathIgnorePatterns: ['<rootDir>/functions/']
 };

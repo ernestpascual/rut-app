@@ -51,7 +51,13 @@
     "export:web:safe": "cross-env EXPO_NO_DOTENV=1 expo export --platform web",
     "lint": "expo lint",
     "type-check": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "build:android": "eas build --platform android --profile preview",
+    "build:android:prod": "eas build --platform android --profile production",
+    "build:ios": "eas build --platform ios --profile preview",
+    "build:ios:simulator": "eas build --platform ios --profile preview-simulator",
+    "build:ios:prod": "eas build --platform ios --profile production",
+    "build:all": "eas build --platform all --profile preview"
   },
   "private": true
 }

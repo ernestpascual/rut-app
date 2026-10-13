@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,18 @@ import { useRouter } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
 import { useAuth } from '../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
-import { colors, typography, spacing } from '../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 
 export default function NewChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +55,27 @@ export default function NewChatScreen() {
       <TopNav
         title="rut"
         subtitle="New Train of Thought"
-        rightAction={<Button title="✕ CLOSE" variant="text" onPress={() => router.back()} />}
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/chats');
+          }
+        }}
+        backTitle="CHATS"
+        rightAction={
+          <Button
+            title="✕ CLOSE"
+            variant="text"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(app)/(tabs)/chats');
+              }
+            }}
+          />
+        }
       />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -79,7 +102,8 @@ export default function NewChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,

@@ -10,18 +10,22 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.rut.app",
+      "buildNumber": "1",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["rut"]
+            "CFBundleURLSchemes": [
+              "rut"
+            ]
           }
         ]
       }
     },
     "android": {
       "package": "com.rut.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -30,7 +34,9 @@
       "intentFilters": [
         {
           "action": "SEND",
-          "category": ["DEFAULT"],
+          "category": [
+            "DEFAULT"
+          ],
           "data": [
             {
               "mimeType": "text/plain"
@@ -49,7 +55,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -58,6 +64,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b17837e0-c4d4-4e35-a89d-dd63c0193e61"
+      }
+    },
+    "owner": "ernestp0"
   }
 }

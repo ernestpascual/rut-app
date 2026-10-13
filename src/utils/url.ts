@@ -75,6 +75,9 @@ export function detectPlatform(urlOrDomain: string): SourcePlatform {
   if (lower.includes('instagram.com') || lower.includes('instagr.am')) {
     return 'instagram';
   }
+  if (lower.includes('pinterest.com') || lower.includes('pin.it')) {
+    return 'pinterest';
+  }
   if (lower.includes('tiktok.com')) {
     return 'tiktok';
   }

@@ -1,39 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  SafeAreaView,
   Pressable,
   ActivityIndicator,
-  Linking
+  Linking,
+  Image,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   collection,
   query,
-  where,
   orderBy,
   onSnapshot,
   doc,
-  updateDoc
+  updateDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../../../src/lib/firebase/client';
-import { useAuth } from '../../../../src/features/auth/AuthContext';
-import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
+import { useAuth, DUMMY_USER_UID } from '../../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../../src/design/ThemeContext';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Input } from '../../../../src/components/ui/Input';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
-import { colors, rounded, typography, spacing } from '../../../../src/design/tokens';
-import { InspirationItem, SourcePlatform } from '../../../../src/types';
+import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
+import { InspirationItem } from '../../../../src/types';
+import {
+  getDumpInspirations,
+  setDumpInspirations,
+  sortDumpItems,
+  DumpSortOption,
+} from '../../../../src/features/dump/dumpService';
 
 export default function BankScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
+  const isDummy = !user || user.uid === DUMMY_USER_UID;
+
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,32 +53,67 @@ export default function BankScreen() {
   const [searching, setSearching] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('ALL');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [sortOption, setSortOption] = useState<DumpSortOption>('newest');
+  const [activeControlTab, setActiveControlTab] = useState<'search' | 'tags' | 'sort' | null>(null);
 
+
+  // Load inspirations from Firestore
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'users', user.uid, 'inspirations'),
-      orderBy('createdAt', 'desc')
-    );
+    let isMounted = true;
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetched: InspirationItem[] = [];
-        snapshot.forEach((docSnap) => {
-          fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        setItems(fetched);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('Inspirations snapshot listener error:', err);
-        setLoading(false);
-      }
-    );
+    if (!user) {
+      getDumpInspirations().then((loaded) => {
+        if (isMounted) {
+          setItems(loaded);
+          setLoading(false);
+        }
+      });
+      return;
+    }
 
-    return unsubscribe;
+    // Firestore mode (including test account under users/test)
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'inspirations'),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!isMounted) return;
+          const fetched: InspirationItem[] = [];
+          snapshot.forEach((docSnap) => {
+            fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
+          });
+          setItems(fetched);
+          setLoading(false);
+        },
+        (err) => {
+          console.warn('Firestore fallback to local dump store:', err);
+          getDumpInspirations().then((loaded) => {
+            if (isMounted) {
+              setItems(loaded);
+              setLoading(false);
+            }
+          });
+        }
+      );
+
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
+    } catch {
+      getDumpInspirations().then((loaded) => {
+        if (isMounted) {
+          setItems(loaded);
+          setLoading(false);
+        }
+      });
+    }
   }, [user]);
+
 
   const handleSemanticSearch = async () => {
     if (!searchQuery.trim() || !user) {
@@ -83,8 +129,18 @@ export default function BankScreen() {
       const res = await searchFn({ query: searchQuery.trim() });
       setSemanticResults(res.data.inspirationIds || []);
     } catch (err) {
-      console.warn('Semantic search fallback to keyword:', err);
-      setSemanticResults(null);
+      // Local keyword fallback
+      const q = searchQuery.toLowerCase();
+      const matched = items
+        .filter(
+          (i) =>
+            i.title.toLowerCase().includes(q) ||
+            (i.aiSummary || '').toLowerCase().includes(q) ||
+            (i.concepts || []).some((c) => c.toLowerCase().includes(q)) ||
+            (i.tags || []).some((t) => t.toLowerCase().includes(q))
+        )
+        .map((i) => i.id);
+      setSemanticResults(matched);
     } finally {
       setSearching(false);
     }
@@ -103,14 +159,24 @@ export default function BankScreen() {
     }
   };
 
-  const platforms = ['ALL', 'INSTAGRAM', 'TIKTOK', 'X', 'THREADS', 'YOUTUBE', 'WEB'];
+  const platforms = ['ALL', 'PINTEREST', 'INSTAGRAM', 'TIKTOK', 'X', 'THREADS', 'YOUTUBE', 'WEB'];
 
-  // Collect all unique tags
+  const sortOptionsList: Array<{ label: string; value: DumpSortOption }> = [
+    { label: 'NEWEST', value: 'newest' },
+    { label: 'OLDEST', value: 'oldest' },
+    { label: 'PLATFORM', value: 'platform' },
+    { label: 'TITLE A-Z', value: 'title-asc' },
+    { label: 'TITLE Z-A', value: 'title-desc' },
+    { label: 'TAGS', value: 'tags' },
+  ];
+
+  // Collect unique tags
   const allTags = Array.from(
     new Set(items.flatMap((i) => [...(i.tags || []), ...(i.aiTags || [])]))
   ).slice(0, 15);
 
-  const filteredItems = items.filter((item) => {
+  // Filter items
+  const filtered = items.filter((item) => {
     if (item.archived) return false;
 
     // Platform filter
@@ -137,129 +203,269 @@ export default function BankScreen() {
       const matchNote = item.userNote?.toLowerCase().includes(queryLower);
       const matchSummary = item.aiSummary?.toLowerCase().includes(queryLower);
       const matchTags = (item.tags || []).some((t) => t.toLowerCase().includes(queryLower));
-      return matchTitle || matchNote || matchSummary || matchTags;
+      const matchConcepts = (item.concepts || []).some((c) => c.toLowerCase().includes(queryLower));
+      return matchTitle || matchNote || matchSummary || matchTags || matchConcepts;
     }
 
     return true;
   });
 
+  // Apply sorting
+  const sortedAndFilteredItems = sortDumpItems(filtered, sortOption);
+
+
   return (
-    <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="BANK" message="AI-indexed private ideas &amp; inspirations" />
+    <SafeAreaView style={styles.container} edges={['top']}>
       <TopNav
         title="rut"
-        subtitle="Inspiration Bank"
+        subtitle="Dump Folder"
         rightAction={
           <Button
             title="+ NEW"
             onPress={() => router.push('/(app)/inspiration/new')}
-            style={{ height: 36, paddingHorizontal: 16 }}
+            style={{ height: 34, paddingHorizontal: 14 }}
           />
         }
       />
 
-      <View style={styles.searchSection}>
-        <View style={styles.searchRow}>
-          <Input
-            value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              if (!text.trim()) setSemanticResults(null);
-            }}
-            placeholder={
-              semanticMode
-                ? 'Semantic AI search (e.g. brutalist typography)...'
-                : 'Filter by keyword or title...'
-            }
-            containerStyle={{ flex: 1, marginVertical: 0 }}
-            onSubmitEditing={semanticMode ? handleSemanticSearch : undefined}
-          />
-          <Button
-            title={semanticMode ? 'AI ON' : 'AI OFF'}
-            variant={semanticMode ? 'primary' : 'secondary'}
-            onPress={() => {
-              const next = !semanticMode;
-              setSemanticMode(next);
-              if (next && searchQuery.trim()) {
-                handleSemanticSearch();
-              } else {
-                setSemanticResults(null);
-              }
-            }}
-            style={{ height: 46, marginLeft: spacing.xs, paddingHorizontal: 16 }}
-          />
-        </View>
-
-        {/* Platform filter pills */}
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={platforms}
-          keyExtractor={(item) => item}
-          style={styles.platformRow}
-          renderItem={({ item: plat }) => (
-            <Pressable
-              onPress={() => setSelectedPlatform(plat)}
+      {/* TUCKED CONTROL TABS */}
+      <View style={styles.controlTabsBar}>
+        <View style={styles.controlTabsRow}>
+          <Pressable
+            onPress={() => setActiveControlTab(activeControlTab === 'search' ? null : 'search')}
+            style={[
+              styles.controlTabBtn,
+              activeControlTab === 'search' && styles.controlTabBtnActive,
+            ]}
+          >
+            <Text
               style={[
-                styles.platformPill,
-                selectedPlatform === plat && styles.platformPillActive,
+                styles.controlTabBtnText,
+                activeControlTab === 'search' && styles.controlTabBtnTextActive,
               ]}
             >
-              <Text
-                style={[
-                  styles.platformPillText,
-                  selectedPlatform === plat && styles.platformPillTextActive,
-                ]}
-              >
-                {plat}
-              </Text>
-            </Pressable>
-          )}
-        />
+              SEARCH{searchQuery.trim() ? ' •' : ''}
+            </Text>
+          </Pressable>
 
-        {/* Tag filters */}
-        {allTags.length > 0 ? (
-          <View style={styles.tagFilterRow}>
-            {allTags.map((tag) => (
+          <Pressable
+            onPress={() => setActiveControlTab(activeControlTab === 'tags' ? null : 'tags')}
+            style={[
+              styles.controlTabBtn,
+              activeControlTab === 'tags' && styles.controlTabBtnActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.controlTabBtnText,
+                activeControlTab === 'tags' && styles.controlTabBtnTextActive,
+              ]}
+            >
+              TAGS{(selectedTag || selectedPlatform !== 'ALL') ? ' •' : ''}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setActiveControlTab(activeControlTab === 'sort' ? null : 'sort')}
+            style={[
+              styles.controlTabBtn,
+              activeControlTab === 'sort' && styles.controlTabBtnActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.controlTabBtnText,
+                activeControlTab === 'sort' && styles.controlTabBtnTextActive,
+              ]}
+            >
+              SORT: {sortOption.toUpperCase()}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* ACTIVE FILTER PILLS (When any filter is active) */}
+        {(searchQuery.trim() || selectedTag || selectedPlatform !== 'ALL') ? (
+          <View style={styles.activeFiltersRow}>
+            {searchQuery.trim() ? (
               <Pressable
-                key={tag}
-                onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                onPress={() => {
+                  setSearchQuery('');
+                  setSemanticResults(null);
+                }}
+                style={styles.activeFilterChip}
               >
-                <Badge
-                  label={selectedTag === tag ? `${tag} ✓` : tag}
-                  variant={selectedTag === tag ? 'inverse' : 'grade'}
-                  style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
-                />
+                <Text style={styles.activeFilterChipText}>"{searchQuery.slice(0, 15)}" ✕</Text>
               </Pressable>
-            ))}
+            ) : null}
+
+            {selectedPlatform !== 'ALL' ? (
+              <Pressable
+                onPress={() => setSelectedPlatform('ALL')}
+                style={styles.activeFilterChip}
+              >
+                <Text style={styles.activeFilterChipText}>{selectedPlatform} ✕</Text>
+              </Pressable>
+            ) : null}
+
+            {selectedTag ? (
+              <Pressable
+                onPress={() => setSelectedTag(null)}
+                style={styles.activeFilterChip}
+              >
+                <Text style={styles.activeFilterChipText}>#{selectedTag} ✕</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={() => {
+                setSearchQuery('');
+                setSemanticResults(null);
+                setSelectedPlatform('ALL');
+                setSelectedTag(null);
+              }}
+              style={styles.clearAllBtn}
+            >
+              <Text style={styles.clearAllText}>CLEAR ALL</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* EXPANDED CONTENT WHEN A TAB IS ACTIVE */}
+        {activeControlTab === 'search' ? (
+          <View style={styles.tuckedPanel}>
+            <View style={styles.searchRow}>
+              <Input
+                value={searchQuery}
+                onChangeText={(text) => {
+                  setSearchQuery(text);
+                  if (!text.trim()) setSemanticResults(null);
+                }}
+                placeholder={
+                  semanticMode
+                    ? 'Semantic AI search (e.g. brutalist typography)...'
+                    : 'Filter by keyword or title...'
+                }
+                containerStyle={{ flex: 1, marginVertical: 0 }}
+                onSubmitEditing={semanticMode ? handleSemanticSearch : undefined}
+                autoFocus
+              />
+              <Button
+                title={semanticMode ? 'AI ON' : 'AI OFF'}
+                variant={semanticMode ? 'primary' : 'secondary'}
+                onPress={() => {
+                  const next = !semanticMode;
+                  setSemanticMode(next);
+                  if (next && searchQuery.trim()) {
+                    handleSemanticSearch();
+                  } else {
+                    setSemanticResults(null);
+                  }
+                }}
+                style={{ height: 46, marginLeft: spacing.xs, paddingHorizontal: 14 }}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {activeControlTab === 'tags' ? (
+          <View style={styles.tuckedPanel}>
+            <Text style={styles.panelSectionLabel}>PLATFORM</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={platforms}
+              keyExtractor={(item) => item}
+              style={styles.platformRow}
+              renderItem={({ item: plat }) => (
+                <Pressable
+                  onPress={() => setSelectedPlatform(plat)}
+                  style={[
+                    styles.platformPill,
+                    selectedPlatform === plat && styles.platformPillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.platformPillText,
+                      selectedPlatform === plat && styles.platformPillTextActive,
+                    ]}
+                  >
+                    {plat}
+                  </Text>
+                </Pressable>
+              )}
+            />
+
+            {allTags.length > 0 ? (
+              <>
+                <Text style={[styles.panelSectionLabel, { marginTop: spacing.xs }]}>TAGS</Text>
+                <View style={styles.tagFilterRow}>
+                  {allTags.map((tag) => (
+                    <Pressable
+                      key={tag}
+                      onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                    >
+                      <Badge
+                        label={selectedTag === tag ? `${tag} ✓` : tag}
+                        variant={selectedTag === tag ? 'inverse' : 'grade'}
+                        style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+          </View>
+        ) : null}
+
+        {activeControlTab === 'sort' ? (
+          <View style={styles.tuckedPanel}>
+            <Text style={styles.panelSectionLabel}>SORT ORDER</Text>
+            <View style={styles.sortOptionsGrid}>
+              {sortOptionsList.map((item) => {
+                const isActive = sortOption === item.value;
+                return (
+                  <Pressable
+                    key={item.value}
+                    onPress={() => setSortOption(item.value)}
+                    style={[styles.sortPill, isActive && styles.sortPillActive]}
+                  >
+                    <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         ) : null}
       </View>
 
+      {/* ITEMS LIST */}
       {loading || searching ? (
         <View style={styles.centerBox}>
           <ActivityIndicator color={colors.ink} size="small" />
           <Text style={styles.loadingText}>
-            {searching ? 'SEARCHING WITH AI...' : 'LOADING BANK...'}
+            {searching ? 'SEARCHING INSPIRATIONS...' : 'LOADING BANK...'}
           </Text>
         </View>
-      ) : filteredItems.length === 0 ? (
+      ) : sortedAndFilteredItems.length === 0 ? (
         <View style={styles.centerBox}>
-          <Text style={styles.emptyTitle}>NO INSPIRATION FOUND</Text>
+          <Text style={styles.emptyTitle}>NO INSPIRATIONS IN DUMP</Text>
           <Text style={styles.emptySubtitle}>
             {searchQuery
-              ? 'No items match your search filters.'
-              : 'Your bank is empty. Save links, snippets, or notes to get started.'}
+              ? 'No items match your active filters.'
+              : 'Share links from your phone (Pinterest, Instagram, TikTok, web) or paste them above. Everything you dump starts here.'}
           </Text>
           <Button
-            title="+ ADD FIRST ITEM"
+            title="+ ADD FIRST INSPIRATION"
             onPress={() => router.push('/(app)/inspiration/new')}
             style={{ marginTop: spacing.base }}
           />
         </View>
       ) : (
         <FlatList
-          data={filteredItems}
+          data={sortedAndFilteredItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
@@ -269,6 +475,7 @@ export default function BankScreen() {
             >
               <View style={styles.cardHeader}>
                 <View style={styles.badgeRow}>
+                  <Badge label="📁 DUMP" variant="grade" style={{ marginRight: 4 }} />
                   {item.sourcePlatform ? (
                     <Badge
                       label={item.sourcePlatform.toUpperCase()}
@@ -282,7 +489,6 @@ export default function BankScreen() {
                   ) : null}
                 </View>
 
-                {/* Processing status */}
                 {item.processingStatus === 'pending' || item.processingStatus === 'processing' ? (
                   <Badge label="AI INDEXING..." variant="grade" />
                 ) : item.processingStatus === 'failed' ? (
@@ -291,6 +497,17 @@ export default function BankScreen() {
                   </Pressable>
                 ) : null}
               </View>
+
+              {/* Preview image if available */}
+              {item.remotePreviewImageUrl ? (
+                <View style={styles.imageContainer}>
+                  <Image
+                    source={{ uri: item.remotePreviewImageUrl }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              ) : null}
 
               <Text style={styles.itemTitle}>{item.title}</Text>
 
@@ -333,20 +550,121 @@ export default function BankScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors, isDark: boolean) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
   },
-  searchSection: {
-    padding: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairline,
+  controlTabsBar: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxs,
+    backgroundColor: colors.canvas,
+  },
+  controlTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  controlTabBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    borderRadius: rounded.none,
+    backgroundColor: colors.canvas,
+  },
+  controlTabBtnActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  controlTabBtnText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: colors.ink,
+  },
+  controlTabBtnTextActive: {
+    color: colors.onInk,
+  },
+  activeFiltersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    gap: spacing.xxs,
+  },
+  activeFilterChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+  },
+  activeFilterChipText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  clearAllBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  clearAllText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    textDecorationLine: 'underline',
+  },
+  tuckedPanel: {
+    marginTop: spacing.xs,
+    padding: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+  },
+  panelSectionLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: colors.inkSoft,
+    marginBottom: spacing.xxs,
+  },
+  sortOptionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xxs,
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+  },
+  sortPill: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    marginRight: spacing.xxs,
+    backgroundColor: colors.canvas,
+  },
+  sortPillActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  sortPillText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+  },
+  sortPillTextActive: {
+    color: colors.onInk,
+    fontWeight: '700',
   },
   platformRow: {
     marginTop: spacing.xs,
@@ -378,6 +696,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.base,
+    paddingBottom: 100,
   },
   itemCard: {
     marginBottom: spacing.sm,
@@ -391,6 +710,19 @@ const styles = StyleSheet.create({
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  imageContainer: {
+    width: '100%',
+    height: 160,
+    backgroundColor: colors.surfaceGrade,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   itemTitle: {
     ...typography.bodyLg,

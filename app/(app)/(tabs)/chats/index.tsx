@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  SafeAreaView,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   collection,
@@ -16,17 +16,20 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../../src/lib/firebase/client';
 import { useAuth } from '../../../../src/features/auth/AuthContext';
+import { useTheme } from '../../../../src/design/ThemeContext';
 import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
-import { colors, rounded, typography, spacing } from '../../../../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { ChatSession } from '../../../../src/types';
 
 export default function ChatsListScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +60,7 @@ export default function ChatsListScreen() {
   }, [user]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <AnnouncementBar pillText="CHATS" message="Explore separate trains of thought with AI" />
       <TopNav
         title="rut"
@@ -124,13 +127,15 @@ export default function ChatsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
   },
   listContent: {
     padding: spacing.base,
+    paddingBottom: 100,
   },
   chatCard: {
     marginBottom: spacing.sm,

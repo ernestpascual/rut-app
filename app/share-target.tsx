@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   SafeAreaView,
-  Alert
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../src/features/auth/AuthContext';
+import { useTheme } from '../src/design/ThemeContext';
 import { useShareCapture } from '../src/features/capture/useShareCapture';
 import { AnnouncementBar } from '../src/components/ui/AnnouncementBar';
 import { TopNav } from '../src/components/ui/TopNav';
@@ -16,12 +17,14 @@ import { Button } from '../src/components/ui/Button';
 import { Input } from '../src/components/ui/Input';
 import { Card } from '../src/components/ui/Card';
 import { Badge } from '../src/components/ui/Badge';
-import { colors, rounded, typography, spacing } from '../src/design/tokens';
+import { rounded, typography, spacing, ThemeColors } from '../src/design/tokens';
 import { InspirationItem } from '../src/types';
 
 export default function ShareTargetScreen() {
   const router = useRouter();
-  const { user, stagedShare, clearStagedShare } = useAuth();
+  const { user, signInAsDummy, stagedShare, clearStagedShare } = useAuth();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const { processPayload, checkForDuplicate, saveShare, loading } = useShareCapture();
   const params = useLocalSearchParams<{ title?: string; text?: string; url?: string }>();
 
@@ -35,6 +38,13 @@ export default function ShareTargetScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [duplicate, setDuplicate] = useState<InspirationItem | null>(null);
   const [isBinaryOnly, setIsBinaryOnly] = useState(false);
+
+  // Auto-login as dummy user if unauthenticated so mobile share is never blocked
+  useEffect(() => {
+    if (!user) {
+      signInAsDummy().catch(() => {});
+    }
+  }, [user]);
 
   const payload = {
     title: rawTitle || null,
@@ -70,19 +80,12 @@ export default function ShareTargetScreen() {
 
   const handleSave = async () => {
     try {
-      const res = await saveShare(payload, title, userNote, tags);
+      await saveShare(payload, title, userNote, tags);
       if (stagedShare) {
         await clearStagedShare();
       }
-      if (res.staged) {
-        Alert.alert(
-          'Saved Locally',
-          'Your shared item has been saved to this device. Please log in to sync it to your bank.',
-          [{ text: 'Log In', onPress: () => router.replace('/(auth)/login') }]
-        );
-      } else {
-        router.replace('/(app)/(tabs)/bank');
-      }
+      // Always direct straight to the Dump folder where everything starts
+      router.replace('/(app)/(tabs)/bank');
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Could not save item.');
     }
@@ -92,32 +95,36 @@ export default function ShareTargetScreen() {
     if (stagedShare) {
       await clearStagedShare();
     }
-    if (user) {
-      router.replace('/(app)/(tabs)/bank');
-    } else {
-      router.replace('/(auth)/login');
-    }
+    router.replace('/(app)/(tabs)/bank');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="CAPTURE" message="Save incoming inspiration to bank" />
-      <TopNav title="rut" subtitle="Incoming Share" />
+      <AnnouncementBar pillText="DUMP INBOX" message="Incoming mobile share · Destination: Dump folder" />
+      <TopNav
+        title="rut"
+        subtitle="Share to Dump"
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(app)/(tabs)/bank');
+          }
+        }}
+        backTitle="DUMP"
+      />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {!user ? (
-          <Card style={styles.authNoticeCard}>
-            <Text style={styles.authNoticeTitle}>YOU ARE SIGNED OUT</Text>
-            <Text style={styles.authNoticeBody}>
-              This item is staged locally on your device. Sign in or create an account to index and save it to your private bank.
-            </Text>
-            <Button
-              title="LOG IN TO SAVE"
-              onPress={() => router.push('/(auth)/login')}
-              style={{ marginTop: spacing.sm }}
-            />
-          </Card>
-        ) : null}
+        {/* DUMP FOLDER DESTINATION NOTICE */}
+        <Card style={styles.destinationCard}>
+          <View style={styles.destinationHeader}>
+            <Text style={styles.destinationTitle}>DESTINATION: 📁 DUMP</Text>
+            <Badge label="EVERYTHING STARTS HERE" variant="inverse" />
+          </View>
+          <Text style={styles.destinationBody}>
+            Shared inspirations from your phone go directly into your Dump folder. From there you can sort items, explore them, and attach them as references to your ideas.
+          </Text>
+        </Card>
 
         {isBinaryOnly ? (
           <Card style={styles.warningCard}>
@@ -161,14 +168,14 @@ export default function ShareTargetScreen() {
         </Card>
 
         <Input
-          label="TITLE"
+          label="INSPIRATION TITLE"
           value={title}
           onChangeText={setTitle}
           placeholder="Title or headline"
         />
 
         <Input
-          label="PERSONAL NOTE (OPTIONAL)"
+          label="QUICK THOUGHT / NOTE (OPTIONAL)"
           value={userNote}
           onChangeText={setUserNote}
           placeholder="Why did you save this? What idea does it spark?"
@@ -206,7 +213,7 @@ export default function ShareTargetScreen() {
 
         <View style={styles.actionRow}>
           <Button
-            title={loading ? 'SAVING...' : 'SAVE TO INSPIRATION BANK'}
+            title={loading ? 'ADDING TO DUMP...' : '⚡ ADD TO DUMP'}
             onPress={handleSave}
             loading={loading}
             style={{ flex: 2, marginRight: spacing.sm }}
@@ -223,7 +230,8 @@ export default function ShareTargetScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -233,6 +241,31 @@ const styles = StyleSheet.create({
     maxWidth: 680,
     width: '100%',
     alignSelf: 'center',
+  },
+  destinationCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    marginBottom: spacing.base,
+    padding: spacing.base,
+  },
+  destinationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xxs,
+  },
+  destinationTitle: {
+    ...typography.captionCap,
+    color: colors.ink,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  destinationBody: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    lineHeight: 18,
+    marginTop: spacing.xxs,
   },
   previewCard: {
     marginBottom: spacing.base,
@@ -252,21 +285,6 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.ink,
     fontStyle: 'italic',
-  },
-  authNoticeCard: {
-    backgroundColor: colors.ink,
-    marginBottom: spacing.base,
-  },
-  authNoticeTitle: {
-    ...typography.captionCap,
-    color: colors.onInk,
-    fontWeight: '700',
-    marginBottom: spacing.xxs,
-  },
-  authNoticeBody: {
-    ...typography.bodyMd,
-    color: colors.onInk,
-    fontSize: 14,
   },
   warningCard: {
     backgroundColor: colors.surfaceGrade,

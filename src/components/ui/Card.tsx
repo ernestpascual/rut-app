@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, Pressable, StyleProp } from 'react-native';
-import { colors, rounded, spacing } from '../../design/tokens';
+import { rounded, spacing } from '../../design/tokens';
+import { useTheme } from '../../design/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
@@ -15,14 +16,17 @@ export const Card: React.FC<CardProps> = ({
   onPress,
   bordered = true,
 }) => {
+  const { colors } = useTheme();
+
   if (onPress) {
     return (
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [
           styles.card,
-          bordered && styles.bordered,
-          pressed && styles.pressed,
+          { backgroundColor: colors.canvas },
+          bordered && { borderWidth: 1, borderColor: colors.hairline },
+          pressed && { backgroundColor: colors.surfaceGrade },
           style,
         ]}
       >
@@ -32,7 +36,14 @@ export const Card: React.FC<CardProps> = ({
   }
 
   return (
-    <View style={[styles.card, bordered && styles.bordered, style]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.canvas },
+        bordered && { borderWidth: 1, borderColor: colors.hairline },
+        style,
+      ]}
+    >
       {children}
     </View>
   );
@@ -40,16 +51,8 @@ export const Card: React.FC<CardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.canvas, // Pure white
     borderRadius: rounded.none, // 0px corners
     padding: spacing.base,
     // 0px elevation / shadow flat design per DESIGN.md
-  },
-  bordered: {
-    borderWidth: 1,
-    borderColor: colors.hairline, // 1px black hairline
-  },
-  pressed: {
-    backgroundColor: colors.surfaceGrade, // #f4f4f4
   },
 });
