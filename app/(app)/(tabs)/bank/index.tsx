@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -56,6 +57,26 @@ export default function BankScreen() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<DumpSortOption>('newest');
   const [activeControlTab, setActiveControlTab] = useState<'search' | 'tags' | 'sort' | null>(null);
+  const [showImages, setShowImages] = useState(true);
+
+  // Load showImages preference
+  useEffect(() => {
+    AsyncStorage.getItem('@rut_show_images')
+      .then((val) => {
+        if (val !== null) {
+          setShowImages(val === 'true');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleShowImages = async () => {
+    const next = !showImages;
+    setShowImages(next);
+    try {
+      await AsyncStorage.setItem('@rut_show_images', String(next));
+    } catch {}
+  };
 
 
   // Load inspirations from Firestore
@@ -296,6 +317,23 @@ export default function BankScreen() {
               SORT: {sortOption.toUpperCase()}
             </Text>
           </Pressable>
+
+          <Pressable
+            onPress={toggleShowImages}
+            style={[
+              styles.controlTabBtn,
+              !showImages && styles.controlTabBtnOff,
+            ]}
+          >
+            <Text
+              style={[
+                styles.controlTabBtnText,
+                !showImages && styles.controlTabBtnTextOff,
+              ]}
+            >
+              {showImages ? '🖼️ IMG: ON' : '🖼️ IMG: OFF'}
+            </Text>
+          </Pressable>
         </View>
 
         {/* ACTIVE FILTER PILLS (When any filter is active) */}
@@ -500,6 +538,13 @@ export default function BankScreen() {
                   ) : (
                     <Badge label={item.kind.toUpperCase()} variant="grade" style={{ marginRight: 4 }} />
                   )}
+                  {item.author ? (
+                    <Badge
+                      label={item.author.startsWith('@') ? item.author : `@${item.author}`}
+                      variant="grade"
+                      style={{ marginRight: 4 }}
+                    />
+                  ) : null}
                   {item.siteName ? (
                     <Badge label={item.siteName} variant="outline" style={{ marginRight: 4 }} />
                   ) : item.sourceDomain ? (
@@ -516,8 +561,8 @@ export default function BankScreen() {
                 ) : null}
               </View>
 
-              {/* Preview image if available */}
-              {item.remotePreviewImageUrl ? (
+              {/* Preview image if available and toggled ON */}
+              {showImages && item.remotePreviewImageUrl ? (
                 <View style={styles.imageContainer}>
                   <Image
                     source={{ uri: item.remotePreviewImageUrl }}
@@ -528,6 +573,15 @@ export default function BankScreen() {
               ) : null}
 
               <Text style={styles.itemTitle}>{item.title}</Text>
+
+              {/* Caption */}
+              {item.caption ? (
+                <View style={styles.captionContainer}>
+                  <Text style={styles.captionText} numberOfLines={2}>
+                    📝 "{item.caption}"
+                  </Text>
+                </View>
+              ) : null}
 
               {/* Rich Context & Auto-Summary */}
               {item.editorialContext ? (
@@ -597,6 +651,10 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
     backgroundColor: colors.ink,
     borderColor: colors.ink,
   },
+  controlTabBtnOff: {
+    opacity: 0.6,
+    borderStyle: 'dashed',
+  },
   controlTabBtnText: {
     ...typography.captionCap,
     fontSize: 10,
@@ -606,6 +664,9 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
   },
   controlTabBtnTextActive: {
     color: colors.onInk,
+  },
+  controlTabBtnTextOff: {
+    color: colors.inkSoft,
   },
   activeFiltersRow: {
     flexDirection: 'row',
@@ -783,6 +844,20 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
   contextText: {
     ...typography.captionSm,
     color: colors.inkSoft,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  captionContainer: {
+    backgroundColor: colors.surfaceGrade,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.ink,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
+    marginBottom: spacing.xs,
+  },
+  captionText: {
+    ...typography.captionSm,
+    color: colors.ink,
     lineHeight: 18,
     fontStyle: 'italic',
   },

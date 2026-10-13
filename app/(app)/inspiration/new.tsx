@@ -24,7 +24,12 @@ import { Badge } from '../../../src/components/ui/Badge';
 import { Card } from '../../../src/components/ui/Card';
 import { InspirationCreateSchema } from '../../../src/lib/validation/schemas';
 import { normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../../src/utils/url';
-import { enrichUrlMetadata, extractUrlMetadataFromUrl, ExtractedUrlMetadata } from '../../../src/utils/urlMetadata';
+import {
+  enrichUrlMetadata,
+  extractUrlMetadataFromUrl,
+  ExtractedUrlMetadata,
+  formatNotesWithCaption,
+} from '../../../src/utils/urlMetadata';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
 import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
@@ -121,6 +126,11 @@ export default function NewInspirationScreen() {
       const domain = urlMeta?.domain || (normalized ? extractDomain(normalized) : null);
       const hash = generateContentHash(normalized || userNote.trim());
       const previewDesc = urlMeta?.description || computedTitle;
+      const author = urlMeta?.author || null;
+      const caption = urlMeta?.caption || null;
+      const formattedNote = (author || caption)
+        ? formatNotesWithCaption(author, caption, userNote.trim() || null)
+        : (userNote.trim() || null);
       const editorialContext = urlMeta?.editorialContext || (userNote.trim() ? `Note: ${userNote.trim()}` : null);
       const concepts = urlMeta?.concepts || combinedTags.slice(0, 4);
 
@@ -133,18 +143,20 @@ export default function NewInspirationScreen() {
         url: url.trim() || null,
         normalizedUrl: normalized,
         sharedText: kind === 'note' ? userNote.trim() : null,
-        userNote: userNote.trim() || null,
+        userNote: formattedNote,
         sourcePlatform: platform,
         sourceDomain: domain,
         sourceApp: urlMeta?.siteName || (platform ? platform.toUpperCase() : 'Manual'),
         siteName: urlMeta?.siteName || null,
+        author,
+        caption,
         previewDescription: previewDesc,
         remotePreviewImageUrl: urlMeta?.previewImageUrl || null,
         editorialContext,
         tags: combinedTags,
         aiTags: autoTags.length > 0 ? autoTags : (platform ? [platform] : []),
         concepts,
-        aiSummary: editorialContext || userNote.trim() || null,
+        aiSummary: editorialContext || formattedNote || null,
         processingStatus: 'ready',
         processingErrorCode: null,
         duplicateOf: hash,
@@ -241,6 +253,9 @@ export default function NewInspirationScreen() {
                 <Card style={styles.metaPreviewCard}>
                   <View style={styles.metaPreviewHeader}>
                     <Badge label={urlMeta.platform.toUpperCase()} variant="inverse" style={{ marginRight: 6 }} />
+                    {urlMeta.author ? (
+                      <Badge label={`@${urlMeta.author.replace(/^@/, '')}`} variant="grade" style={{ marginRight: 6 }} />
+                    ) : null}
                     <Badge label={urlMeta.siteName || 'WEB'} variant="outline" />
                   </View>
 
@@ -255,6 +270,14 @@ export default function NewInspirationScreen() {
                   <Text style={styles.metaPreviewTitle} numberOfLines={2}>
                     {urlMeta.title}
                   </Text>
+
+                  {urlMeta.caption ? (
+                    <View style={styles.captionPreviewBox}>
+                      <Text style={styles.captionPreviewText} numberOfLines={3}>
+                        📝 "{urlMeta.caption}"
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <Text style={styles.metaPreviewContext}>
                     {urlMeta.editorialContext}
@@ -384,6 +407,18 @@ const getStyles = (colors: ThemeColors) =>
     color: colors.inkSoft,
     lineHeight: 18,
     marginBottom: spacing.xs,
+  },
+  captionPreviewBox: {
+    padding: 8,
+    backgroundColor: colors.surfaceGrade,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.ink,
+    marginBottom: spacing.xs,
+  },
+  captionPreviewText: {
+    ...typography.captionSm,
+    color: colors.ink,
+    fontStyle: 'italic',
   },
   previewThumb: {
     width: '100%',

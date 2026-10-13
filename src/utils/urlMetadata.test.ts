@@ -1,4 +1,10 @@
-import { extractUrlMetadataFromUrl, humanizeSlug, enrichUrlMetadata } from './urlMetadata';
+import {
+  extractUrlMetadataFromUrl,
+  humanizeSlug,
+  enrichUrlMetadata,
+  extractAuthorAndCaption,
+  formatNotesWithCaption,
+} from './urlMetadata';
 
 describe('URL Metadata and Auto-Tagging Engine', () => {
   test('humanizes slug properly', () => {
@@ -37,6 +43,51 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(meta.autoTags).toContain('furniture');
     expect(meta.autoTags).toContain('ceramics');
     expect(meta.autoTags).toContain('minimalist');
+  });
+
+  test('extracts author, caption, and thumbnail from Instagram post URL and shared text', () => {
+    const { author, caption, thumbnail } = extractAuthorAndCaption(
+      'https://www.instagram.com/p/DecT31jlOWi/',
+      'Studio Koto on Instagram: "Visual identity system for archival gallery"'
+    );
+    expect(author).toBe('Studio Koto');
+    expect(caption).toBe('Visual identity system for archival gallery');
+    expect(thumbnail).toBe('https://www.instagram.com/p/DecT31jlOWi/media/?size=l');
+
+    const meta = extractUrlMetadataFromUrl(
+      'https://www.instagram.com/p/DecT31jlOWi/',
+      'Studio Koto on Instagram: "Visual identity system for archival gallery"'
+    );
+    expect(meta.platform).toBe('instagram');
+    expect(meta.author).toBe('Studio Koto');
+    expect(meta.caption).toBe('Visual identity system for archival gallery');
+    expect(meta.previewImageUrl).toBe('https://www.instagram.com/p/DecT31jlOWi/media/?size=l');
+  });
+
+  test('extracts author and caption from Pinterest board or pin', () => {
+    const { author, caption } = extractAuthorAndCaption(
+      'https://www.pinterest.com/designstudio/brutalist-concrete-architecture/'
+    );
+    expect(author).toBe('designstudio');
+    expect(caption).toBe('Brutalist Concrete Architecture');
+
+    const meta = extractUrlMetadataFromUrl(
+      'https://www.pinterest.com/designstudio/brutalist-concrete-architecture/'
+    );
+    expect(meta.platform).toBe('pinterest');
+    expect(meta.author).toBe('designstudio');
+    expect(meta.caption).toBe('Brutalist Concrete Architecture');
+  });
+
+  test('formats notes cleanly with creator and caption', () => {
+    const formatted = formatNotesWithCaption(
+      'designstudio',
+      'Brutalist Concrete Architecture',
+      'Look into texture treatment'
+    );
+    expect(formatted).toContain('👤 @designstudio');
+    expect(formatted).toContain('📝 Caption: "Brutalist Concrete Architecture"');
+    expect(formatted).toContain('💡 Note: Look into texture treatment');
   });
 
   test('enriches with user note context', async () => {

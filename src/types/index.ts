@@ -34,6 +34,7 @@ export interface InspirationItem {
   sourceApp: string | null;
   siteName?: string | null;
   author?: string | null;
+  caption?: string | null;
   previewDescription: string | null;
   remotePreviewImageUrl: string | null;
   editorialContext?: string | null;

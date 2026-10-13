@@ -8,7 +8,8 @@ import {
   Pressable,
   Linking,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -46,6 +47,7 @@ export default function InspirationDetailScreen() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showImage, setShowImage] = useState(true);
 
   useEffect(() => {
     if (!id) return;
@@ -281,6 +283,12 @@ export default function InspirationDetailScreen() {
               {item.sourcePlatform ? (
                 <Badge label={item.sourcePlatform.toUpperCase()} variant="grade" />
               ) : null}
+              {item.author ? (
+                <Badge
+                  label={item.author.startsWith('@') ? item.author : `@${item.author}`}
+                  variant="outline"
+                />
+              ) : null}
               {item.sourceDomain ? (
                 <Badge label={item.sourceDomain} variant="outline" />
               ) : null}
@@ -290,7 +298,37 @@ export default function InspirationDetailScreen() {
               />
             </View>
 
+            {item.remotePreviewImageUrl ? (
+              <View style={styles.imageCard}>
+                <View style={styles.imageHeaderRow}>
+                  <Text style={styles.imageHeaderLabel}>PREVIEW THUMBNAIL</Text>
+                  <Pressable
+                    onPress={() => setShowImage(!showImage)}
+                    style={styles.imageToggleBtn}
+                  >
+                    <Text style={styles.imageToggleText}>
+                      {showImage ? 'HIDE IMAGE' : 'SHOW IMAGE'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {showImage ? (
+                  <Image
+                    source={{ uri: item.remotePreviewImageUrl }}
+                    style={styles.detailImage}
+                    resizeMode="cover"
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
             <Text style={styles.title}>{item.title}</Text>
+
+            {item.caption ? (
+              <Card style={styles.captionCard}>
+                <Text style={styles.captionHeading}>ORIGINAL CAPTION</Text>
+                <Text style={styles.captionText}>{item.caption}</Text>
+              </Card>
+            ) : null}
 
             {item.url ? (
               <Pressable
@@ -430,6 +468,63 @@ const getStyles = (colors: ThemeColors) =>
     marginBottom: spacing.base,
     borderWidth: 1,
     borderColor: colors.hairline,
+  },
+  imageCard: {
+    marginBottom: spacing.base,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    overflow: 'hidden',
+  },
+  imageHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+  imageHeaderLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  imageToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+  },
+  imageToggleText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  detailImage: {
+    width: '100%',
+    height: 240,
+    backgroundColor: colors.canvas,
+  },
+  captionCard: {
+    marginBottom: spacing.base,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.ink,
+    backgroundColor: colors.surfaceGrade,
+  },
+  captionHeading: {
+    ...typography.captionCap,
+    color: colors.inkSoft,
+    marginBottom: spacing.xxs,
+  },
+  captionText: {
+    ...typography.bodyMd,
+    color: colors.ink,
+    lineHeight: 22,
+    fontStyle: 'italic',
   },
   noteHeading: {
     ...typography.captionCap,

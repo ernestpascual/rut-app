@@ -13,7 +13,7 @@ import {
 import { db, auth } from '../../lib/firebase/client';
 import { InspirationItem, Project, ProjectInspirationLink, SourcePlatform } from '../../types';
 import { detectPlatform, extractDomain, generateContentHash, normalizeUrl } from '../../utils/url';
-import { enrichUrlMetadata, extractUrlMetadataFromUrl } from '../../utils/urlMetadata';
+import { enrichUrlMetadata, extractUrlMetadataFromUrl, formatNotesWithCaption } from '../../utils/urlMetadata';
 
 export function getTargetUid(uid?: string): string {
   return uid || auth?.currentUser?.uid || 'test';
@@ -44,18 +44,22 @@ cleanupOldStorageKeys();
 
 export function enrichInspirationItem(item: InspirationItem): InspirationItem {
   if (!item.url) return item;
-  const meta = extractUrlMetadataFromUrl(item.url);
+  const meta = extractUrlMetadataFromUrl(item.url, item.sharedText || item.userNote || undefined);
   const combinedTags = Array.from(new Set([...(item.tags || []), ...meta.autoTags]));
   return {
     ...item,
+    author: item.author || meta.author || null,
+    caption: item.caption || meta.caption || null,
     siteName: item.siteName || meta.siteName,
     sourcePlatform: item.sourcePlatform || meta.platform,
     sourceDomain: item.sourceDomain || meta.domain,
+    remotePreviewImageUrl: item.remotePreviewImageUrl || meta.previewImageUrl || null,
+    userNote: item.userNote || (meta.author || meta.caption ? formatNotesWithCaption(meta.author, meta.caption) : null),
     tags: combinedTags,
     aiTags: item.aiTags && item.aiTags.length > 0 ? item.aiTags : meta.autoTags,
     concepts: item.concepts && item.concepts.length > 0 ? item.concepts : meta.concepts,
     editorialContext: item.editorialContext || meta.editorialContext,
-    previewDescription: item.previewDescription || meta.description,
+    previewDescription: item.previewDescription || meta.caption || meta.description,
   };
 }
 
@@ -149,12 +153,13 @@ export async function quickDumpLinkOrNote(
     url: normalized ? trimmed : null,
     normalizedUrl: normalized,
     sharedText: normalized ? null : trimmed,
-    userNote: userNote?.trim() || null,
+    author: meta?.author || null,
+    userNote: userNote?.trim() || (meta?.author || meta?.caption ? formatNotesWithCaption(meta.author, meta.caption) : null),
     sourcePlatform: platform,
     sourceDomain: domain,
     sourceApp: meta?.siteName || (platform !== 'other' ? platform.toUpperCase() : 'Web'),
     siteName: meta?.siteName || null,
-    previewDescription: meta?.description || trimmed,
+    previewDescription: meta?.caption || meta?.description || trimmed,
     remotePreviewImageUrl: meta?.previewImageUrl || null,
     editorialContext: meta?.editorialContext || null,
     tags: combinedTags,

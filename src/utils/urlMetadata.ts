@@ -21,6 +21,8 @@ export interface ExtractedUrlMetadata {
   title: string | null;
   description: string | null;
   siteName: string | null;
+  author: string | null;
+  caption: string | null;
   previewImageUrl: string | null;
   domain: string | null;
   platform: SourcePlatform;
@@ -87,9 +89,196 @@ export function humanizeSlug(slug: string): string {
 }
 
 /**
- * Extracts auto tags, title tokens, and concepts from a URL's structure.
+ * Extracts author username, post caption, and instant thumbnail URL across platforms.
  */
-export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata {
+export function extractAuthorAndCaption(
+  rawUrl: string,
+  sharedText?: string
+): { author: string | null; caption: string | null; thumbnail: string | null } {
+  let author: string | null = null;
+  let caption: string | null = null;
+  let thumbnail: string | null = null;
+
+  const text = (sharedText || '').trim();
+
+  try {
+    const norm = normalizeUrl(rawUrl) || rawUrl.trim();
+    const urlObj = new URL(norm);
+    const domain = (urlObj.hostname || '').toLowerCase().replace(/^www\./, '');
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+
+    // 1. INSTAGRAM
+    if (domain.includes('instagram.com')) {
+      const pIdx = pathParts.findIndex((p) => p === 'p' || p === 'reel' || p === 'reels');
+      let shortcode: string | null = null;
+      if (pIdx >= 0 && pathParts[pIdx + 1]) {
+        shortcode = pathParts[pIdx + 1];
+        if (pIdx > 0 && !['www', 'm'].includes(pathParts[pIdx - 1])) {
+          author = pathParts[pIdx - 1];
+        }
+      } else if (pathParts.length === 1 && !['explore', 'reels', 'stories'].includes(pathParts[0])) {
+        author = pathParts[0];
+      }
+
+      if (shortcode) {
+        thumbnail = `https://www.instagram.com/p/${shortcode}/media/?size=l`;
+      }
+
+      // Check text for Instagram author and caption
+      const igAuthorMatch = text.match(/([a-zA-Z0-9_.\s]+)\s+on\s+Instagram[:\s]/i) ||
+                            text.match(/@([a-zA-Z0-9_.]{3,30})/);
+      if (igAuthorMatch && igAuthorMatch[1]) {
+        author = igAuthorMatch[1].trim().replace(/^@/, '');
+      }
+
+      const igCaptionMatch = text.match(/["“]([^"”]+)["”]/) ||
+                             text.match(/on\s+Instagram:\s*(.+?)(?:https?:\/\/|$)/is);
+      if (igCaptionMatch && igCaptionMatch[1] && igCaptionMatch[1].trim().length > 3) {
+        caption = igCaptionMatch[1].trim();
+      }
+    }
+
+    // 2. PINTEREST
+    else if (domain.includes('pinterest.com') || domain.includes('pin.it')) {
+      if (domain.includes('pinterest.com')) {
+        if (pathParts.length >= 2 && !['pin', 'search', 'ideas', 'today'].includes(pathParts[0])) {
+          author = pathParts[0];
+          caption = humanizeSlug(pathParts[1]);
+        } else if (pathParts.length === 1 && !['pin', 'search', 'ideas'].includes(pathParts[0])) {
+          author = pathParts[0];
+        }
+      }
+
+      const pinCaptionMatch = text.match(/["“]([^"”]+)["”]/) ||
+                              text.match(/(?:Pinterest[:\s]+)(.+?)(?:https?:\/\/|$)/is);
+      if (pinCaptionMatch && pinCaptionMatch[1]) {
+        caption = pinCaptionMatch[1].trim();
+      }
+      const pinAuthorMatch = text.match(/(?:pinned by|from|by)\s+@?([a-zA-Z0-9_-]{3,30})/i);
+      if (pinAuthorMatch && pinAuthorMatch[1]) {
+        author = pinAuthorMatch[1].trim();
+      }
+    }
+
+    // 3. YOUTUBE
+    else if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+      let videoId: string | null = null;
+      if (domain.includes('youtu.be') && pathParts[0]) {
+        videoId = pathParts[0];
+      } else if (urlObj.searchParams.has('v')) {
+        videoId = urlObj.searchParams.get('v');
+      } else if (pathParts[0] === 'shorts' && pathParts[1]) {
+        videoId = pathParts[1];
+      }
+
+      if (videoId) {
+        thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      }
+
+      if (pathParts[0] && pathParts[0].startsWith('@')) {
+        author = pathParts[0].slice(1);
+      }
+    }
+
+    // 4. VIMEO
+    else if (domain.includes('vimeo.com')) {
+      const vimeoId = pathParts[0] && /^\d+$/.test(pathParts[0]) ? pathParts[0] : null;
+      if (vimeoId) {
+        thumbnail = `https://vumbnail.com/${vimeoId}.jpg`;
+      }
+    }
+
+    // 5. X / TWITTER
+    else if (domain.includes('twitter.com') || domain.includes('x.com')) {
+      if (pathParts.length >= 1 && !['i', 'search', 'home', 'explore'].includes(pathParts[0])) {
+        author = pathParts[0];
+      }
+      const tweetMatch = text.match(/["“]([^"”]+)["”]/) ||
+                         text.match(/(.+?)(?:https?:\/\/|$)/is);
+      if (tweetMatch && tweetMatch[1] && tweetMatch[1].trim().length > 3) {
+        caption = tweetMatch[1].trim();
+      }
+    }
+
+    // 6. TIKTOK
+    else if (domain.includes('tiktok.com')) {
+      if (pathParts[0] && pathParts[0].startsWith('@')) {
+        author = pathParts[0].slice(1);
+      }
+    }
+
+    // 7. BEHANCE
+    else if (domain.includes('behance.net')) {
+      if (pathParts[0] === 'gallery' && pathParts[2]) {
+        caption = humanizeSlug(pathParts[2]);
+      } else if (pathParts.length === 1) {
+        author = pathParts[0];
+      }
+    }
+
+    // 8. DRIBBBLE
+    else if (domain.includes('dribbble.com')) {
+      if (pathParts[0] === 'shots' && pathParts[1]) {
+        caption = humanizeSlug(pathParts[1].replace(/^\d+-/, ''));
+      } else if (pathParts.length === 1) {
+        author = pathParts[0];
+      }
+    }
+
+    // 9. GITHUB
+    else if (domain.includes('github.com')) {
+      if (pathParts[0]) author = pathParts[0];
+      if (pathParts[1]) caption = humanizeSlug(pathParts[1]);
+    }
+
+    // 10. SUBSTACK & MEDIUM
+    else if (domain.includes('substack.com')) {
+      const sub = domain.split('.')[0];
+      if (sub && sub !== 'www') author = sub;
+      if (pathParts[1]) caption = humanizeSlug(pathParts[1]);
+    } else if (domain.includes('medium.com')) {
+      if (pathParts[0] && pathParts[0].startsWith('@')) {
+        author = pathParts[0].slice(1);
+      }
+    }
+  } catch {}
+
+  if (!caption && text && !text.startsWith('http')) {
+    caption = text.slice(0, 160);
+  }
+
+  return { author, caption, thumbnail };
+}
+
+/**
+ * Formats note text with author creator info and caption.
+ */
+export function formatNotesWithCaption(
+  author?: string | null,
+  caption?: string | null,
+  userNote?: string | null,
+  siteName?: string | null
+): string {
+  const parts: string[] = [];
+  if (siteName) {
+    parts.push(`🌐 ${siteName}`);
+  }
+  if (author) {
+    parts.push(`👤 @${author.replace(/^@/, '')}`);
+  }
+  if (caption) {
+    parts.push(`📝 Caption: "${caption}"`);
+  }
+  if (userNote && userNote.trim() && !parts.some((p) => p.includes(userNote.trim()))) {
+    parts.push(`💡 Note: ${userNote.trim()}`);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Extracts auto tags, title tokens, author, caption, and concepts from a URL's structure.
+ */
+export function extractUrlMetadataFromUrl(rawUrl: string, sharedText?: string): ExtractedUrlMetadata {
   const norm = normalizeUrl(rawUrl) || rawUrl.trim();
   const domain = extractDomain(norm) || '';
   const cleanDomain = domain.toLowerCase().replace(/^www\./, '');
@@ -108,6 +297,14 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
     }
   }
 
+  // Extract author username, caption, and thumbnail
+  const { author, caption, thumbnail } = extractAuthorAndCaption(norm, sharedText);
+
+  if (author) {
+    const cleanAuthor = author.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (cleanAuthor) autoTagsSet.add(cleanAuthor);
+  }
+
   // Parse path components
   let parsedTitle: string | null = null;
   const pathTokens: string[] = [];
@@ -117,7 +314,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
     const pathParts = urlObj.pathname.split('/').filter((p) => p.length > 0);
 
     if (pathParts.length > 0) {
-      // Find the most meaningful segment (usually the last or second to last)
       const meaningful = [...pathParts].reverse().find(
         (p) => p.length > 3 && !/^\d+$/.test(p) && !['p', 'pin', 'reel', 'post', 'item', 'watch'].includes(p.toLowerCase())
       );
@@ -126,7 +322,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
         parsedTitle = humanizeSlug(meaningful);
       }
 
-      // Collect path tokens for tagging
       pathParts.forEach((part) => {
         const words = part.toLowerCase().split(/[-_.]+/);
         words.forEach((w) => {
@@ -137,7 +332,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
       });
     }
 
-    // Parse query params for search/topic keywords
     urlObj.searchParams.forEach((val, key) => {
       if (['q', 'query', 'tag', 'topic', 'search'].includes(key.toLowerCase())) {
         val.toLowerCase().split(/[\s,+_-]+/).forEach((w) => {
@@ -147,7 +341,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
     });
   } catch {}
 
-  // Match design keywords from path tokens and domain
   pathTokens.forEach((token) => {
     DESIGN_KEYWORDS.forEach((keyword) => {
       if (token.includes(keyword) || keyword.includes(token)) {
@@ -156,7 +349,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
     });
   });
 
-  // If no design keyword matched, add top informative path tokens
   if (autoTagsSet.size < 3) {
     pathTokens.slice(0, 3).forEach((token) => {
       if (token.length > 3 && !['html', 'index', 'view'].includes(token)) {
@@ -165,7 +357,6 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
     });
   }
 
-  // Always ensure platform tag
   if (platform && platform !== 'other') {
     autoTagsSet.add(platform);
   }
@@ -173,19 +364,30 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
   const autoTags = Array.from(autoTagsSet);
   const concepts = autoTags.slice(0, 4);
 
-  const fallbackTitle = parsedTitle
+  const fallbackTitle = caption
+    ? `${caption} (${siteName})`
+    : parsedTitle
     ? `${parsedTitle} (${siteName})`
+    : author
+    ? `@${author} on ${siteName}`
     : `Saved reference from ${siteName}`;
 
-  // Formulate rich editorial context
   const tagSummary = concepts.length > 0 ? concepts.join(', ') : 'creative inspiration';
-  const editorialContext = `💡 ${siteName} reference • Context: Explores ${tagSummary} with focus on visual aesthetics and spatial composition.`;
+  const authorBadge = author ? `👤 @${author.replace(/^@/, '')}` : null;
+  const captionSnippet = caption ? `📝 "${caption.slice(0, 80)}"` : null;
+  const contextNotes = [authorBadge, captionSnippet].filter(Boolean).join(' • ');
+
+  const editorialContext = contextNotes
+    ? `💡 ${siteName} • ${contextNotes} • Context: ${tagSummary}`
+    : `💡 ${siteName} reference • Context: Explores ${tagSummary} with focus on visual aesthetics.`;
 
   return {
     title: fallbackTitle,
-    description: `Reference link from ${siteName} exploring ${tagSummary}. Saved to inspiration dump.`,
+    description: caption || `Reference link from ${siteName} exploring ${tagSummary}. Saved to inspiration dump.`,
     siteName,
-    previewImageUrl: null,
+    author,
+    caption,
+    previewImageUrl: thumbnail,
     domain: cleanDomain || null,
     platform,
     autoTags,
@@ -201,9 +403,10 @@ export function extractUrlMetadataFromUrl(rawUrl: string): ExtractedUrlMetadata 
 export async function enrichUrlMetadata(
   rawUrl: string,
   userTitle?: string,
-  userNote?: string
+  userNote?: string,
+  sharedText?: string
 ): Promise<ExtractedUrlMetadata> {
-  const base = extractUrlMetadataFromUrl(rawUrl);
+  const base = extractUrlMetadataFromUrl(rawUrl, sharedText);
 
   // If user provided a title, preserve it
   if (userTitle && userTitle.trim()) {
@@ -216,8 +419,8 @@ export async function enrichUrlMetadata(
 
   // In web browsers, or for CORS-restricted domains, NEVER perform direct client fetch
   if (Platform.OS === 'web' || isRestrictedDomain) {
-    if (userNote && userNote.trim()) {
-      base.editorialContext = `💡 ${base.siteName} • User Note: "${userNote.trim()}" • Context: ${base.concepts.join(', ')}`;
+    if (base.author || base.caption || userNote) {
+      base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
     }
     return base;
   }
@@ -270,8 +473,8 @@ export async function enrichUrlMetadata(
     // Pure fallback
   }
 
-  if (userNote && userNote.trim()) {
-    base.editorialContext = `💡 ${base.siteName} • User Note: "${userNote.trim()}" • Context: ${base.concepts.join(', ')}`;
+  if (base.author || base.caption || userNote) {
+    base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
   }
 
   return base;
