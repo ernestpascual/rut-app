@@ -19,7 +19,6 @@ import {
 import { db } from '../../../../src/lib/firebase/client';
 import { useAuth } from '../../../../src/features/auth/AuthContext';
 import { useTheme, ThemeMode } from '../../../../src/design/ThemeContext';
-import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
@@ -164,7 +163,6 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AnnouncementBar pillText="AUDIT" message="Runtime AI Usage & Settings" />
       <TopNav title="rut" subtitle="Settings & Ledger" />
 
       <ScrollView contentContainerStyle={styles.content}>
