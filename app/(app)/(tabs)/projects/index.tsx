@@ -17,7 +17,6 @@ import {
 import { db } from '../../../../src/lib/firebase/client';
 import { useAuth, DUMMY_USER_UID } from '../../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../../src/design/ThemeContext';
-import { AnnouncementBar } from '../../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../../src/components/ui/TopNav';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
@@ -102,10 +101,6 @@ export default function ProjectsListScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AnnouncementBar
-        pillText="IDEAS STUDIO"
-        message="Write your idea and match & attach inspirations from your dump as references"
-      />
       <TopNav
         title="rut"
         subtitle="Ideas & Projects"
