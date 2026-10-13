@@ -1,5 +1,21 @@
+import { Platform } from 'react-native';
 import { SourcePlatform } from '../types';
 import { detectPlatform, extractDomain, normalizeUrl } from './url';
+
+const CORS_RESTRICTED_DOMAINS = [
+  'instagram.com',
+  'facebook.com',
+  'fb.com',
+  'tiktok.com',
+  'twitter.com',
+  'x.com',
+  'threads.net',
+  'pinterest.com',
+  'pin.it',
+  'linkedin.com',
+  'youtube.com',
+  'youtu.be',
+];
 
 export interface ExtractedUrlMetadata {
   title: string | null;
@@ -194,46 +210,64 @@ export async function enrichUrlMetadata(
     base.title = userTitle.trim();
   }
 
-  // Try lightweight fetch for OpenGraph tags (best effort, timeout 2.5s)
+  const isRestrictedDomain = CORS_RESTRICTED_DOMAINS.some((d) =>
+    (base.domain || '').toLowerCase().includes(d)
+  );
+
+  // In web browsers, or for CORS-restricted domains, NEVER perform direct client fetch
+  if (Platform.OS === 'web' || isRestrictedDomain) {
+    if (userNote && userNote.trim()) {
+      base.editorialContext = `💡 ${base.siteName} • User Note: "${userNote.trim()}" • Context: ${base.concepts.join(', ')}`;
+    }
+    return base;
+  }
+
+  // On native mobile (iOS/Android), attempt lightweight OpenGraph fetch for open domains
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => {
+      try {
+        controller.abort();
+      } catch {}
+    }, 2000);
 
     const response = await fetch(rawUrl, {
       method: 'GET',
       signal: controller.signal,
       headers: {
         'Accept': 'text/html,application/xhtml+xml',
-        'User-Agent': 'rut-app/1.0 (+https://rut-app.internal)',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
       },
-    });
+    }).catch(() => null);
 
     clearTimeout(timeout);
 
-    if (response.ok) {
-      const html = await response.text();
-      const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
-                         html.match(/<title[^>]*>([^<]+)<\/title>/i);
-      const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
-                        html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
-      const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-      const siteMatch = html.match(/<meta\s+property=["']og:site_name["']\s+content=["']([^"']+)["']/i);
+    if (response && response.ok) {
+      const html = await response.text().catch(() => '');
+      if (html) {
+        const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+                           html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+                          html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+        const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+        const siteMatch = html.match(/<meta\s+property=["']og:site_name["']\s+content=["']([^"']+)["']/i);
 
-      if (titleMatch && titleMatch[1] && (!userTitle || !userTitle.trim())) {
-        base.title = titleMatch[1].trim();
-      }
-      if (descMatch && descMatch[1]) {
-        base.description = descMatch[1].trim();
-      }
-      if (imageMatch && imageMatch[1] && /^https?:\/\//i.test(imageMatch[1])) {
-        base.previewImageUrl = imageMatch[1].trim();
-      }
-      if (siteMatch && siteMatch[1]) {
-        base.siteName = siteMatch[1].trim();
+        if (titleMatch && titleMatch[1] && (!userTitle || !userTitle.trim())) {
+          base.title = titleMatch[1].trim();
+        }
+        if (descMatch && descMatch[1]) {
+          base.description = descMatch[1].trim();
+        }
+        if (imageMatch && imageMatch[1] && /^https?:\/\//i.test(imageMatch[1])) {
+          base.previewImageUrl = imageMatch[1].trim();
+        }
+        if (siteMatch && siteMatch[1]) {
+          base.siteName = siteMatch[1].trim();
+        }
       }
     }
   } catch {
-    // Graceful fallback to path tokens
+    // Pure fallback
   }
 
   if (userNote && userNote.trim()) {

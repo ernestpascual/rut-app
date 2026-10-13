@@ -1,7 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  collection,
+  getDocs,
+  setDoc,
+  doc,
+  addDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  where,
+} from 'firebase/firestore';
+import { db, auth } from '../../lib/firebase/client';
 import { InspirationItem, Project, ProjectInspirationLink, SourcePlatform } from '../../types';
 import { detectPlatform, extractDomain, generateContentHash, normalizeUrl } from '../../utils/url';
 import { enrichUrlMetadata, extractUrlMetadataFromUrl } from '../../utils/urlMetadata';
+
+export function getTargetUid(uid?: string): string {
+  return uid || auth?.currentUser?.uid || 'test';
+}
 
 export type DumpSortOption =
   | 'newest'
@@ -44,9 +60,28 @@ export function enrichInspirationItem(item: InspirationItem): InspirationItem {
 }
 
 /**
- * Loads dump inspirations from storage, ensuring auto-enrichment on any missing metadata.
+ * Loads dump inspirations from Firebase Firestore, ensuring auto-enrichment on any missing metadata.
  */
-export async function getDumpInspirations(): Promise<InspirationItem[]> {
+export async function getDumpInspirations(uid?: string): Promise<InspirationItem[]> {
+  const targetUid = getTargetUid(uid);
+  try {
+    const q = query(
+      collection(db, 'users', targetUid, 'inspirations'),
+      orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const items: InspirationItem[] = [];
+      snap.forEach((d) => {
+        items.push(enrichInspirationItem({ id: d.id, ...(d.data() as any) }));
+      });
+      AsyncStorage.setItem(DUMP_STORAGE_KEY, JSON.stringify(items)).catch(() => {});
+      return items;
+    }
+  } catch (e) {
+    // Graceful fallback to local cache
+  }
+
   try {
     const raw = await AsyncStorage.getItem(DUMP_STORAGE_KEY);
     if (raw) {
@@ -82,20 +117,22 @@ export async function resetDumpToInitial(): Promise<InspirationItem[]> {
 }
 
 /**
- * Quick-dump a raw link or text note into the inspiration bank.
+ * Quick-dump a raw link or text note into the inspiration bank via Firebase Firestore.
  */
 export async function quickDumpLinkOrNote(
   rawInput: string,
   userNote?: string,
-  tags: string[] = []
+  tags: string[] = [],
+  uid?: string
 ): Promise<InspirationItem> {
+  const targetUid = getTargetUid(uid);
   const trimmed = rawInput.trim();
   const normalized = normalizeUrl(trimmed);
   const hash = generateContentHash(normalized || trimmed);
 
   let meta;
   if (normalized) {
-    meta = await enrichUrlMetadata(normalized, undefined, userNote);
+    meta = await enrichUrlMetadata(normalized, undefined, userNote).catch(() => undefined);
   }
 
   const combinedTags = Array.from(new Set([...tags, ...(meta?.autoTags || [])]));
@@ -105,7 +142,7 @@ export async function quickDumpLinkOrNote(
 
   const newItem: InspirationItem = {
     id: `dump-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    ownerUid: 'test',
+    ownerUid: targetUid,
     kind: normalized ? 'link' : 'note',
     folder: 'dump',
     title,
@@ -133,8 +170,18 @@ export async function quickDumpLinkOrNote(
     capturedAt: Date.now(),
   };
 
-  const current = await getDumpInspirations();
-  const updated = [newItem, ...current];
+  try {
+    const docRef = await addDoc(
+      collection(db, 'users', targetUid, 'inspirations'),
+      newItem
+    );
+    newItem.id = docRef.id;
+  } catch (err) {
+    console.warn('[dumpService] Firestore write fallback:', err);
+  }
+
+  const current = await getDumpInspirations(targetUid);
+  const updated = [newItem, ...current.filter((i) => i.id !== newItem.id)];
   await setDumpInspirations(updated);
   return newItem;
 }
@@ -163,9 +210,28 @@ export function sortDumpItems(items: InspirationItem[], criteria: DumpSortOption
 }
 
 /**
- * Projects / Ideas storage helpers.
+ * Projects / Ideas storage helpers using Firebase Firestore.
  */
-export async function getProjects(): Promise<Project[]> {
+export async function getProjects(uid?: string): Promise<Project[]> {
+  const targetUid = getTargetUid(uid);
+  try {
+    const q = query(
+      collection(db, 'users', targetUid, 'projects'),
+      orderBy('updatedAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const projects: Project[] = [];
+      snap.forEach((d) => {
+        projects.push({ id: d.id, ...(d.data() as any) });
+      });
+      AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects)).catch(() => {});
+      return projects;
+    }
+  } catch (e) {
+    // Fallback to local cache
+  }
+
   try {
     const raw = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
     if (raw) {
@@ -181,8 +247,15 @@ export async function getProjects(): Promise<Project[]> {
   return [];
 }
 
-export async function saveProject(project: Project): Promise<void> {
-  const current = await getProjects();
+export async function saveProject(project: Project, uid?: string): Promise<void> {
+  const targetUid = getTargetUid(uid);
+  try {
+    await setDoc(doc(db, 'users', targetUid, 'projects', project.id), project, { merge: true });
+  } catch (err) {
+    console.warn('[dumpService] saveProject Firestore fallback:', err);
+  }
+
+  const current = await getProjects(targetUid);
   const index = current.findIndex((p) => p.id === project.id);
   let updated: Project[];
   if (index >= 0) {
@@ -191,20 +264,42 @@ export async function saveProject(project: Project): Promise<void> {
   } else {
     updated = [project, ...current];
   }
-  await AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updated));
+  await AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
 }
 
-export async function deleteProjectLocal(projectId: string): Promise<void> {
-  const current = await getProjects();
+export async function deleteProjectLocal(projectId: string, uid?: string): Promise<void> {
+  const targetUid = getTargetUid(uid);
+  try {
+    await deleteDoc(doc(db, 'users', targetUid, 'projects', projectId));
+  } catch (err) {
+    console.warn('[dumpService] deleteProject Firestore fallback:', err);
+  }
+
+  const current = await getProjects(targetUid);
   const updated = current.filter((p) => p.id !== projectId);
-  await AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updated));
-  await AsyncStorage.removeItem(`${LINKS_STORAGE_PREFIX}${projectId}`);
+  await AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+  await AsyncStorage.removeItem(`${LINKS_STORAGE_PREFIX}${projectId}`).catch(() => {});
 }
 
 /**
- * Inspiration links attached to a project/idea.
+ * Inspiration links attached to a project/idea via Firebase Firestore.
  */
-export async function getProjectLinks(projectId: string): Promise<ProjectInspirationLink[]> {
+export async function getProjectLinks(projectId: string, uid?: string): Promise<ProjectInspirationLink[]> {
+  const targetUid = getTargetUid(uid);
+  try {
+    const snap = await getDocs(
+      collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks')
+    );
+    if (!snap.empty) {
+      const links: ProjectInspirationLink[] = [];
+      snap.forEach((d) => links.push({ id: d.id, ...(d.data() as any) }));
+      AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(links)).catch(() => {});
+      return links;
+    }
+  } catch (err) {
+    // Fallback
+  }
+
   try {
     const raw = await AsyncStorage.getItem(`${LINKS_STORAGE_PREFIX}${projectId}`);
     if (raw) {
@@ -221,12 +316,10 @@ export async function attachInspirationToProject(
   inspirationId: string,
   linkedBy: 'user' | 'ai' = 'user',
   reason?: string | null,
-  confidence?: number | null
+  confidence?: number | null,
+  uid?: string
 ): Promise<ProjectInspirationLink> {
-  const current = await getProjectLinks(projectId);
-  const existing = current.find((l) => l.inspirationId === inspirationId);
-  if (existing) return existing;
-
+  const targetUid = getTargetUid(uid);
   const newLink: ProjectInspirationLink = {
     id: `link-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     inspirationId,
@@ -236,16 +329,42 @@ export async function attachInspirationToProject(
     createdAt: Date.now(),
   };
 
-  const updated = [newLink, ...current];
-  await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated));
+  try {
+    await setDoc(
+      doc(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks', newLink.id),
+      newLink
+    );
+  } catch (err) {
+    console.warn('[dumpService] attachInspiration Firestore fallback:', err);
+  }
+
+  const current = await getProjectLinks(projectId, targetUid);
+  const updated = [newLink, ...current.filter((l) => l.inspirationId !== inspirationId)];
+  await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated)).catch(() => {});
   return newLink;
 }
 
 export async function detachInspirationFromProject(
   projectId: string,
-  inspirationId: string
+  inspirationId: string,
+  uid?: string
 ): Promise<void> {
-  const current = await getProjectLinks(projectId);
+  const targetUid = getTargetUid(uid);
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks'),
+        where('inspirationId', '==', inspirationId)
+      )
+    );
+    for (const d of snap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[dumpService] detachInspiration Firestore fallback:', err);
+  }
+
+  const current = await getProjectLinks(projectId, targetUid);
   const updated = current.filter((l) => l.inspirationId !== inspirationId);
-  await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated));
+  await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated)).catch(() => {});
 }

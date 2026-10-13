@@ -61,11 +61,13 @@ export default function NewInspirationScreen() {
 
       // Async live fetch
       let isCurrent = true;
-      enrichUrlMetadata(normalized, title, userNote).then((enriched) => {
-        if (isCurrent) {
-          setUrlMeta(enriched);
-        }
-      });
+      enrichUrlMetadata(normalized, title, userNote)
+        .then((enriched) => {
+          if (isCurrent) {
+            setUrlMeta(enriched);
+          }
+        })
+        .catch(() => {});
 
       return () => {
         isCurrent = false;
@@ -152,16 +154,18 @@ export default function NewInspirationScreen() {
         capturedAt: Date.now(),
       };
 
-      if (!user || user.uid === DUMMY_USER_UID) {
-        const existing = await getDumpInspirations();
-        await setDumpInspirations([newItem, ...existing]);
-        router.back();
-        return;
+      const targetUid = user?.uid || DUMMY_USER_UID;
+      newItem.ownerUid = targetUid;
+
+      try {
+        const docRef = await addDoc(collection(db, 'users', targetUid, 'inspirations'), newItem);
+        newItem.id = docRef.id;
+      } catch (err) {
+        console.warn('Firestore inspiration save fallback:', err);
       }
 
-      await addDoc(collection(db, 'users', user.uid, 'inspirations'), newItem);
-      const existing = await getDumpInspirations();
-      await setDumpInspirations([newItem, ...existing]);
+      const existing = await getDumpInspirations(targetUid);
+      await setDumpInspirations([newItem, ...existing.filter((i) => i.id !== newItem.id)]);
       router.back();
     } catch (err: any) {
       // Local fallback
