@@ -26,7 +26,6 @@ import {
 import { db } from '../../../src/lib/firebase/client';
 import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../src/design/ThemeContext';
-import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
@@ -357,10 +356,6 @@ export default function ChatWorkspaceScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar
-        pillText="TRAIN OF THOUGHT"
-        message={activeTitle}
-      />
       <TopNav
         title="rut"
         subtitle={activeTitle}

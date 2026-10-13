@@ -10,7 +10,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../src/design/ThemeContext';
-import { AnnouncementBar } from '../../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../../src/components/ui/TopNav';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
@@ -42,7 +41,6 @@ export default function NewChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="NEW THOUGHT" message="Start an isolated exploration" />
       <TopNav
         title="rut"
         subtitle="New Train of Thought"

@@ -11,7 +11,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/features/auth/AuthContext';
 import { useTheme } from '../../src/design/ThemeContext';
-import { AnnouncementBar } from '../../src/components/ui/AnnouncementBar';
 import { TopNav } from '../../src/components/ui/TopNav';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
@@ -50,7 +49,6 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AnnouncementBar pillText="RECOVERY" message="Reset your account password" />
       <TopNav
         title="rut"
         subtitle="Reset Password"
