@@ -90,13 +90,19 @@ export class MockAIProvider implements AIProvider {
     const citedIds = contextItems.slice(0, 3).map((item) => item.id);
     const titles = contextItems.slice(0, 3).map((item) => `"${item.title}"`);
 
-    let response = `In response to "${input.message}": `;
+    let response = `### BRAINSTORMING: ${input.message.toUpperCase()}\n\n`;
     if (titles.length > 0) {
-      response += `Drawing from your saved inspiration in ${titles.join(
-        ' and '
-      )}, this train of thought suggests combining these visual motifs and concepts to explore new directions.`;
+      response += `Cross-pollinating your saved bank references in ${titles.join(' and ')}:\n\n` +
+        `• **Structural Contrast**: Juxtapose the primary form with unexpected raw finishes.\n` +
+        `• **Tactile Manifestation**: Ground this idea in high-contrast optical white and obsidian black.\n\n` +
+        `### ⚡ SPARK QUESTION\n` +
+        `Which direction creates the most compelling friction with your concept?`;
     } else {
-      response += `Exploring this train of thought: Consider brainstorming related visual elements, saving links or snippets to your bank to anchor the AI synthesis.`;
+      response += `Let's break this thought down from multiple creative angles:\n\n` +
+        `• **Angle 1 — Divergent Scale**: Flip expected proportions to create immediate tension.\n` +
+        `• **Angle 2 — Materiality & Texture**: Translate this premise into architectural materials and light.\n\n` +
+        `### ⚡ NEXT MOVE\n` +
+        `What is the one non-negotiable signature detail for this concept?`;
     }
 
     const inputTokens = Math.max(20, Math.round(input.message.length / 4) + contextItems.length * 40);

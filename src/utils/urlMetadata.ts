@@ -57,6 +57,15 @@ export function getPlatformFallbackSvg(platform?: string | null): string {
   }
 }
 
+export function truncateTitle(title?: string | null): string {
+  if (!title) return '';
+  const trimmed = title.trim();
+  if (trimmed.length > 300) {
+    return trimmed.slice(0, 100).trim();
+  }
+  return trimmed;
+}
+
 export function cleanMetadata(value: string): string {
   const entities: Record<string, string> = {
     amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' '
@@ -427,13 +436,15 @@ export function extractUrlMetadataFromUrl(rawUrl: string, sharedText?: string): 
   const autoTags = Array.from(autoTagsSet);
   const concepts = autoTags.slice(0, 4);
 
-  const fallbackTitle = caption
-    ? `${caption} (${siteName})`
-    : parsedTitle
-    ? `${parsedTitle} (${siteName})`
-    : author
-    ? `@${author} on ${siteName}`
-    : (siteName || 'Web Resource');
+  const fallbackTitle = truncateTitle(
+    caption
+      ? `${caption} (${siteName})`
+      : parsedTitle
+      ? `${parsedTitle} (${siteName})`
+      : author
+      ? `@${author} on ${siteName}`
+      : (siteName || 'Web Resource')
+  );
 
   const tagSummary = concepts.length > 0 ? concepts.join(', ') : '';
   const authorBadge = author ? `👤 @${author.replace(/^@/, '')}` : null;
@@ -710,7 +721,7 @@ export async function enrichUrlMetadata(
   const base = extractUrlMetadataFromUrl(rawUrl, sharedText);
 
   if (userTitle && userTitle.trim()) {
-    base.title = userTitle.trim();
+    base.title = truncateTitle(userTitle);
   }
 
   const live = await fetchLiveMetadata(rawUrl).catch(() => null);
@@ -723,7 +734,7 @@ export async function enrichUrlMetadata(
         live.title.toLowerCase() === `www.${base.domain.toLowerCase()}`);
 
     if (live.title && !isDomainOnly && (!userTitle || !userTitle.trim())) {
-      base.title = live.title;
+      base.title = truncateTitle(live.title);
     }
     if (live.description) {
       base.description = live.description;
@@ -763,6 +774,8 @@ export async function enrichUrlMetadata(
   if (base.author || base.caption || userNote) {
     base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
   }
+
+  base.title = truncateTitle(base.title);
 
   return base;
 }

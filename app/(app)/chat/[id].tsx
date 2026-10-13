@@ -544,11 +544,18 @@ export default function ChatWorkspaceScreen() {
               {/* Actions on Message */}
               <View style={styles.messageActions}>
                 {item.role === 'assistant' && item.status !== 'failed' ? (
-                  <Button
-                    title="→ SAVE AS NEW IDEA"
-                    variant="text"
-                    onPress={() => openCreateProjectModal(item.content)}
-                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs }}>
+                    <Button
+                      title="💬 DIVE DEEPER"
+                      variant="text"
+                      onPress={() => handleSendMessage(`Let's unpack and expand on this specific angle further: "${item.content.slice(0, 80)}..."`)}
+                    />
+                    <Button
+                      title="→ SAVE AS NEW IDEA"
+                      variant="text"
+                      onPress={() => openCreateProjectModal(item.content)}
+                    />
+                  </View>
                 ) : null}
                 <Button
                   title="DELETE"
@@ -568,6 +575,46 @@ export default function ChatWorkspaceScreen() {
           </View>
         ) : null}
 
+        {/* Quick Brainstorm Action Bar */}
+        <View style={styles.brainstormSparksBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brainstormSparksContent}
+          >
+            <Pressable
+              style={styles.brainstormSparkPill}
+              onPress={() => handleSendMessage('Give me 3 wild, counter-intuitive conceptual angles for this idea')}
+            >
+              <Text style={styles.brainstormSparkText}>⚡ Wild Angle</Text>
+            </Pressable>
+            <Pressable
+              style={styles.brainstormSparkPill}
+              onPress={() => handleSendMessage('Suggest sensory materials, tactile textures, and a color palette')}
+            >
+              <Text style={styles.brainstormSparkText}>🎨 Materials & Palette</Text>
+            </Pressable>
+            <Pressable
+              style={styles.brainstormSparkPill}
+              onPress={() => handleSendMessage('Critique this concept: what feels clichéd, and what is the killer hallmark detail?')}
+            >
+              <Text style={styles.brainstormSparkText}>🔍 Pressure Test</Text>
+            </Pressable>
+            <Pressable
+              style={styles.brainstormSparkPill}
+              onPress={() => handleSendMessage('Check my dump and cross-pollinate with my saved inspiration bank')}
+            >
+              <Text style={styles.brainstormSparkText}>📥 Cross-Pollinate Bank</Text>
+            </Pressable>
+            <Pressable
+              style={styles.brainstormSparkPill}
+              onPress={() => handleSendMessage('What is the single most compelling tangible experiment or prototype to build next?')}
+            >
+              <Text style={styles.brainstormSparkText}>🚀 Next Move</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+
         {/* Input Bar */}
         <View style={styles.inputBar}>
           <Button
@@ -579,7 +626,7 @@ export default function ChatWorkspaceScreen() {
           <Input
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask AI to brainstorm, critique, or check dump..."
+            placeholder="Brainstorm with AI, challenge ideas, check dump..."
             containerStyle={{ flex: 1, marginVertical: 0 }}
             onSubmitEditing={() => handleSendMessage()}
           />
@@ -1027,6 +1074,31 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 10,
     color: colors.inkSoft,
     marginLeft: spacing.xs,
+  },
+  brainstormSparksBar: {
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    paddingVertical: 6,
+  },
+  brainstormSparksContent: {
+    paddingHorizontal: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  brainstormSparkPill: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  brainstormSparkText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.ink,
   },
   inputBar: {
     flexDirection: 'row',

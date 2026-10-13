@@ -104,7 +104,8 @@ export function useShareCapture() {
       const platform = meta?.platform || processed.platform || 'other';
       const domain = meta?.domain || processed.domain || null;
       const siteName = meta?.siteName || (domain ? domain.charAt(0).toUpperCase() + domain.slice(1) : null);
-      const finalTitle = (customTitle || meta?.title || processed.title).trim();
+      const rawFinalTitle = (customTitle || meta?.title || processed.title).trim();
+      const finalTitle = rawFinalTitle.length > 300 ? rawFinalTitle.slice(0, 100).trim() : rawFinalTitle;
       const combinedTags = Array.from(new Set([...tags, ...(meta?.autoTags || [])]));
       const concepts = meta?.concepts || combinedTags.slice(0, 4);
       const editorialContext = meta?.editorialContext || (userNote?.trim() ? `💡 Note: ${userNote.trim()}` : null);

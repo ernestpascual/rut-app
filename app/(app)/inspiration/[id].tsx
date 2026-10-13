@@ -85,10 +85,11 @@ export default function InspirationDetailScreen() {
 
   const handleSaveEdits = async () => {
     if (!item) return;
-    setSaving(true);
+    const rawTitle = editTitle.trim();
+    const finalTitle = rawTitle.length > 300 ? rawTitle.slice(0, 100).trim() : rawTitle;
     const updated: InspirationItem = {
       ...item,
-      title: editTitle.trim(),
+      title: finalTitle,
       userNote: editNote.trim() || null,
       tags: editTags,
       updatedAt: Date.now(),

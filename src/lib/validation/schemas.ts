@@ -1,7 +1,18 @@
 import { z } from 'zod';
 
+export const normalizeTitle = (val: string): string => {
+  const trimmed = val ? val.trim() : '';
+  if (trimmed.length > 300) {
+    return trimmed.slice(0, 100).trim();
+  }
+  return trimmed;
+};
+
 export const InspirationCreateSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(300, 'Title cannot exceed 300 characters'),
+  title: z
+    .string()
+    .min(1, 'Title is required')
+    .transform((val) => normalizeTitle(val)),
   url: z
     .string()
     .max(2048, 'URL cannot exceed 2048 characters')
@@ -17,7 +28,11 @@ export const InspirationCreateSchema = z.object({
 });
 
 export const InspirationUpdateSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(300, 'Title cannot exceed 300 characters').optional(),
+  title: z
+    .string()
+    .min(1, 'Title is required')
+    .transform((val) => normalizeTitle(val))
+    .optional(),
   userNote: z.string().max(5000, 'Note cannot exceed 5000 characters').nullable().optional(),
   tags: z.array(z.string().max(50)).max(30, 'Maximum 30 tags allowed').optional(),
   archived: z.boolean().optional(),
@@ -29,7 +44,10 @@ export const ChatMessageCreateSchema = z.object({
 });
 
 export const ProjectCreateSchema = z.object({
-  title: z.string().min(1, 'Project title is required').max(200, 'Title cannot exceed 200 characters'),
+  title: z
+    .string()
+    .min(1, 'Project title is required')
+    .transform((val) => normalizeTitle(val)),
   brief: z.string().max(5000, 'Brief cannot exceed 5000 characters').nullable().optional(),
   notes: z.string().max(20000, 'Notes cannot exceed 20000 characters').default(''),
   tags: z.array(z.string().max(50)).max(30).default([]),

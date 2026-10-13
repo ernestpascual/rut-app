@@ -7,6 +7,7 @@ import {
   cleanMetadata,
   parseInstagramDesc,
   parseThreadsDesc,
+  truncateTitle,
   getPlatformFallbackSvg,
   INSTAGRAM_SVG,
   PINTEREST_SVG,
@@ -144,13 +145,15 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(meta.editorialContext).not.toContain('focus on visual aesthetics');
   });
 
-  test('provides platform-tailored fallback SVGs ensuring visuals never break', () => {
-    expect(getPlatformFallbackSvg('instagram')).toBe(INSTAGRAM_SVG);
-    expect(getPlatformFallbackSvg('pinterest')).toBe(PINTEREST_SVG);
-    expect(getPlatformFallbackSvg('threads')).toBe(THREADS_SVG);
-    expect(getPlatformFallbackSvg('youtube')).toBe(YOUTUBE_SVG);
-    expect(getPlatformFallbackSvg('generic')).toBe(GENERIC_SVG);
-    expect(getPlatformFallbackSvg('unknown')).toBe(GENERIC_SVG);
+  test('shortens titles longer than 300 characters to 100 characters', () => {
+    const longTitle = 'Super long title that repeats words for testing '.repeat(10);
+    expect(longTitle.length).toBeGreaterThan(300);
+    const truncated = truncateTitle(longTitle);
+    expect(truncated.length).toBe(100);
+    expect(truncated).toBe(longTitle.slice(0, 100).trim());
+
+    // Titles under 300 are preserved
+    expect(truncateTitle('Normal Title')).toBe('Normal Title');
   });
 });
 

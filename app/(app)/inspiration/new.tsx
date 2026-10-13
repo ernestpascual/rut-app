@@ -148,7 +148,7 @@ export default function NewInspirationScreen() {
         ownerUid: user?.uid || DUMMY_USER_UID,
         kind,
         folder: 'dump',
-        title: computedTitle,
+        title: validation.data.title,
         url: url.trim() || null,
         normalizedUrl: normalized,
         sharedText: kind === 'note' ? userNote.trim() : null,

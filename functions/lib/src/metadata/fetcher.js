@@ -4,6 +4,7 @@ exports.GENERIC_SVG = exports.YOUTUBE_SVG = exports.THREADS_SVG = exports.PINTER
 exports.isPrivateOrBlockedHost = isPrivateOrBlockedHost;
 exports.parseInstagramDesc = parseInstagramDesc;
 exports.parseThreadsDesc = parseThreadsDesc;
+exports.truncateTitle = truncateTitle;
 exports.cleanMetadata = cleanMetadata;
 exports.normalizeTargetUrl = normalizeTargetUrl;
 exports.captureMetadataAction = captureMetadataAction;
@@ -56,6 +57,15 @@ function parseThreadsDesc(desc) {
     content = content.replace(/\\?"?\s*$/, "").trim();
     const sentences = content.split(/(?<=[.!?])\s+/);
     return sentences.slice(0, 2).join(" ");
+}
+function truncateTitle(title) {
+    if (!title)
+        return '';
+    const trimmed = title.trim();
+    if (trimmed.length > 300) {
+        return trimmed.slice(0, 100).trim();
+    }
+    return trimmed;
 }
 function cleanMetadata(value) {
     const entities = {
@@ -483,7 +493,7 @@ async function captureMetadataAction(url) {
         }
         return {
             success: true,
-            title: extractedTitle,
+            title: truncateTitle(extractedTitle),
             thumbnail: finalThumbnail,
             description: isInstagram && extractedDesc
                 ? parseInstagramDesc(extractedDesc)

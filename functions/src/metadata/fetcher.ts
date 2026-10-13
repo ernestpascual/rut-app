@@ -79,6 +79,15 @@ export function parseThreadsDesc(desc: string): string {
   return sentences.slice(0, 2).join(" ");
 }
 
+export function truncateTitle(title?: string | null): string {
+  if (!title) return '';
+  const trimmed = title.trim();
+  if (trimmed.length > 300) {
+    return trimmed.slice(0, 100).trim();
+  }
+  return trimmed;
+}
+
 export function cleanMetadata(value: string): string {
   const entities: Record<string, string> = {
     amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " "
@@ -549,7 +558,7 @@ export async function captureMetadataAction(url: string): Promise<MetadataResult
 
     return {
       success: true,
-      title: extractedTitle,
+      title: truncateTitle(extractedTitle),
       thumbnail: finalThumbnail,
       description: isInstagram && extractedDesc 
         ? parseInstagramDesc(extractedDesc) 

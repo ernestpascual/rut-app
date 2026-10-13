@@ -27,13 +27,17 @@ describe('Validation Schemas', () => {
     expect(result.success).toBe(false);
   });
 
-  test('rejects titles longer than 300 characters', () => {
-    const invalid = {
-      title: 'a'.repeat(301),
+  test('shortens titles longer than 300 characters to 100 characters', () => {
+    const item = {
+      title: 'a'.repeat(350),
       kind: 'note' as const
     };
-    const result = InspirationCreateSchema.safeParse(invalid);
-    expect(result.success).toBe(false);
+    const result = InspirationCreateSchema.safeParse(item);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.title.length).toBe(100);
+      expect(result.data.title).toBe('a'.repeat(100));
+    }
   });
 
   test('validates chat message limits', () => {

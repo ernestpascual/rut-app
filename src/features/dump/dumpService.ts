@@ -43,13 +43,15 @@ async function cleanupOldStorageKeys() {
 cleanupOldStorageKeys();
 
 export function enrichInspirationItem(item: InspirationItem): InspirationItem {
-  if (!item.url) return item;
+  const normalizedTitle = item.title && item.title.length > 300 ? item.title.slice(0, 100).trim() : item.title;
+  if (!item.url) return { ...item, title: normalizedTitle };
   const meta = extractUrlMetadataFromUrl(item.url, item.sharedText || item.userNote || undefined);
   const combinedTags = Array.from(new Set([...(item.tags || []), ...meta.autoTags]));
   const deduplicatedAiTags = Array.from(new Set(item.aiTags && item.aiTags.length > 0 ? item.aiTags : meta.autoTags));
   const deduplicatedConcepts = Array.from(new Set(item.concepts && item.concepts.length > 0 ? item.concepts : meta.concepts));
   return {
     ...item,
+    title: normalizedTitle,
     author: item.author || meta.author || null,
     caption: item.caption || meta.caption || null,
     siteName: item.siteName || meta.siteName,
@@ -142,7 +144,8 @@ export async function quickDumpLinkOrNote(
   const combinedTags = Array.from(new Set([...tags, ...(meta?.autoTags || [])]));
   const platform = meta?.platform || (normalized ? detectPlatform(normalized) : 'other');
   const domain = meta?.domain || (normalized ? extractDomain(normalized) : null);
-  const title = meta?.title || (domain ? `Saved from ${domain}` : trimmed.slice(0, 60));
+  const rawTitle = meta?.title || (domain ? `Saved from ${domain}` : trimmed.slice(0, 60));
+  const title = rawTitle.length > 300 ? rawTitle.slice(0, 100).trim() : rawTitle;
 
   const newItem: InspirationItem = {
     id: `dump-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,

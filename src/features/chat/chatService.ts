@@ -480,69 +480,87 @@ export function synthesizeThoughtTrain(params: {
   if (isDumpPullQuery && topMatches.length > 0) {
     body = `### 📥 PULLED FROM YOUR DUMP & INSPIRATION BANK
 
-We searched your inspiration bank and pulled the following reference materials for "${ideaTitle}":
+Cross-referencing your bank for **${ideaTitle}** reveals several aesthetic resonances to play with:
 
 ${topMatches
   .map((m, idx) => {
     const item = m.item;
-    const tagList = (item.tags || []).length > 0 ? `#${item.tags.join(' #')}` : 'none';
     const domainStr = item.siteName || item.sourceDomain || (item.sourcePlatform ? item.sourcePlatform.toUpperCase() : 'Web');
-    return `${idx + 1}. **"${item.title}"** [ID: ${item.id}]
-   • **Source**: ${domainStr}${item.url ? ` (${item.url})` : ''}
-   • **Auto-Tags**: ${tagList}
-   • **Context**: ${item.editorialContext || item.previewDescription || item.userNote || 'Visual design reference'}
-   • **Relevance**: Informs the design direction for "${ideaTitle}" with structural clarity and aesthetic focus.`;
+    const tagsStr = (item.tags || []).length > 0 ? `#${item.tags.slice(0, 3).join(' #')}` : 'curated';
+    return `${idx + 1}. **"${item.title}"** [ID: ${item.id}] (${domainStr})
+   • **Aesthetic Resonance**: ${item.editorialContext || item.previewDescription || item.userNote || 'Visual reference'}
+   • **Creative Translation**: Borrow the tactile restraint and subtle tension from this piece to anchor ${ideaTitle}. Tagged: ${tagsStr}.`;
   })
   .join('\n\n')}
 
-### STRATEGIC NEXT MOVE
-Use these pulled references to ground your design decisions. Tap any source card below to view details in your Bank.`;
-  } else if (q.includes('variation') || q.includes('angle') || q.includes('alternative') || q.includes('different')) {
-    body = `### CONCEPTUAL ANGLES FOR "${ideaTitle.toUpperCase()}"
-
-1. **Monolithic & Minimalist Approach**:
-   Strip ornamentation to pure form, high contrast, and structural geometry. Focus entirely on silhouette and spatial tension.
-
-2. **Textural Tactility**:
-   Introduce subtle organic irregularities into the editorial framework—matte surface treatments contrasted with high-gloss highlights.
-
-3. **Narrative Sequencing**:
-   Frame the concept as an unfolding editorial lookbook or serialized object series rather than an isolated artifact.`;
+### ⚡ SYNTHESIS & NEXT MOVE
+Merge the structural language of these references into a single cohesive prototype. What specific detail from these saves sparks your curiosity most?`;
   } else if (q.includes('palette') || q.includes('material') || q.includes('color') || q.includes('texture')) {
     body = `### MATERIALITY & PALETTE MATRIX
 
-• **Ink & Canvas Baseline**:
-  Pure pitch black (#000000) and optical white (#ffffff) establish high-contrast editorial hierarchy.
+Grounding **${ideaTitle}** in tactile reality:
 
-• **Tactile Finishes**:
-  Brushed raw aluminum, honed basalt slate, unbleached linen, and low-reflectance ceramics.
+• **Monochrome Tectonic Baseline**:
+  High-contrast optical white against deep carbon obsidian. Creates sharp editorial hierarchy and gives every physical edge deliberate weight.
 
-• **Atmospheric Tonalities**:
-  Cold asphalt gray, subtle warm travertine, and deep obsidian shadowing. Zero artificial saturation.`;
+• **Raw & Tactile Finishes**:
+  Honed basalt slate, brushed cold aluminum, porous architectural travertine, and unbleached matte paper. The juxtaposition of rough aggregate and precision metal creates sensory tension.
+
+• **Atmospheric Undertones**:
+  Muted slate grey (#2a2a2a), warm plaster dust (#e8e4df), and faint cast-shadow undertones with zero artificial oversaturation.
+
+### 💡 SPARK QUESTION
+Which physical surface should dominate the initial prototype: the raw unpolished aggregate or the precision-machined edge?`;
   } else if (q.includes('brief') || q.includes('refine') || q.includes('polish') || q.includes('critique')) {
-    body = `### EDITORIAL BRIEF REFINEMENT
+    body = `### EDITORIAL BRIEF REFINEMENT & PRESSURE TEST
 
-• **Core Proposition**:
-  "${ideaContext?.brief || ideaTitle}" thrives when the core tension is sharpened. Emphasize what is intentionally excluded.
+Sharpening the focus of **${ideaTitle}**:
 
-• **Critical Observations**:
-  ${ideaContext?.notes ? `Current notes focus on: "${ideaContext.notes.slice(0, 80)}..."` : 'Ground the idea with specific spatial or material constraints.'}
+• **The Killer Tension**:
+  ${ideaContext?.brief ? `Building on "${ideaContext.brief}": ` : ''}The strongest concepts rely on a single unresolved question or striking contradiction. What is the one thing this project refuses to compromise on?
 
-• **Immediate Next Action**:
-  Define a single signature gesture—one unmistakable detail that anchors the entire collection.`;
+• **What to Strip Away**:
+  Eliminate decorative filler. If an element doesn't actively support the core silhouette or tactile experience, cut it completely.
+
+• **Signature Gesture**:
+  Define one unmistakable hallmark—whether an oversized typographic hierarchy, an asymmetrical negative space, or an unyielding material choice—that makes this instantly recognizable.
+
+### ⚡ NEXT MOVE
+Commit to one strict rule for this project (e.g. "no smooth curves", "monochrome only", or "single material construction"). What constraint unlocks the most creativity for you?`;
+  } else if (q.includes('variation') || q.includes('angle') || q.includes('alternative') || q.includes('different') || q.includes('wild')) {
+    body = `### DIVERGENT CONCEPTUAL ANGLES FOR "${ideaTitle.toUpperCase()}"
+
+1. **The Brutalist Monolith**:
+   Maximize density and visual weight. Treat the entire execution as an imposing, immovable block where negative space is as physically felt as the mass itself.
+
+2. **The Deconstructed Lookbook**:
+   Break the concept down into an archival index or sequential fragments. Instead of a single final piece, present it as a clinical study of materials, process, and prototypes.
+
+3. **High-Contrast Micro-Scale**:
+   Flip conventional proportions. Pair immense typographic scale or monumental framing with ultra-delicate tactile details that reward close inspection.
+
+### 💡 SPARK QUESTION
+Which direction creates the most exciting friction with your current vision: absolute monolithic weight or fragmented archival sequencing?`;
   } else {
-    body = `### TRAIN OF THOUGHT EXPLORATION
+    // Dynamic, high-agency brainstorm response
+    const isQuestion = q.endsWith('?') || q.startsWith('what') || q.startsWith('how') || q.startsWith('why') || q.startsWith('could') || q.startsWith('can');
+    const referencedMention = topMatches.length > 0 ? `Drawing from your saved item **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], ` : '';
 
-Exploring "${ideaTitle}":
+    body = `### BRAINSTORMING: ${ideaTitle.toUpperCase()}
 
-• **Concept Synthesis**:
-  ${userQuery}
+${referencedMention}Let's break this thought down from multiple creative perspectives:
 
-• **Strategic Direction**:
-  Align this inquiry with your saved references to maintain distinct visual consistency while testing bolder experimental boundaries.
+• **Angle 1 — Structural Tension**:
+  ${isQuestion ? `Exploring "${userQuery.replace(/\?$/, '')}": ` : ''}Consider establishing an immediate contrast. When everyone leans toward polished uniformity, lean into raw texture, deliberate asymmetry, and stark editorial breathing room.
 
-• **Exploratory Vector**:
-  Consider how this element will interact with the editorial baseline—maintaining hard 0px geometry and rigorous contrast.`;
+• **Angle 2 — Material & Spatial Manifestation**:
+  Translate this abstract premise into something tangible. Think about how light catches the surface, how the scale feels in physical space, and the emotional resonance of the materials involved.
+
+• **Angle 3 — The Subversive Detail**:
+  What would be the most counter-intuitive decision we could make here? Often the most memorable design choice is the one that violates expected genre conventions while keeping the craftsmanship flawless.
+
+### ⚡ WHERE TO TAKE THIS NEXT
+Does this feel closer to an architectural object, an intimate editorial publication, or a digital experience? Let's choose a medium to test this hypothesis.`;
   }
 
   const citationsText =
