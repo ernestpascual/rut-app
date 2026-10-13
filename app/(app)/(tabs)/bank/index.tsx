@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,7 +46,9 @@ export default function BankScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
-  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth >= 640;
+  const styles = useMemo(() => getStyles(colors, isDark, isDesktop), [colors, isDark, isDesktop]);
   const isDummy = !user || user.uid === DUMMY_USER_UID;
 
   const [items, setItems] = useState<InspirationItem[]>([]);
@@ -623,7 +626,7 @@ export default function BankScreen() {
   );
 }
 
-const getStyles = (colors: ThemeColors, isDark: boolean) =>
+const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
   StyleSheet.create({
   container: {
     flex: 1,
@@ -639,6 +642,7 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    flexWrap: 'wrap',
   },
   controlTabBtn: {
     paddingVertical: 6,
@@ -775,25 +779,29 @@ const getStyles = (colors: ThemeColors, isDark: boolean) =>
     marginTop: spacing.xs,
   },
   listContent: {
-    padding: spacing.base,
+    paddingHorizontal: isDesktop ? spacing.base : spacing.sm,
+    paddingTop: spacing.sm,
     paddingBottom: 100,
-    ...(Platform.OS === 'web'
+    ...(isDesktop
       ? {
           flexDirection: 'row',
           flexWrap: 'wrap',
           gap: spacing.base,
+          justifyContent: 'center',
           alignItems: 'flex-start',
         }
-      : {}),
+      : {
+          flexDirection: 'column',
+          alignItems: 'center',
+          width: '100%',
+        }),
   },
   itemCard: {
     marginBottom: spacing.sm,
-    ...(Platform.OS === 'web'
-      ? {
-          width: 400,
-          maxWidth: '100%',
-        }
-      : {}),
+    width: isDesktop ? 400 : '100%',
+    maxWidth: isDesktop ? 400 : '100%',
+    alignSelf: 'center',
+    padding: spacing.base,
   },
   cardHeader: {
     flexDirection: 'row',
