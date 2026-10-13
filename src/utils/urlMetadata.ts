@@ -71,14 +71,18 @@ export function cleanMetadata(value: string): string {
 }
 
 export function parseInstagramDesc(desc: string): string {
+  if (!desc) return '';
   if (/log in|login|welcome back|sign up/i.test(desc)) {
     return 'Instagram video reference captured for ideation.';
   }
-  const match = desc.match(/on\s+[A-Za-z]+\s+\d+,\s*\d{4}\s*:\s*(?:\\?"|")?(.*)/i);
+  const match =
+    desc.match(/on\s+[A-Za-z]+\s+\d+,\s*\d{4}\s*:\s*(?:\\?"|[“"])(.*)/i) ||
+    desc.match(/:\s*(?:\\?"|[“"])(.*)/i);
   let content = match ? match[1] : desc;
-  content = content.replace(/\\?"?\s*$/, '').trim();
+  content = content.replace(/[”"]?\s*\.?\s*$/, '').trim();
+  content = content.replace(/[”"]\s*$/, '').trim();
   const sentences = content.split(/(?<=[.!?])\s+/);
-  return sentences.slice(0, 2).join(' ');
+  return sentences.slice(0, 2).join(' ').trim();
 }
 
 export function parseThreadsDesc(desc: string): string {
@@ -429,20 +433,20 @@ export function extractUrlMetadataFromUrl(rawUrl: string, sharedText?: string): 
     ? `${parsedTitle} (${siteName})`
     : author
     ? `@${author} on ${siteName}`
-    : `Saved reference from ${siteName}`;
+    : (siteName || 'Web Resource');
 
-  const tagSummary = concepts.length > 0 ? concepts.join(', ') : 'creative inspiration';
+  const tagSummary = concepts.length > 0 ? concepts.join(', ') : '';
   const authorBadge = author ? `👤 @${author.replace(/^@/, '')}` : null;
   const captionSnippet = caption ? `📝 "${caption.slice(0, 80)}"` : null;
   const contextNotes = [authorBadge, captionSnippet].filter(Boolean).join(' • ');
 
   const editorialContext = contextNotes
-    ? `💡 ${siteName} • ${contextNotes} • Context: ${tagSummary}`
-    : `💡 ${siteName} reference • Context: Explores ${tagSummary} with focus on visual aesthetics.`;
+    ? `💡 ${siteName} • ${contextNotes}${tagSummary ? ` • Context: ${tagSummary}` : ''}`
+    : (tagSummary ? `💡 ${siteName} • Context: ${tagSummary}` : `💡 ${siteName}`);
 
   return {
     title: fallbackTitle,
-    description: caption || `Reference link from ${siteName} exploring ${tagSummary}. Saved to inspiration dump.`,
+    description: caption || null,
     siteName,
     author,
     caption,
@@ -459,22 +463,33 @@ export function extractUrlMetadataFromUrl(rawUrl: string, sharedText?: string): 
  * Enhanced async metadata extractor: attempts live HTML metadata fetch if feasible,
  * and seamlessly merges with URL path semantic parsing.
  */
-export async function enrichUrlMetadata(
-  rawUrl: string,
-  userTitle?: string,
-  userNote?: string,
-  sharedText?: string
-): Promise<ExtractedUrlMetadata> {
-  const base = extractUrlMetadataFromUrl(rawUrl, sharedText);
+interface LiveMetadataPayload {
+  title?: string;
+  description?: string;
+  author?: string;
+  caption?: string;
+  thumbnail?: string;
+  domain?: string;
+  siteName?: string;
+}
 
-  // If user provided a title, preserve it
-  if (userTitle && userTitle.trim()) {
-    base.title = userTitle.trim();
+/**
+ * Fetches live metadata through multiple CORS-safe and server-backed strategies:
+ * 1. Firebase Callable Cloud Function (if deployed)
+ * 2. Official CORS-enabled oEmbed endpoints (YouTube, Vimeo, X)
+ * 3. CORS-friendly universal OpenGraph extractor (Microlink) for Instagram, Pinterest, Threads, etc.
+ * 4. Mobile native direct fetch (iOS/Android)
+ */
+export async function fetchLiveMetadata(rawUrl: string): Promise<LiveMetadataPayload | null> {
+  const norm = normalizeUrl(rawUrl) || rawUrl.trim();
+  let domain = '';
+  try {
+    domain = new URL(norm).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return null;
   }
 
-  // First, attempt to invoke the server-side Cloud Function callable `captureMetadata`.
-  // Running in Node 20 on the server completely avoids client-side CORS issues for
-  // Instagram, Threads, Pinterest, and YouTube.
+  // Strategy 1: Firebase Callable Cloud Function
   try {
     const { httpsCallable } = await import('firebase/functions');
     const { functions } = await import('../lib/firebase/client');
@@ -492,99 +507,257 @@ export async function enrichUrlMetadata(
         }
       >(functions, 'captureMetadata');
 
-      const res = await callCapture({ url: rawUrl });
+      const res = await callCapture({ url: norm });
       if (res?.data && res.data.success) {
-        const d = res.data;
-        if (d.title && (!userTitle || !userTitle.trim())) {
-          base.title = d.title;
-        }
-        if (d.description) {
-          base.description = d.description;
-        }
-        if (d.thumbnail) {
-          base.previewImageUrl = d.thumbnail;
-        }
-        if (d.author) {
-          base.author = d.author;
-          const cleanAuthor = d.author.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-          if (cleanAuthor && !base.autoTags.includes(cleanAuthor)) {
-            base.autoTags.push(cleanAuthor);
+        return {
+          title: res.data.title,
+          description: res.data.description,
+          thumbnail: res.data.thumbnail,
+          author: res.data.author,
+          caption: res.data.caption,
+          domain: res.data.domain,
+        };
+      }
+    }
+  } catch {
+    // Continue to next strategy if callable is not yet deployed or unreachable
+  }
+
+  // Strategy 2: Official YouTube oEmbed (native CORS enabled by Google)
+  if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(norm)}&format=json`;
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          title: cleanMetadata(data.title || ''),
+          author: cleanMetadata(data.author_name || ''),
+          thumbnail: data.thumbnail_url,
+          siteName: 'YouTube',
+        };
+      }
+    } catch {}
+  }
+
+  // Strategy 3: Official Vimeo oEmbed (native CORS enabled)
+  if (domain.includes('vimeo.com')) {
+    try {
+      const oembedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(norm)}`;
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          title: cleanMetadata(data.title || ''),
+          author: cleanMetadata(data.author_name || ''),
+          description: cleanMetadata(data.description || ''),
+          thumbnail: data.thumbnail_url,
+          siteName: 'Vimeo',
+        };
+      }
+    } catch {}
+  }
+
+  // Strategy 4: Official X (Twitter) oEmbed (native CORS enabled)
+  if (domain.includes('twitter.com') || domain.includes('x.com')) {
+    try {
+      const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(norm)}`;
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        const rawHtml = data.html || '';
+        const match = rawHtml.match(/<p[^>]*>(.*?)<\/p>/i);
+        const tweetText = match ? cleanMetadata(match[1].replace(/<[^>]+>/g, '')) : undefined;
+        return {
+          title: cleanMetadata(data.author_name ? `Post by ${data.author_name}` : 'X Post'),
+          author: cleanMetadata(data.author_name || ''),
+          caption: tweetText,
+          description: tweetText,
+          siteName: 'X',
+        };
+      }
+    } catch {}
+  }
+
+  // Strategy 5: Universal CORS-friendly OpenGraph resolver (Microlink)
+  // Perfectly handles Instagram, Pinterest, Threads, and arbitrary websites in browser contexts
+  try {
+    const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(norm)}`;
+    const res = await fetch(microUrl, {
+      signal: AbortSignal.timeout(7000),
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.status === 'success' && json.data) {
+        const d = json.data;
+        let title = cleanMetadata(d.title || '');
+        let author = cleanMetadata(d.author || '');
+        let caption = cleanMetadata(d.description || '');
+        let image =
+          d.image?.url && typeof d.image.url === 'string' && /^https?:\/\//i.test(d.image.url)
+            ? d.image.url
+            : undefined;
+
+        // Instagram refinements
+        if (domain.includes('instagram.com')) {
+          const handleMatch = title.match(/\(@([A-Za-z0-9_.]+)\)/);
+          if (handleMatch) {
+            author = handleMatch[1];
+          }
+          if (caption) {
+            const parsedCaption = parseInstagramDesc(caption);
+            if (parsedCaption) {
+              caption = parsedCaption;
+              if (!title || /instagram/i.test(title)) {
+                title = parsedCaption;
+              }
+            }
+          }
+          if (image && /rsrc\.php|logging|static\.cdninstagram\.com\/rsrc/i.test(image)) {
+            image = undefined;
           }
         }
-        if (d.caption) {
-          base.caption = d.caption;
+
+        // Threads refinements
+        if (domain.includes('threads.net') || domain.includes('threads.com')) {
+          if (caption) {
+            const parsedCaption = parseThreadsDesc(caption);
+            if (parsedCaption) {
+              caption = parsedCaption;
+              if (!title || /threads/i.test(title)) {
+                title = parsedCaption;
+              }
+            }
+          }
+          if (image && /rsrc\.php|logging/i.test(image)) {
+            image = undefined;
+          }
         }
-        if (d.domain) {
-          base.domain = d.domain;
+
+        // Pinterest refinements
+        if (domain.includes('pinterest.com') || domain.includes('pin.it')) {
+          if (caption && /Instagram:/i.test(caption)) {
+            const parsed = parseInstagramDesc(caption);
+            if (parsed) caption = parsed;
+          }
         }
-        if (base.author || base.caption || userNote) {
-          base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
+
+        if (/log in|login|welcome back|sign up/i.test(title)) {
+          title = '';
         }
-        return base;
+
+        return {
+          title: title || undefined,
+          author: author || undefined,
+          caption: caption || undefined,
+          description: caption || undefined,
+          thumbnail: image,
+          siteName: d.publisher ? cleanMetadata(d.publisher) : undefined,
+        };
       }
     }
-  } catch {
-    // Gracefully fall back to local client parsing / lightweight fetch
-  }
+  } catch {}
 
-  const isRestrictedDomain = CORS_RESTRICTED_DOMAINS.some((d) =>
-    (base.domain || '').toLowerCase().includes(d)
-  );
-
-  // In web browsers, or for CORS-restricted domains, NEVER perform direct client fetch
-  if (Platform.OS === 'web' || isRestrictedDomain) {
-    if (base.author || base.caption || userNote) {
-      base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
-    }
-    return base;
-  }
-
-  // On native mobile (iOS/Android), attempt lightweight OpenGraph fetch for open domains
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      try {
-        controller.abort();
-      } catch {}
-    }, 2000);
-
-    const response = await fetch(rawUrl, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml',
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
-      },
-    }).catch(() => null);
-
-    clearTimeout(timeout);
-
-    if (response && response.ok) {
-      const html = await response.text().catch(() => '');
-      if (html) {
-        const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
-                           html.match(/<title[^>]*>([^<]+)<\/title>/i);
-        const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
-                          html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
-        const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+  // Strategy 6: Native Mobile direct fetch (iOS / Android) for unrestricted domains
+  if (Platform.OS !== 'web' && !CORS_RESTRICTED_DOMAINS.some((d) => domain.includes(d))) {
+    try {
+      const res = await fetch(norm, {
+        signal: AbortSignal.timeout(3000),
+        headers: {
+          Accept: 'text/html',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+        },
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const titleMatch =
+          html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+          html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descMatch =
+          html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+          html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+        const imgMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
         const siteMatch = html.match(/<meta\s+property=["']og:site_name["']\s+content=["']([^"']+)["']/i);
 
-        if (titleMatch && titleMatch[1] && (!userTitle || !userTitle.trim())) {
-          base.title = titleMatch[1].trim();
-        }
-        if (descMatch && descMatch[1]) {
-          base.description = descMatch[1].trim();
-        }
-        if (imageMatch && imageMatch[1] && /^https?:\/\//i.test(imageMatch[1])) {
-          base.previewImageUrl = imageMatch[1].trim();
-        }
-        if (siteMatch && siteMatch[1]) {
-          base.siteName = siteMatch[1].trim();
-        }
+        return {
+          title: titleMatch ? cleanMetadata(titleMatch[1]) : undefined,
+          description: descMatch ? cleanMetadata(descMatch[1]) : undefined,
+          caption: descMatch ? cleanMetadata(descMatch[1]) : undefined,
+          thumbnail: imgMatch && /^https?:\/\//i.test(imgMatch[1]) ? imgMatch[1].trim() : undefined,
+          siteName: siteMatch ? cleanMetadata(siteMatch[1]) : undefined,
+        };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+/**
+ * Enhanced async metadata extractor: executes live metadata resolution across
+ * multiple resilient providers and merges genuine data with zero dummy fallbacks.
+ */
+export async function enrichUrlMetadata(
+  rawUrl: string,
+  userTitle?: string,
+  userNote?: string,
+  sharedText?: string
+): Promise<ExtractedUrlMetadata> {
+  const base = extractUrlMetadataFromUrl(rawUrl, sharedText);
+
+  if (userTitle && userTitle.trim()) {
+    base.title = userTitle.trim();
+  }
+
+  const live = await fetchLiveMetadata(rawUrl).catch(() => null);
+
+  if (live) {
+    const isDomainOnly =
+      live.title &&
+      base.domain &&
+      (live.title.toLowerCase() === base.domain.toLowerCase() ||
+        live.title.toLowerCase() === `www.${base.domain.toLowerCase()}`);
+
+    if (live.title && !isDomainOnly && (!userTitle || !userTitle.trim())) {
+      base.title = live.title;
+    }
+    if (live.description) {
+      base.description = live.description;
+    }
+    if (live.caption) {
+      base.caption = live.caption;
+    }
+    if (live.author) {
+      base.author = live.author;
+      const cleanAuthor = live.author.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (cleanAuthor && !base.autoTags.includes(cleanAuthor)) {
+        base.autoTags.unshift(cleanAuthor);
       }
     }
-  } catch {
-    // Pure fallback
+    if (live.thumbnail) {
+      base.previewImageUrl = live.thumbnail;
+    }
+    if (live.siteName) {
+      const isCurated = Object.values(DOMAIN_PLATFORM_MAP).some((m) => m.siteName === base.siteName);
+      if (!isCurated) {
+        base.siteName = live.siteName;
+      }
+    }
+    if (live.domain) {
+      base.domain = live.domain;
+    }
+
+    // Extract genuine auto-tags from real title and caption
+    const textPool = `${live.title || ''} ${live.caption || ''}`.toLowerCase();
+    DESIGN_KEYWORDS.forEach((keyword) => {
+      if (textPool.includes(keyword) && !base.autoTags.includes(keyword)) {
+        base.autoTags.push(keyword);
+      }
+    });
   }
 
   if (base.author || base.caption || userNote) {

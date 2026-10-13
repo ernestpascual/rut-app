@@ -130,6 +130,20 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(parsed).toContain('Modern grid with grotesque headers.');
   });
 
+  test('parses Instagram description with like/comment count header cleanly', () => {
+    const raw = '64 likes, 17 comments - itsnextwork on October 13, 2026: “Follow and comment “uni” for hands-on AI projects of the week 👀 #ai#projects#students”.';
+    const parsed = parseInstagramDesc(raw);
+    expect(parsed).toBe('Follow and comment “uni” for hands-on AI projects of the week 👀 #ai#projects#students');
+  });
+
+  test('never generates dummy placeholder sentences when extracting metadata', () => {
+    const meta = extractUrlMetadataFromUrl('https://example.com/unknown-resource');
+    expect(meta.description).toBeNull();
+    expect(meta.title).not.toContain('Saved reference from');
+    expect(meta.editorialContext).not.toContain('exploring creative inspiration');
+    expect(meta.editorialContext).not.toContain('focus on visual aesthetics');
+  });
+
   test('provides platform-tailored fallback SVGs ensuring visuals never break', () => {
     expect(getPlatformFallbackSvg('instagram')).toBe(INSTAGRAM_SVG);
     expect(getPlatformFallbackSvg('pinterest')).toBe(PINTEREST_SVG);

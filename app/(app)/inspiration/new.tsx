@@ -9,7 +9,8 @@ import {
   Platform,
   Alert,
   Image,
-  Pressable
+  Pressable,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
@@ -50,16 +51,19 @@ export default function NewInspirationScreen() {
 
   // Extracted URL metadata state
   const [urlMeta, setUrlMeta] = useState<ExtractedUrlMetadata | null>(null);
+  const [isFetchingMeta, setIsFetchingMeta] = useState(false);
 
   // Detect and extract metadata whenever URL changes
   useEffect(() => {
     if (kind !== 'link' || !url.trim()) {
       setUrlMeta(null);
+      setIsFetchingMeta(false);
       return;
     }
 
     const normalized = normalizeUrl(url.trim());
     if (normalized) {
+      setIsFetchingMeta(true);
       const fastMeta = extractUrlMetadataFromUrl(normalized);
       setUrlMeta(fastMeta);
 
@@ -69,15 +73,21 @@ export default function NewInspirationScreen() {
         .then((enriched) => {
           if (isCurrent) {
             setUrlMeta(enriched);
+            setIsFetchingMeta(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (isCurrent) {
+            setIsFetchingMeta(false);
+          }
+        });
 
       return () => {
         isCurrent = false;
       };
     } else {
       setUrlMeta(null);
+      setIsFetchingMeta(false);
     }
   }, [url, kind]);
 
@@ -247,6 +257,13 @@ export default function NewInspirationScreen() {
               />
 
               {/* Rich Real-Time Metadata & Auto-Tags Preview */}
+              {isFetchingMeta ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: spacing.xs }}>
+                  <ActivityIndicator size="small" color={colors.ink} style={{ marginRight: 8 }} />
+                  <Badge label="FETCHING LIVE METADATA..." variant="grade" />
+                </View>
+              ) : null}
+
               {urlMeta ? (
                 <Card style={styles.metaPreviewCard}>
                   <View style={styles.metaPreviewHeader}>
@@ -265,9 +282,11 @@ export default function NewInspirationScreen() {
                     />
                   ) : null}
 
-                  <Text style={styles.metaPreviewTitle} numberOfLines={2}>
-                    {urlMeta.title}
-                  </Text>
+                  {urlMeta.title ? (
+                    <Text style={styles.metaPreviewTitle} numberOfLines={2}>
+                      {urlMeta.title}
+                    </Text>
+                  ) : null}
 
                   {urlMeta.caption ? (
                     <View style={styles.captionPreviewBox}>
@@ -277,9 +296,11 @@ export default function NewInspirationScreen() {
                     </View>
                   ) : null}
 
-                  <Text style={styles.metaPreviewContext}>
-                    {urlMeta.editorialContext}
-                  </Text>
+                  {urlMeta.editorialContext ? (
+                    <Text style={styles.metaPreviewContext}>
+                      {urlMeta.editorialContext}
+                    </Text>
+                  ) : null}
 
                   {urlMeta.autoTags.length > 0 ? (
                     <View style={styles.autoTagSection}>

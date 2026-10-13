@@ -57,6 +57,8 @@
     "build:ios": "eas build --platform ios --profile preview",
     "build:ios:simulator": "eas build --platform ios --profile preview-simulator",
     "build:ios:prod": "eas build --platform ios --profile production",
+    "submit:ios": "eas submit --platform ios --latest",
+    "deploy:testflight": "eas build --platform ios --profile production --auto-submit",
     "build:all": "eas build --platform all --profile preview"
   },
   "private": true
