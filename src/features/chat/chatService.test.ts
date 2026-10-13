@@ -5,6 +5,8 @@ import {
   synthesizeThoughtTrain,
   getOrCreateIdeaChat,
   sendChatMessage,
+  deleteChatMessage,
+  getChatMessages,
 } from './chatService';
 import { Project, InspirationItem } from '../../types';
 
@@ -202,6 +204,26 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     expect(assistantMessage.content).toContain('PULLED FROM YOUR DUMP');
     expect(assistantMessage.content).toContain('Monolithic Basalt Pavilion');
     expect(assistantMessage.sourceInspirationIds).toContain('dump-arch-1');
+  });
+
+  test('deletes individual thought messages / insights from chat', async () => {
+    const session = await createChatSession('Delete Test Train');
+    const { userMessage, assistantMessage } = await sendChatMessage(
+      session.id,
+      'Initial brainstorm message'
+    );
+
+    let messages = await getChatMessages(session.id);
+    expect(messages.length).toBe(2);
+
+    await deleteChatMessage(session.id, assistantMessage.id);
+    messages = await getChatMessages(session.id);
+    expect(messages.length).toBe(1);
+    expect(messages[0].id).toBe(userMessage.id);
+
+    await deleteChatMessage(session.id, userMessage.id);
+    messages = await getChatMessages(session.id);
+    expect(messages.length).toBe(0);
   });
 });
 

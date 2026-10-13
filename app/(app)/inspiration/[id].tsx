@@ -169,6 +169,43 @@ export default function InspirationDetailScreen() {
     );
   };
 
+  const handleDeleteAiInsight = () => {
+    Alert.alert('Delete Insight', 'Are you sure you want to remove the AI summary and concepts?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!item) return;
+          const updated: InspirationItem = {
+            ...item,
+            aiSummary: null,
+            editorialContext: null,
+            concepts: [],
+            updatedAt: Date.now(),
+          };
+          try {
+            if (user) {
+              await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
+                aiSummary: null,
+                editorialContext: null,
+                concepts: [],
+                updatedAt: Date.now(),
+              });
+            }
+            const local = await getDumpInspirations();
+            await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+            setItem(updated);
+          } catch {
+            const local = await getDumpInspirations();
+            await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+            setItem(updated);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleAddTag = () => {
     const trimmed = tagInput.trim().toLowerCase();
     if (trimmed && !editTags.includes(trimmed) && editTags.length < 30) {
@@ -343,7 +380,14 @@ export default function InspirationDetailScreen() {
 
             {item.aiSummary ? (
               <Card style={styles.aiCard}>
-                <Text style={styles.aiHeading}>AI INDEXED SUMMARY</Text>
+                <View style={styles.aiHeaderRow}>
+                  <Text style={styles.aiHeading}>AI INDEXED SUMMARY</Text>
+                  <Button
+                    title="DELETE INSIGHT"
+                    variant="text"
+                    onPress={handleDeleteAiInsight}
+                  />
+                </View>
                 <Text style={styles.aiSummaryText}>{item.aiSummary}</Text>
 
                 {item.concepts && item.concepts.length > 0 ? (
@@ -444,11 +488,16 @@ const getStyles = (colors: ThemeColors) =>
     borderColor: colors.hairline,
     marginBottom: spacing.base,
   },
+  aiHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
   aiHeading: {
     ...typography.captionCap,
     color: colors.ink,
     fontWeight: '700',
-    marginBottom: spacing.xs,
   },
   aiSummaryText: {
     ...typography.bodyMd,

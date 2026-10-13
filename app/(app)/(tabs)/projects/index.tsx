@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,7 +24,7 @@ import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { Project } from '../../../../src/types';
-import { getProjects } from '../../../../src/features/dump/dumpService';
+import { getProjects, deleteProjectLocal } from '../../../../src/features/dump/dumpService';
 
 export default function ProjectsListScreen() {
   const router = useRouter();
@@ -58,21 +59,12 @@ export default function ProjectsListScreen() {
         q,
         (snapshot) => {
           if (!isMounted) return;
-          if (snapshot.empty) {
-            getProjects().then((loaded) => {
-              if (isMounted) {
-                setProjects(loaded);
-                setLoading(false);
-              }
-            });
-          } else {
-            const fetched: Project[] = [];
-            snapshot.forEach((docSnap) => {
-              fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
-            });
-            setProjects(fetched);
-            setLoading(false);
-          }
+          const fetched: Project[] = [];
+          snapshot.forEach((docSnap) => {
+            fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
+          });
+          setProjects(fetched);
+          setLoading(false);
         },
         (err) => {
           console.warn('Projects snapshot error, using local ideas:', err);
@@ -98,6 +90,20 @@ export default function ProjectsListScreen() {
       });
     }
   }, [user, isDummy]);
+
+  const handleDeleteProject = (projectId: string, title: string) => {
+    Alert.alert('Delete Idea', `Are you sure you want to delete "${title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteProjectLocal(projectId, user?.uid);
+          setProjects((prev) => prev.filter((p) => p.id !== projectId));
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -167,11 +173,19 @@ export default function ProjectsListScreen() {
                 <Text style={styles.cardFooterSub}>
                   {item.thoughtCount ? `${item.thoughtCount} THOUGHTS LOGGED` : 'CONNECTED TO BANK'}
                 </Text>
-                <Button
-                  title="THINK →"
-                  variant="text"
-                  onPress={() => router.push(`/(app)/project/${item.id}`)}
-                />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Button
+                    title="DELETE"
+                    variant="text"
+                    onPress={() => handleDeleteProject(item.id, item.title)}
+                    style={{ marginRight: spacing.xs }}
+                  />
+                  <Button
+                    title="THINK →"
+                    variant="text"
+                    onPress={() => router.push(`/(app)/project/${item.id}`)}
+                  />
+                </View>
               </View>
             </Card>
           )}

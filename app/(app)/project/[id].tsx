@@ -46,6 +46,7 @@ import {
   getOrCreateIdeaChat,
   getChatMessages,
   sendChatMessage,
+  deleteChatMessage,
 } from '../../../src/features/chat/chatService';
 
 export default function ProjectDetailScreen() {
@@ -197,15 +198,13 @@ export default function ProjectDetailScreen() {
       if (user) {
         try {
           const snap = await getDocs(collection(db, 'users', user.uid, 'inspirations'));
-          if (!snap.empty) {
-            snap.forEach((d) => {
-              itemsList.push({ id: d.id, ...(d.data() as any) } as InspirationItem);
-            });
-          }
-        } catch {}
-      }
-
-      if (itemsList.length === 0) {
+          snap.forEach((d) => {
+            itemsList.push({ id: d.id, ...(d.data() as any) } as InspirationItem);
+          });
+        } catch {
+          itemsList = await getDumpInspirations();
+        }
+      } else {
         itemsList = await getDumpInspirations();
       }
 
@@ -481,6 +480,21 @@ export default function ProjectDetailScreen() {
     } finally {
       setSendingThought(false);
     }
+  };
+
+  const handleDeleteThought = (messageId: string) => {
+    if (!ideaChat) return;
+    Alert.alert('Delete Insight', 'Are you sure you want to delete this thought message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteChatMessage(ideaChat.id, messageId, user?.uid);
+          setChatMessages((prev) => prev.filter((m) => m.id !== messageId));
+        },
+      },
+    ]);
   };
 
   if (loading || !project) {
@@ -940,6 +954,12 @@ export default function ProjectDetailScreen() {
                           >
                             {msg.role === 'user' ? 'YOU' : `RUT ASSISTANT (${msg.model || 'gemini-3.5-flash-lite'})`}
                           </Text>
+                          <Pressable
+                            onPress={() => handleDeleteThought(msg.id)}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.deleteThoughtBtn}>✕</Text>
+                          </Pressable>
                         </View>
                         <Text
                           style={[
@@ -1320,6 +1340,13 @@ const getStyles = (colors: ThemeColors) =>
     borderStyle: 'dashed',
     borderColor: colors.hairline,
     marginBottom: spacing.base,
+  },
+  deleteThoughtBtn: {
+    ...typography.captionCap,
+    fontSize: 10,
+    color: colors.inkSoft,
+    fontWeight: '700',
+    paddingHorizontal: 4,
   },
   emptyThoughtText: {
     ...typography.captionSm,

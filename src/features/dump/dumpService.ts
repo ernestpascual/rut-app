@@ -74,16 +74,14 @@ export async function getDumpInspirations(uid?: string): Promise<InspirationItem
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      const items: InspirationItem[] = [];
-      snap.forEach((d) => {
-        items.push(enrichInspirationItem({ id: d.id, ...(d.data() as any) }));
-      });
-      AsyncStorage.setItem(DUMP_STORAGE_KEY, JSON.stringify(items)).catch(() => {});
-      return items;
-    }
+    const items: InspirationItem[] = [];
+    snap.forEach((d) => {
+      items.push(enrichInspirationItem({ id: d.id, ...(d.data() as any) }));
+    });
+    AsyncStorage.setItem(DUMP_STORAGE_KEY, JSON.stringify(items)).catch(() => {});
+    return items;
   } catch (e) {
-    // Graceful fallback to local cache
+    // Graceful fallback to local cache ONLY if network/Firestore fails
   }
 
   try {
@@ -225,16 +223,14 @@ export async function getProjects(uid?: string): Promise<Project[]> {
       orderBy('updatedAt', 'desc')
     );
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      const projects: Project[] = [];
-      snap.forEach((d) => {
-        projects.push({ id: d.id, ...(d.data() as any) });
-      });
-      AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects)).catch(() => {});
-      return projects;
-    }
+    const projects: Project[] = [];
+    snap.forEach((d) => {
+      projects.push({ id: d.id, ...(d.data() as any) });
+    });
+    AsyncStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects)).catch(() => {});
+    return projects;
   } catch (e) {
-    // Fallback to local cache
+    // Fallback to local cache ONLY if Firestore fails
   }
 
   try {
@@ -295,14 +291,12 @@ export async function getProjectLinks(projectId: string, uid?: string): Promise<
     const snap = await getDocs(
       collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks')
     );
-    if (!snap.empty) {
-      const links: ProjectInspirationLink[] = [];
-      snap.forEach((d) => links.push({ id: d.id, ...(d.data() as any) }));
-      AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(links)).catch(() => {});
-      return links;
-    }
+    const links: ProjectInspirationLink[] = [];
+    snap.forEach((d) => links.push({ id: d.id, ...(d.data() as any) }));
+    AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(links)).catch(() => {});
+    return links;
   } catch (err) {
-    // Fallback
+    // Fallback ONLY if Firestore call fails
   }
 
   try {

@@ -40,6 +40,8 @@ import {
   getChatMessages,
   sendChatMessage,
   saveChatSession,
+  deleteChatSession,
+  deleteChatMessage,
   getLocalChats,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
@@ -296,6 +298,36 @@ export default function ChatWorkspaceScreen() {
     }
   };
 
+  const handleDeleteMessage = (messageId: string) => {
+    Alert.alert('Delete Insight', 'Are you sure you want to delete this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!id) return;
+          await deleteChatMessage(id, messageId, user?.uid);
+          setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteChat = () => {
+    Alert.alert('Delete Train of Thought', 'Are you sure you want to delete this entire chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!id) return;
+          await deleteChatSession(id, user?.uid);
+          router.replace('/(app)/(tabs)/chats');
+        },
+      },
+    ]);
+  };
+
   if (loading && !session) {
     return (
       <SafeAreaView style={styles.container}>
@@ -342,6 +374,12 @@ export default function ChatWorkspaceScreen() {
         backTitle="CHATS"
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Button
+              title="DELETE"
+              variant="text"
+              onPress={handleDeleteChat}
+              style={{ marginRight: spacing.xs }}
+            />
             <Button
               title="📥 PULL DUMP"
               variant="secondary"
@@ -504,16 +542,22 @@ export default function ChatWorkspaceScreen() {
                 </View>
               ) : null}
 
-              {/* Action to convert useful response to Project Idea */}
-              {item.role === 'assistant' && item.status !== 'failed' ? (
-                <View style={styles.messageActions}>
+              {/* Actions on Message */}
+              <View style={styles.messageActions}>
+                {item.role === 'assistant' && item.status !== 'failed' ? (
                   <Button
                     title="→ SAVE AS NEW IDEA"
                     variant="text"
                     onPress={() => openCreateProjectModal(item.content)}
                   />
-                </View>
-              ) : null}
+                ) : null}
+                <Button
+                  title="DELETE"
+                  variant="text"
+                  onPress={() => handleDeleteMessage(item.id)}
+                  style={{ marginLeft: 'auto' }}
+                />
+              </View>
             </View>
           )}
         />

@@ -12,7 +12,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../lib/firebase/client';
+import { db, functions, auth } from '../../lib/firebase/client';
 import { DUMMY_USER_UID } from '../auth/AuthContext';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../types';
 import { getDumpInspirations } from '../dump/dumpService';
@@ -95,16 +95,8 @@ export async function getChatSessions(uid?: string | null): Promise<ChatSession[
     const snap = await getDocs(q);
     const remote: ChatSession[] = [];
     snap.forEach((d) => remote.push({ id: d.id, ...(d.data() as any) }));
-
-    if (remote.length > 0) {
-      // Merge with local to ensure nothing is lost
-      const idMap = new Map<string, ChatSession>();
-      local.forEach((c) => idMap.set(c.id, c));
-      remote.forEach((c) => idMap.set(c.id, c));
-      const merged = Array.from(idMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-      await setLocalChats(merged);
-      return merged;
-    }
+    await setLocalChats(remote);
+    return remote;
   } catch (e) {
     console.warn('Firestore chats fetch failed, using local sessions:', e);
   }
@@ -287,16 +279,42 @@ export async function getChatMessages(chatId: string, uid?: string | null): Prom
     const snap = await getDocs(q);
     const remote: ChatMessage[] = [];
     snap.forEach((d) => remote.push({ id: d.id, ...(d.data() as any) }));
-
-    if (remote.length > 0) {
-      await setLocalMessages(chatId, remote);
-      return remote;
-    }
+    await setLocalMessages(chatId, remote);
+    return remote;
   } catch (e) {
     console.warn(`Firestore messages fetch failed for ${chatId}, using local:`, e);
   }
 
   return local;
+}
+
+/**
+ * Deletes a single message or thought insight from a chat session.
+ */
+export async function deleteChatMessage(
+  chatId: string,
+  messageId: string,
+  uid?: string | null
+): Promise<void> {
+  const current = await getLocalMessages(chatId);
+  const updated = current.filter((m) => m.id !== messageId);
+  await setLocalMessages(chatId, updated);
+
+  const targetUid = uid || (auth?.currentUser?.uid ?? DUMMY_USER_UID);
+  try {
+    await deleteDoc(doc(db, 'users', targetUid, 'chats', chatId, 'messages', messageId));
+  } catch (e) {
+    console.warn('Failed to delete message from Firestore:', e);
+  }
+
+  // Update session summary if last message was removed
+  const session = await getChatSession(chatId, targetUid);
+  if (session) {
+    const lastMsg = updated[updated.length - 1];
+    session.summary = lastMsg ? lastMsg.content.slice(0, 100) : null;
+    session.updatedAt = Date.now();
+    await saveChatSession(session, targetUid);
+  }
 }
 
 /**

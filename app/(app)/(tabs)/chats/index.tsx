@@ -65,9 +65,7 @@ export default function ChatsListScreen() {
           snapshot.forEach((docSnap) => {
             fetched.push({ id: docSnap.id, ...(docSnap.data() as any) });
           });
-          if (fetched.length > 0) {
-            setChats(fetched);
-          }
+          setChats(fetched);
           setLoading(false);
         },
         (err) => {
