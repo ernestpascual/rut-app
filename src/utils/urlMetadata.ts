@@ -31,6 +31,65 @@ export interface ExtractedUrlMetadata {
   editorialContext: string;
 }
 
+// Module-level base64 SVG mockups to ensure visual elements are never broken
+export const INSTAGRAM_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgNDAwIDI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzA5MDkwOSIvPjxsaW5lYXJHcmFkaWVudCBpZD0iaWciIHgxPSIwIiB5MT0iMSIgeDI9IjEiIHkyPSIwIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZjljZTNmIi8+PHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiNlMTMwNmMiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM4MzNhYjQiLz48L2xpbmVhckdyYWRpZW50PjxyZWN0IHg9IjE0MCIgeT0iNjUiIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iMjgiIGZpbGw9InVybCgjaWcpIi8+PHJlY3QgeD0iMTYwIiB5PSI4NSIgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNiIvPjxjaXJjbGUgY3g9IjIwMCIgY3k9IjEyNSIgcj0iMjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNiIvPjxjaXJjbGUgY3g9IjIyNiIgY3k9Ijk5IiByPSI2IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==";
+
+export const PINTEREST_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgNDAwIDI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzA5MDkwOSIvPjxjaXJjbGUgY3g9IjIwMCIgY3k9IjEyNSIgcj0iNjAiIGZpbGw9IiNlNjAwMjMiLz48cGF0aCBkPSJNMjAwLDg1Yy0yMi4xLDAtNDAsMTcuOS00MCw0MGMwLDE2LjksMTAuNSwzMS40LDI1LjMsMzcuMmMtMC4zLTMuNy0wLjctOS41LDAuMS0xMy42YzAuOC0zLjcsNS4yLTIyLDUuMi0yMnMtMS4zLTIuNi0xLjMtNi41YzAtNi4xLDMuNS0xMC43LDgtMTAuN2MzLjgsMCw1LjYsMi44LDUuNiw2LjNjMCwzLjgtMi40LDkuNS0zLjcsMTQuOGMtMSw0LjQsMi4yLDgsNi41LDhjNy44LDAsMTMuOC04LjIsMTMuOC0yMC4xYzAtMTAuNS03LjUtMTcuOS0xOC40LTE3LjljLTEyLjUsMC0xOS45LDkuNC0xOS45LDE5LjJjMCwzLjgsMS41LDcuOCwzLjMsMTBjMC40LDAuNCwwLjQsMC44LDAuMywxLjJsLTEuMiw1Yy0wLjIsMC44LTAuNiwxLTEuNCwwLjZjLTUuMi0yLjQtOC41LTEwLTguNS0xNi4xYzAtMTMuMSw5LjUtMjUuMiwyNy41LTI1LjJjMTQuNCwwLDI1LjYsMTAuMywyNS42LDI0YzAsMTQuMy05LDI1LjgtMjEuNSwyNS44Yy00LjIsMC04LjItMi4yLTkuNS00LjJsLTIuNiw5LjljLTAuOSwzLjYtMy41LDguMS01LjIsMTAuOWMzLjksMS4yLDgsMS45LDEyLjMsMS45YzIyLjEsMCw0MC0xNy45LDQwLTQwQzI0MCwxMDIuOSwyMjIuMSw4NSwyMDAsODV6IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==";
+
+export const THREADS_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgNDAwIDI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzA5MDkwOSIvPjxwYXRoIGQ9Ik0yMDAsNzUgQzE4NSw3NSAxNzAsODUgMTcwLDEwNSBDMTcwLDEyNSAxODUsMTM1IDIwMCwxMzUgQzIxNSwxMzUgMjI1LDEyNSAyMjUsMTE1IEMyMjUsMTAwIDIxMCw5NSAyMDAsOTUgQzE4MCw5NSAxNjAsMTEwIDE2MCwxMzAgQzE2MCwxNTUgMTgwLDE3NSAyMDUsMTc1IEMyMjUsMTc1IDI0MCwxNjAgMjQwLDE0NSBMMjI1LDE0NSBDMjI1LDE1MiAyMTcsMTYwIDIwNSwxNjAgQzE5MCwxNjAgMTc1LDE0NSAxNzUsMTMwIEMxNzUsMTE4IDE4OCwxMTAgMjAwLDExMCBDMjEyLDExMCAyMTcsMTE4IDIxNSwxMjUgQzIxMiwxMzAgMjA2LDEzMiAyMDAsMTMyIEMxOTQsMTMyIDE4NSwxMjggMTg1LDExOCBDMTg1LDEwOCAxOTQsMTAzIDIwMCwxMDMgQzIwOCwxMDMgMjEzLDEwOCAyMTQsMTE1IE0yMDAsNjAgQzIzNSw2MCAyNTUsODUgMjU1LDExNSBDMjU1LDE0NSAyMzAsMTkwIDIwMCwxOTAgQzE2NSwxOTAgMTQ1LDE2NSAxNDUsMTMwIEMxNDUsOTUgMTcwLDYwIDIwMCw2MFoiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+";
+
+export const YOUTUBE_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgNDAwIDI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzA5MDkwOSIvPjxyZWN0IHg9IjEyMCIgeT0iNzAiIHdpZHRoPSIxNjAiIGhlaWdodD0iMTEwIiByeD0iMjQiIGZpbGw9IiNGRjAwMDAiLz48cG9seWdvbiBwb2ludHM9IjE3NSw5NSAyMjUsMTI1IDE3NSwxNTUiIGZpbGw9IndoaXRlIi8+PC9zdmc+";
+
+export const GENERIC_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMjUwIiB2aWV3Qm94PSIwIDAgNDAwIDI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzA5MDkwOSIvPjxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDk5ZmYiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM2YTRjZjUiLz48L2xpbmVhckdyYWRpZW50PjxyZWN0IHg9IjQwIiB5PSI0MCIgd2lkdGg9IjMyMCIgaGVpZ2h0PSIxNzAiIHJ4PSIxMiIgZmlsbD0idXJsKCNncmFkKSIgZmlsbD0ib3BhY2l0eT0iMC4yIiBzdHJva2U9InVybCgjZ3JhZCkiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEyMCIgY3k9IjEyNSIgcj0iNDAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuMDUiLz48Y2lyY2xlIGN4PSIyODAiIGN5PSIxMjUiIHI9IjYwIiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIwLjA1Ii8+PHBhdGggZD0iTTYwLDE4MCBMMzQwLDE4MCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtZGFzaGFycmF5PSIxMCA2Ii8+PC9zdmc+";
+
+export function getPlatformFallbackSvg(platform?: string | null): string {
+  switch (platform) {
+    case 'instagram':
+      return INSTAGRAM_SVG;
+    case 'pinterest':
+      return PINTEREST_SVG;
+    case 'threads':
+      return THREADS_SVG;
+    case 'youtube':
+      return YOUTUBE_SVG;
+    default:
+      return GENERIC_SVG;
+  }
+}
+
+export function cleanMetadata(value: string): string {
+  const entities: Record<string, string> = {
+    amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' '
+  };
+  return value
+    .replace(/\\u([\dA-Fa-f]{4})/g, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
+    .replace(/&#x([\dA-Fa-f]+);/g, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number.parseInt(code, 10)))
+    .replace(/&(amp|quot|apos|lt|gt|nbsp);/gi, (_, entity) => entities[entity.toLowerCase()] || entity)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseInstagramDesc(desc: string): string {
+  if (/log in|login|welcome back|sign up/i.test(desc)) {
+    return 'Instagram video reference captured for ideation.';
+  }
+  const match = desc.match(/on\s+[A-Za-z]+\s+\d+,\s*\d{4}\s*:\s*(?:\\?"|")?(.*)/i);
+  let content = match ? match[1] : desc;
+  content = content.replace(/\\?"?\s*$/, '').trim();
+  const sentences = content.split(/(?<=[.!?])\s+/);
+  return sentences.slice(0, 2).join(' ');
+}
+
+export function parseThreadsDesc(desc: string): string {
+  const match = desc.match(/on\s+Threads\s*:\s*(?:\\?"|")?(.*)/i);
+  let content = match ? match[1] : desc;
+  content = content.replace(/\s*-\s*[A-Za-z0-9_.]+\s*\(@[A-Za-z0-9_.]+\)\s*on\s*Threads\s*$/i, '');
+  content = content.replace(/\\?"?\s*$/, '').trim();
+  const sentences = content.split(/(?<=[.!?])\s+/);
+  return sentences.slice(0, 2).join(' ');
+}
+
 const DOMAIN_PLATFORM_MAP: Record<string, { platform: SourcePlatform; siteName: string; defaultTags: string[] }> = {
   'instagram.com': { platform: 'instagram', siteName: 'Instagram', defaultTags: ['instagram', 'visual', 'lookbook', 'social'] },
   'pinterest.com': { platform: 'pinterest', siteName: 'Pinterest', defaultTags: ['pinterest', 'visual-inspiration', 'moodboard', 'curation'] },
@@ -411,6 +470,61 @@ export async function enrichUrlMetadata(
   // If user provided a title, preserve it
   if (userTitle && userTitle.trim()) {
     base.title = userTitle.trim();
+  }
+
+  // First, attempt to invoke the server-side Cloud Function callable `captureMetadata`.
+  // Running in Node 20 on the server completely avoids client-side CORS issues for
+  // Instagram, Threads, Pinterest, and YouTube.
+  try {
+    const { httpsCallable } = await import('firebase/functions');
+    const { functions } = await import('../lib/firebase/client');
+    if (functions) {
+      const callCapture = httpsCallable<
+        { url: string },
+        {
+          success: boolean;
+          title?: string;
+          description?: string;
+          thumbnail?: string;
+          author?: string;
+          caption?: string;
+          domain?: string;
+        }
+      >(functions, 'captureMetadata');
+
+      const res = await callCapture({ url: rawUrl });
+      if (res?.data && res.data.success) {
+        const d = res.data;
+        if (d.title && (!userTitle || !userTitle.trim())) {
+          base.title = d.title;
+        }
+        if (d.description) {
+          base.description = d.description;
+        }
+        if (d.thumbnail) {
+          base.previewImageUrl = d.thumbnail;
+        }
+        if (d.author) {
+          base.author = d.author;
+          const cleanAuthor = d.author.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+          if (cleanAuthor && !base.autoTags.includes(cleanAuthor)) {
+            base.autoTags.push(cleanAuthor);
+          }
+        }
+        if (d.caption) {
+          base.caption = d.caption;
+        }
+        if (d.domain) {
+          base.domain = d.domain;
+        }
+        if (base.author || base.caption || userNote) {
+          base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
+        }
+        return base;
+      }
+    }
+  } catch {
+    // Gracefully fall back to local client parsing / lightweight fetch
   }
 
   const isRestrictedDomain = CORS_RESTRICTED_DOMAINS.some((d) =>

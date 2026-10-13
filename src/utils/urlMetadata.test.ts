@@ -4,6 +4,15 @@ import {
   enrichUrlMetadata,
   extractAuthorAndCaption,
   formatNotesWithCaption,
+  cleanMetadata,
+  parseInstagramDesc,
+  parseThreadsDesc,
+  getPlatformFallbackSvg,
+  INSTAGRAM_SVG,
+  PINTEREST_SVG,
+  THREADS_SVG,
+  YOUTUBE_SVG,
+  GENERIC_SVG,
 } from './urlMetadata';
 
 describe('URL Metadata and Auto-Tagging Engine', () => {
@@ -100,4 +109,34 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(enriched.editorialContext).toContain('Raw textures for packaging prototype');
     expect(enriched.autoTags).toContain('pinterest');
   });
+
+  test('cleans HTML entities and unicode characters in metadata', () => {
+    const raw = 'Brutalist &amp; Monolithic&#x20;Design &quot;Inspiration&quot;';
+    expect(cleanMetadata(raw)).toBe('Brutalist & Monolithic Design "Inspiration"');
+  });
+
+  test('parses Instagram caption sentences cleanly from standard embed text', () => {
+    const raw = 'on October 12, 2026: "Raw concrete monolith in Kyoto. Exploring tectonic mass and light."';
+    const parsed = parseInstagramDesc(raw);
+    expect(parsed).toBe('Raw concrete monolith in Kyoto. Exploring tectonic mass and light.');
+
+    const loginWall = 'Log in to see photos and videos from friends';
+    expect(parseInstagramDesc(loginWall)).toBe('Instagram video reference captured for ideation.');
+  });
+
+  test('parses Threads caption text cleanly', () => {
+    const raw = 'Exploring brutalist typography systems on Threads: Modern grid with grotesque headers. - studio (@studio) on Threads';
+    const parsed = parseThreadsDesc(raw);
+    expect(parsed).toContain('Modern grid with grotesque headers.');
+  });
+
+  test('provides platform-tailored fallback SVGs ensuring visuals never break', () => {
+    expect(getPlatformFallbackSvg('instagram')).toBe(INSTAGRAM_SVG);
+    expect(getPlatformFallbackSvg('pinterest')).toBe(PINTEREST_SVG);
+    expect(getPlatformFallbackSvg('threads')).toBe(THREADS_SVG);
+    expect(getPlatformFallbackSvg('youtube')).toBe(YOUTUBE_SVG);
+    expect(getPlatformFallbackSvg('generic')).toBe(GENERIC_SVG);
+    expect(getPlatformFallbackSvg('unknown')).toBe(GENERIC_SVG);
+  });
 });
+
