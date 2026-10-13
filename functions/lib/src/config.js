@@ -33,9 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.db = void 0;
+exports.DEFAULT_MODEL = exports.ALLOWED_MODELS = exports.db = void 0;
 exports.isAiKillSwitchActive = isAiKillSwitchActive;
 exports.getGeminiApiKey = getGeminiApiKey;
+exports.normalizeModelName = normalizeModelName;
 exports.validateFlashModel = validateFlashModel;
 exports.getGeminiModel = getGeminiModel;
 const admin = __importStar(require("firebase-admin"));
@@ -67,29 +68,61 @@ function getGeminiApiKey() {
     return process.env.GEMINI_API_KEY || null;
 }
 /**
- * Strictly ensures only Flash models version 3.5 and above are allowed.
- * Blocks non-flash models (e.g. pro, ultra) and models below version 3.5 (e.g. 1.5, 2.0, 2.5, 3.0).
+ * Allowed AI models:
+ * - Gemini 4 (gemini-4)
+ * - Gemini 3.8 Flash (gemini-3.8-flash)
+ * - Gemini 3.6 Flash (gemini-3.6-flash) - DEFAULT
  */
-function validateFlashModel(model) {
+exports.ALLOWED_MODELS = [
+    'gemini-3.6-flash',
+    'gemini-3.8-flash',
+    'gemini-4',
+];
+exports.DEFAULT_MODEL = 'gemini-3.6-flash';
+/**
+ * Normalizes input string to canonical model identifier.
+ */
+function normalizeModelName(model) {
     const clean = (model || '').trim().toLowerCase();
-    if (!clean.includes('flash')) {
-        throw new Error(`Invalid model '${model}'. Only Gemini Flash models (must contain 'flash') are permitted.`);
+    if (clean === 'gemini-4' ||
+        clean === 'gemini 4' ||
+        clean === 'gemini-4.0' ||
+        clean === 'gemini 4.0' ||
+        clean === 'gemini-4-flash' ||
+        clean === 'gemini-4.0-flash') {
+        return 'gemini-4';
     }
-    const versionMatch = clean.match(/(\d+(?:\.\d+)?)/);
-    if (!versionMatch) {
-        throw new Error(`Invalid model '${model}'. Could not detect model version. Only Flash models version 3.5 and above are permitted.`);
+    if (clean === 'gemini-3.8-flash' ||
+        clean === 'gemini-3.8' ||
+        clean === 'gemini 3.8' ||
+        clean === 'gemini 3.8 flash') {
+        return 'gemini-3.8-flash';
     }
-    const version = parseFloat(versionMatch[1]);
-    if (isNaN(version) || version < 3.5) {
-        throw new Error(`Invalid model '${model}'. Version ${versionMatch[1]} is not supported. Only Flash models version 3.5 and above (e.g. gemini-3.5-flash, gemini-4.0-flash) are permitted.`);
+    if (clean === 'gemini-3.6-flash' ||
+        clean === 'gemini-3.6' ||
+        clean === 'gemini 3.6' ||
+        clean === 'gemini 3.6 flash') {
+        return 'gemini-3.6-flash';
     }
     return clean;
 }
 /**
- * Returns configured Gemini Flash model (defaults to gemini-3.5-flash).
+ * Strictly ensures only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are allowed.
+ */
+function validateFlashModel(model) {
+    const normalized = normalizeModelName(model);
+    if (normalized === 'gemini-4' ||
+        normalized === 'gemini-3.8-flash' ||
+        normalized === 'gemini-3.6-flash') {
+        return normalized;
+    }
+    throw new Error(`Invalid model '${model}'. Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted.`);
+}
+/**
+ * Returns configured Gemini model (defaults to gemini-3.6-flash).
  */
 function getGeminiModel() {
-    const envModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const envModel = process.env.GEMINI_MODEL || exports.DEFAULT_MODEL;
     return validateFlashModel(envModel);
 }
 //# sourceMappingURL=config.js.map

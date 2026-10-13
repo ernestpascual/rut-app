@@ -8,34 +8,24 @@ exports.PRICING_TABLE = exports.PRICING_VERSION = void 0;
 exports.calculateCostMicros = calculateCostMicros;
 exports.PRICING_VERSION = '2026-09-01';
 exports.PRICING_TABLE = {
-    'gemini-3.5-flash': {
+    'gemini-3.6-flash': {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
         embeddingPer1kCharsMicros: 0,
     },
-    'gemini-3.5-flash-preview': {
+    'gemini-3.8-flash': {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
         embeddingPer1kCharsMicros: 0,
     },
-    'gemini-4.0-flash': {
+    'gemini-4': {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
         embeddingPer1kCharsMicros: 0,
     },
-    'gemini-4.5-flash': {
+    'gemini-4.0': {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
-        embeddingPer1kCharsMicros: 0,
-    },
-    'gemini-2.0-flash': {
-        inputPer1kTokensMicros: 75,
-        outputPer1kTokensMicros: 300,
-        embeddingPer1kCharsMicros: 0,
-    },
-    'gemini-1.5-flash': {
-        inputPer1kTokensMicros: 75, // $0.075 / 1M tokens
-        outputPer1kTokensMicros: 300, // $0.30 / 1M tokens
         embeddingPer1kCharsMicros: 0,
     },
     'text-embedding-004': {
@@ -53,7 +43,7 @@ exports.PRICING_TABLE = {
  * Calculates estimated cost in integer micros.
  */
 function calculateCostMicros(model, inputTokens = 0, outputTokens = 0, chars = 0) {
-    const rates = exports.PRICING_TABLE[model] || exports.PRICING_TABLE['gemini-3.5-flash'] || {
+    const rates = exports.PRICING_TABLE[model] || exports.PRICING_TABLE['gemini-3.6-flash'] || {
         inputPer1kTokensMicros: 75,
         outputPer1kTokensMicros: 300,
         embeddingPer1kCharsMicros: 0,

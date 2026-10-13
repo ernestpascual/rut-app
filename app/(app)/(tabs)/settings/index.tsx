@@ -37,16 +37,15 @@ export default function SettingsScreen() {
   const [monthSummary, setMonthSummary] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.6-flash');
   const [customModel, setCustomModel] = useState<string>('');
   const [modelError, setModelError] = useState<string | null>(null);
   const [savingModel, setSavingModel] = useState<boolean>(false);
 
-  const FLASH_MODELS = [
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-preview',
-    'gemini-4.0-flash',
-    'gemini-4.5-flash'
+  const ALLOWED_MODELS = [
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (Default)' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+    { id: 'gemini-4', label: 'Gemini 4' },
   ];
 
   useEffect(() => {
@@ -134,25 +133,24 @@ export default function SettingsScreen() {
   const handleSaveModel = async (modelName: string) => {
     setModelError(null);
     const clean = modelName.trim().toLowerCase();
-    if (!clean.includes('flash')) {
-      setModelError("Only Gemini Flash models (must contain 'flash') are permitted.");
-      return;
-    }
-    const versionMatch = clean.match(/(\d+(?:\.\d+)?)/);
-    if (!versionMatch) {
-      setModelError("Could not detect model version. Only Flash models version 3.5 and above are permitted.");
-      return;
-    }
-    const version = parseFloat(versionMatch[1]);
-    if (isNaN(version) || version < 3.5) {
-      setModelError(`Version ${versionMatch[1]} is not supported. Only Flash models version 3.5 and above (e.g. gemini-3.5-flash, gemini-4.0-flash) are permitted.`);
+    const normalized =
+      clean === 'gemini-4' || clean === 'gemini 4' || clean === 'gemini-4.0' || clean === 'gemini 4.0' || clean === 'gemini-4-flash' || clean === 'gemini-4.0-flash'
+        ? 'gemini-4'
+        : clean === 'gemini-3.8-flash' || clean === 'gemini-3.8' || clean === 'gemini 3.8' || clean === 'gemini 3.8 flash'
+        ? 'gemini-3.8-flash'
+        : clean === 'gemini-3.6-flash' || clean === 'gemini-3.6' || clean === 'gemini 3.6' || clean === 'gemini 3.6 flash'
+        ? 'gemini-3.6-flash'
+        : null;
+
+    if (!normalized) {
+      setModelError('Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted.');
       return;
     }
     if (!user) return;
     setSavingModel(true);
     try {
-      await setDoc(doc(db, 'users', user.uid), { preferredModel: clean }, { merge: true });
-      setSelectedModel(clean);
+      await setDoc(doc(db, 'users', user.uid), { preferredModel: normalized }, { merge: true });
+      setSelectedModel(normalized);
       setCustomModel('');
     } catch (err: any) {
       setModelError(err.message || 'Failed to update preferred model.');
@@ -220,15 +218,15 @@ export default function SettingsScreen() {
           </Text>
         </Card>
 
-        {/* Gemini Flash Model Selection */}
+        {/* Gemini Model Selection */}
         <Card style={styles.sectionCard}>
           <View style={styles.auditHeader}>
-            <Text style={styles.sectionHeading}>GEMINI FLASH MODEL CONFIGURATION</Text>
-            <Badge label="FLASH 3.5+ ONLY" variant="inverse" />
+            <Text style={styles.sectionHeading}>AI MODEL CONFIGURATION</Text>
+            <Badge label="GEMINI 4 • 3.8 • 3.6" variant="inverse" />
           </View>
           <Text style={styles.disclaimerText}>
-            Select or specify the active Gemini Flash model for AI indexing, trains of thought, and project matching.
-            Only fast, efficient Flash models version 3.5 and above (e.g. gemini-3.5-flash, gemini-4.0-flash) are permitted.
+            Select the active Gemini model for AI indexing, trains of thought, and project matching.
+            Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are supported (Gemini 3.6 Flash is default).
           </Text>
 
           {modelError ? (
@@ -238,19 +236,19 @@ export default function SettingsScreen() {
           ) : null}
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm }}>
-            {FLASH_MODELS.map((m) => (
+            {ALLOWED_MODELS.map((m) => (
               <Button
-                key={m}
-                title={m === selectedModel ? `${m} ✓` : m}
-                variant={m === selectedModel ? 'primary' : 'secondary'}
-                onPress={() => handleSaveModel(m)}
+                key={m.id}
+                title={m.id === selectedModel ? `${m.label} ✓` : m.label}
+                variant={m.id === selectedModel ? 'primary' : 'secondary'}
+                onPress={() => handleSaveModel(m.id)}
                 disabled={savingModel}
                 style={{ marginRight: spacing.xs, marginBottom: spacing.xs, height: 38, paddingHorizontal: 14 }}
               />
             ))}
           </View>
 
-          {/* Custom model input */}
+          {/* Quick select custom input */}
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Input
               value={customModel}
@@ -258,7 +256,7 @@ export default function SettingsScreen() {
                 setCustomModel(text);
                 if (modelError) setModelError(null);
               }}
-              placeholder="e.g. gemini-3.5-flash (3.5+ Flash only)"
+              placeholder="e.g. gemini-3.6-flash, gemini-3.8-flash, gemini-4"
               containerStyle={{ flex: 1, marginVertical: 0 }}
               onSubmitEditing={() => customModel && handleSaveModel(customModel)}
             />

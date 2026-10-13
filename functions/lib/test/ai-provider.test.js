@@ -59,4 +59,22 @@ describe('Mock AI Provider', () => {
         expect(projectResult.suggestions[0].inspirationId).toBe('insp-1');
     });
 });
+describe('Model Rule Enforcement (Gemini 4, Gemini 3.8 Flash, Gemini 3.6 Flash)', () => {
+    const { validateFlashModel } = require('../src/config');
+    test('accepts only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash', () => {
+        expect(validateFlashModel('gemini-3.6-flash')).toBe('gemini-3.6-flash');
+        expect(validateFlashModel('gemini-3.8-flash')).toBe('gemini-3.8-flash');
+        expect(validateFlashModel('gemini-4')).toBe('gemini-4');
+        expect(validateFlashModel('GEMINI-4')).toBe('gemini-4');
+        expect(validateFlashModel('Gemini 3.8 Flash')).toBe('gemini-3.8-flash');
+        expect(validateFlashModel('Gemini 3.6 Flash')).toBe('gemini-3.6-flash');
+    });
+    test('rejects models outside the allowed trio', () => {
+        expect(() => validateFlashModel('gemini-3.5-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+        expect(() => validateFlashModel('gemini-2.0-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+        expect(() => validateFlashModel('gemini-1.5-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+        expect(() => validateFlashModel('gemini-pro')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+        expect(() => validateFlashModel('gemini-ultra')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+    });
+});
 //# sourceMappingURL=ai-provider.test.js.map

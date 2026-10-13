@@ -66,27 +66,24 @@ describe('Mock AI Provider', () => {
   });
 });
 
-describe('validateFlashModel Rule Enforcement', () => {
+describe('Model Rule Enforcement (Gemini 4, Gemini 3.8 Flash, Gemini 3.6 Flash)', () => {
   const { validateFlashModel } = require('../src/config');
 
-  test('accepts gemini-3.5-flash and above flash models', () => {
-    expect(validateFlashModel('gemini-3.5-flash')).toBe('gemini-3.5-flash');
-    expect(validateFlashModel('gemini-3.5-flash-preview')).toBe('gemini-3.5-flash-preview');
-    expect(validateFlashModel('gemini-4.0-flash')).toBe('gemini-4.0-flash');
-    expect(validateFlashModel('GEMINI-4.5-FLASH')).toBe('gemini-4.5-flash');
+  test('accepts only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash', () => {
+    expect(validateFlashModel('gemini-3.6-flash')).toBe('gemini-3.6-flash');
+    expect(validateFlashModel('gemini-3.8-flash')).toBe('gemini-3.8-flash');
+    expect(validateFlashModel('gemini-4')).toBe('gemini-4');
+    expect(validateFlashModel('GEMINI-4')).toBe('gemini-4');
+    expect(validateFlashModel('Gemini 3.8 Flash')).toBe('gemini-3.8-flash');
+    expect(validateFlashModel('Gemini 3.6 Flash')).toBe('gemini-3.6-flash');
   });
 
-  test('rejects Flash models below version 3.5', () => {
-    expect(() => validateFlashModel('gemini-2.0-flash')).toThrow(/Version 2.0 is not supported/);
-    expect(() => validateFlashModel('gemini-1.5-flash')).toThrow(/Version 1.5 is not supported/);
-    expect(() => validateFlashModel('gemini-2.5-flash')).toThrow(/Version 2.5 is not supported/);
-    expect(() => validateFlashModel('gemini-3.0-flash')).toThrow(/Version 3.0 is not supported/);
-  });
-
-  test('rejects non-flash models even if 3.5 or above', () => {
-    expect(() => validateFlashModel('gemini-3.5-pro')).toThrow(/Only Gemini Flash models/);
-    expect(() => validateFlashModel('gemini-pro')).toThrow(/Only Gemini Flash models/);
-    expect(() => validateFlashModel('gemini-ultra')).toThrow(/Only Gemini Flash models/);
+  test('rejects models outside the allowed trio', () => {
+    expect(() => validateFlashModel('gemini-3.5-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+    expect(() => validateFlashModel('gemini-2.0-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+    expect(() => validateFlashModel('gemini-1.5-flash')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+    expect(() => validateFlashModel('gemini-pro')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
+    expect(() => validateFlashModel('gemini-ultra')).toThrow(/Only Gemini 4, Gemini 3.8 Flash, and Gemini 3.6 Flash are permitted/);
   });
 });
 
