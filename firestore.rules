@@ -12,9 +12,9 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
-    // Allows authenticated owner OR temporary test account 'test' for development/preview testing
+    // Strictly enforces authenticated owner access
     function isOwner(uid) {
-      return (isAuthenticated() && request.auth.uid == uid) || uid == 'test';
+      return isAuthenticated() && request.auth.uid == uid;
     }
 
     function isValidString(val, maxLen) {
