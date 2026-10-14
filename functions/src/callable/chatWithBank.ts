@@ -39,7 +39,7 @@ export const chatWithBank = onCall(async (request) => {
     const chatData = chatDoc.data() || {};
     const pinnedIds: string[] = chatData.pinnedInspirationIds || [];
 
-    // 2. Fetch pinned inspiration items
+    // 2. Fetch pinned inspiration items with full RAG detail
     const pinnedInspirations: InspirationContextItem[] = [];
     for (const pid of pinnedIds.slice(0, 10)) {
       const itemSnap = await db.collection('users').doc(uid).collection('inspirations').doc(pid).get();
@@ -48,40 +48,117 @@ export const chatWithBank = onCall(async (request) => {
         pinnedInspirations.push({
           id: pid,
           title: d?.title || 'Untitled',
-          summary: d?.aiSummary || d?.userNote || d?.sharedText || '',
-          userNote: d?.userNote,
-          url: d?.url,
+          summary: d?.aiSummary || d?.userNote || d?.sharedText || d?.previewDescription || '',
+          userNote: d?.userNote || null,
+          caption: d?.caption || null,
+          url: d?.url || null,
+          domain: d?.sourceDomain || d?.siteName || d?.sourcePlatform || null,
+          author: d?.author || null,
+          tags: d?.tags || [],
+          concepts: d?.concepts || [],
         });
       }
     }
 
-    // 3. Perform semantic retrieval for relevant inspirations using message embedding
-    const retrievedInspirations: InspirationContextItem[] = [];
-    const queryEmbed = await aiProvider.generateEmbedding(userMessage);
-    const searchMatches = await searchOwnerIndex(uid, queryEmbed.embedding, 5);
+    // 3. Multi-source RAG Knowledge Base Retrieval
+    // Sources:
+    // A) Semantic vector search via _aiInspirationIndex
+    // B) Direct Firestore dump collection items
+    // C) Client-provided dumpContext (ensures offline/recent saves are immediately in knowledgebase)
+    const candidateMap = new Map<string, InspirationContextItem>();
 
-    for (const match of searchMatches) {
-      // Exclude already pinned
-      if (pinnedIds.includes(match.inspirationId)) continue;
-
-      const itemSnap = await db
-        .collection('users')
-        .doc(uid)
-        .collection('inspirations')
-        .doc(match.inspirationId)
-        .get();
-
-      if (itemSnap.exists) {
-        const d = itemSnap.data();
-        retrievedInspirations.push({
-          id: match.inspirationId,
-          title: d?.title || 'Untitled',
-          summary: d?.aiSummary || d?.userNote || d?.sharedText || '',
-          userNote: d?.userNote,
-          url: d?.url,
-        });
+    // Client dump context
+    const clientDump: InspirationContextItem[] = Array.isArray(request.data?.dumpContext)
+      ? request.data.dumpContext
+      : [];
+    for (const item of clientDump) {
+      if (item.id && !pinnedIds.includes(item.id)) {
+        candidateMap.set(item.id, item);
       }
     }
+
+    // Vector search
+    try {
+      const queryEmbed = await aiProvider.generateEmbedding(userMessage);
+      const searchMatches = await searchOwnerIndex(uid, queryEmbed.embedding, 10);
+      for (const match of searchMatches) {
+        if (pinnedIds.includes(match.inspirationId)) continue;
+        if (!candidateMap.has(match.inspirationId)) {
+          const snap = await db
+            .collection('users')
+            .doc(uid)
+            .collection('inspirations')
+            .doc(match.inspirationId)
+            .get();
+          if (snap.exists) {
+            const d = snap.data();
+            candidateMap.set(match.inspirationId, {
+              id: match.inspirationId,
+              title: d?.title || 'Untitled',
+              summary: d?.aiSummary || d?.userNote || d?.sharedText || d?.previewDescription || '',
+              userNote: d?.userNote || null,
+              caption: d?.caption || null,
+              url: d?.url || null,
+              domain: d?.sourceDomain || d?.siteName || d?.sourcePlatform || null,
+              author: d?.author || null,
+              tags: d?.tags || [],
+              concepts: d?.concepts || [],
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[RAG] Vector retrieval error:', e);
+    }
+
+    // Firestore fallback / top recent saves if pool is small
+    if (candidateMap.size < 8) {
+      try {
+        const recentSnap = await db
+          .collection('users')
+          .doc(uid)
+          .collection('inspirations')
+          .where('archived', '==', false)
+          .limit(20)
+          .get();
+
+        recentSnap.forEach((docSnap) => {
+          if (!pinnedIds.includes(docSnap.id) && !candidateMap.has(docSnap.id)) {
+            const d = docSnap.data();
+            candidateMap.set(docSnap.id, {
+              id: docSnap.id,
+              title: d?.title || 'Untitled',
+              summary: d?.aiSummary || d?.userNote || d?.sharedText || d?.previewDescription || '',
+              userNote: d?.userNote || null,
+              caption: d?.caption || null,
+              url: d?.url || null,
+              domain: d?.sourceDomain || d?.siteName || d?.sourcePlatform || null,
+              author: d?.author || null,
+              tags: d?.tags || [],
+              concepts: d?.concepts || [],
+            });
+          }
+        });
+      } catch (e) {
+        console.warn('[RAG] Firestore dump fetch fallback:', e);
+      }
+    }
+
+    // Keyword & thematic scoring across candidate pool
+    const qTokens = userMessage.toLowerCase().split(/[\s,.-]+/).filter((t: string) => t.length > 2);
+    const scoredList = Array.from(candidateMap.values()).map((item) => {
+      let score = 0;
+      const haystack = `${item.title} ${item.userNote || ''} ${item.caption || ''} ${item.summary || ''} ${(item.tags || []).join(' ')} ${(item.concepts || []).join(' ')} ${item.domain || ''}`.toLowerCase();
+
+      for (const tok of qTokens) {
+        if (haystack.includes(tok)) score += 3;
+      }
+      return { item, score };
+    });
+
+    scoredList.sort((a, b) => b.score - a.score);
+    // Take top 8 knowledge base items (or top 5 most recent if query is general)
+    const retrievedInspirations = scoredList.slice(0, 8).map((sc) => sc.item);
 
     // 4. Fetch recent chat history window (last 6 messages)
     const historySnap = await db

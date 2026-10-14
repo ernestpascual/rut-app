@@ -431,6 +431,23 @@ export default function ChatWorkspaceScreen() {
         }
       />
 
+      {/* Knowledge Base (RAG) Grounding Bar */}
+      <View style={styles.kbStatusBar}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text style={styles.kbStatusIcon}>📚</Text>
+          <Text style={styles.kbStatusTitle}>KNOWLEDGE BASE: DUMP</Text>
+          <Badge
+            label={`${bankItems.length} SAVES`}
+            variant="inverse"
+            style={{ marginLeft: 6, marginRight: 6 }}
+          />
+          <Badge label="RAG ACTIVE" variant="grade" />
+        </View>
+        <Text style={styles.kbStatusSubtitle} numberOfLines={1}>
+          Grounded in your saved inspirations, personal notes, captions, and tags.
+        </Text>
+      </View>
+
       {/* Live Web Grounding Banner */}
       {webAccessEnabled ? (
         <View style={styles.webAccessActiveBanner}>
@@ -491,6 +508,18 @@ export default function ChatWorkspaceScreen() {
                 Pose a design query, ask for conceptual angles, or synthesize with your bank inspirations.
               </Text>
               <View style={styles.promptChipsContainer}>
+                <Pressable
+                  style={[styles.promptChip, { borderColor: colors.ink, backgroundColor: colors.surfaceGrade }]}
+                  onPress={() =>
+                    handleSendMessage(
+                      'Search my dump knowledge base: What are the main recurring aesthetic themes, concepts, and materials across my saved inspirations?'
+                    )
+                  }
+                >
+                  <Text style={[styles.promptChipText, { fontWeight: '700' }]}>
+                    📚 Ask Dump Knowledge Base (RAG)
+                  </Text>
+                </Pressable>
                 <Pressable
                   style={[styles.promptChip, webAccessEnabled && styles.promptChipActive]}
                   onPress={() => {
@@ -575,7 +604,9 @@ export default function ChatWorkspaceScreen() {
               {/* Clickable Source Cards for Assistant citations */}
               {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
                 <View style={styles.sourcesContainer}>
-                  <Text style={styles.sourcesHeader}>REFERENCED INSPIRATIONS:</Text>
+                  <Text style={styles.sourcesHeader}>
+                    📚 DUMP KNOWLEDGE BASE CITATIONS ({item.sourceInspirationIds.length}):
+                  </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {item.sourceInspirationIds.map((sid: string) => {
                       const sourceItem = pinnedMap[sid];
@@ -702,10 +733,10 @@ export default function ChatWorkspaceScreen() {
               <Text style={styles.brainstormSparkText}>🔍 Pressure Test</Text>
             </Pressable>
             <Pressable
-              style={styles.brainstormSparkPill}
-              onPress={() => handleSendMessage('Check my dump and cross-pollinate with my saved inspiration bank')}
+              style={[styles.brainstormSparkPill, { borderColor: colors.ink }]}
+              onPress={() => handleSendMessage('Search my dump knowledge base for the most relevant inspirations and synthesize their core ideas')}
             >
-              <Text style={styles.brainstormSparkText}>📥 Cross-Pollinate Bank</Text>
+              <Text style={[styles.brainstormSparkText, { fontWeight: '700' }]}>📚 Query Dump KB</Text>
             </Pressable>
             <Pressable
               style={styles.brainstormSparkPill}
@@ -1352,5 +1383,35 @@ const getStyles = (colors: ThemeColors) =>
   brainstormSparkTextWeb: {
     color: colors.ink,
     fontWeight: '700',
+  },
+  kbStatusBar: {
+    backgroundColor: colors.surfaceGrade,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+    paddingHorizontal: spacing.base,
+    paddingVertical: 6,
+  },
+  kbStatusIcon: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  kbStatusTitle: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  kbStatusBadgeDesc: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    fontWeight: '600',
+  },
+  kbStatusSubtitle: {
+    ...typography.captionSm,
+    fontSize: 10,
+    color: colors.inkSoft,
+    marginTop: 2,
   },
 });

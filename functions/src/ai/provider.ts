@@ -9,8 +9,12 @@ export interface InspirationContextItem {
   title: string;
   summary: string;
   userNote?: string | null;
+  caption?: string | null;
   url?: string | null;
+  domain?: string | null;
+  author?: string | null;
   tags?: string[];
+  concepts?: string[];
 }
 
 export interface ChatRequest {

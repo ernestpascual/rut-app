@@ -107,10 +107,36 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
 
     const contextItems = [...input.pinnedInspirations, ...input.retrievedInspirations];
     const contextFormatted = contextItems
-      .map(
-        (item) => `[ID: ${item.id}] "${item.title}": ${item.summary} (Note: ${item.userNote || 'none'})`
-      )
-      .join('\n');
+      .map((item, idx) => {
+        const lines = [
+          `[DUMP KNOWLEDGE ENTRY #${idx + 1}]`,
+          `• ID: ${item.id}`,
+          `• Title: "${item.title}"`,
+        ];
+        if (item.domain || item.author) {
+          lines.push(`• Source / Author: ${item.author ? `@${item.author} on ` : ''}${item.domain || 'Web'}`);
+        }
+        if (item.userNote) {
+          lines.push(`• User's Personal Note: "${item.userNote}"`);
+        }
+        if (item.caption) {
+          lines.push(`• Saved Caption / Post Text: "${item.caption}"`);
+        }
+        if (item.summary) {
+          lines.push(`• AI Summary & Context: ${item.summary}`);
+        }
+        if (item.tags && item.tags.length > 0) {
+          lines.push(`• Tags: #${item.tags.join(' #')}`);
+        }
+        if (item.concepts && item.concepts.length > 0) {
+          lines.push(`• Concepts: ${item.concepts.join(', ')}`);
+        }
+        if (item.url) {
+          lines.push(`• Link: ${item.url}`);
+        }
+        return lines.join('\n');
+      })
+      .join('\n\n');
 
     const webAccessDirective = input.webAccess
       ? `\nLIVE INTERNET ACCESS: ACTIVATED.
@@ -119,13 +145,16 @@ You have active Google Search grounding. Perform live searches to bring in real-
 
     const fullPrompt = `${CHAT_SYSTEM_PROMPT}${webAccessDirective}
 
-AVAILABLE USER INSPIRATIONS (SOURCES):
-${contextFormatted || 'None found.'}
+======================================================
+RETRIEVED KNOWLEDGE BASE CONTEXT (FROM USER'S DUMP):
+======================================================
+${contextFormatted || 'No relevant saves retrieved.'}
+======================================================
 
 USER QUERY:
 ${input.message}
 
-Please formulate an insightful response exploring this train of thought and explicitly state which [ID: ...] sources you drew from.
+Formulate an insightful response exploring this train of thought grounded in the user's dump knowledge base. Explicitly cite which [ID: ...] sources you drew from.
 `;
 
     const result = await model.generateContent(fullPrompt);

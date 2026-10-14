@@ -485,9 +485,9 @@ export function synthesizeThoughtTrain(params: {
   scoredCandidates.sort((a, b) => b.score - a.score);
   let topMatches = scoredCandidates.slice(0, 4).filter((sc) => sc.score > 0);
 
-  // If user specifically asked to check/pull from dump and no match scored, pull newest from dump
-  if (topMatches.length === 0 && allInspirations.length > 0 && isDumpPullQuery) {
-    topMatches = allInspirations.slice(0, 3).map((item) => ({ item, score: 1 }));
+  // RAG Knowledge Base Retrieval: ensure candidate items are always grounded
+  if (topMatches.length === 0 && candidatePool.length > 0) {
+    topMatches = candidatePool.slice(0, 3).map((item) => ({ item, score: 1 }));
   }
 
   const citedIds = topMatches.map((m) => m.item.id);
@@ -690,8 +690,27 @@ export async function sendChatMessage(
 
   if (isLiveAuth(uid)) {
     try {
+      const dumpContext = allInspirations.slice(0, 30).map((item) => ({
+        id: item.id,
+        title: item.title,
+        summary: item.aiSummary || item.previewDescription || item.editorialContext || '',
+        userNote: item.userNote || null,
+        caption: item.caption || null,
+        url: item.url || null,
+        domain: item.sourceDomain || item.siteName || item.sourcePlatform || null,
+        author: item.author || null,
+        tags: item.tags || [],
+        concepts: item.concepts || [],
+      }));
+
       const chatFn = httpsCallable<
-        { chatId: string; message: string; model?: string; webAccess?: boolean },
+        {
+          chatId: string;
+          message: string;
+          model?: string;
+          webAccess?: boolean;
+          dumpContext?: any[];
+        },
         {
           response: string;
           sourceInspirationIds: string[];
@@ -709,6 +728,7 @@ export async function sendChatMessage(
         message: cleanContent,
         model: options?.model,
         webAccess: isWebAccess,
+        dumpContext,
       });
 
       if (result.data?.response) {
