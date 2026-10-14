@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,17 +10,19 @@ import * as Linking from 'expo-linking';
 import { redirectSystemPath } from './+native-intent';
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading, stagedShare } = useAuth();
+  const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // Listen for warm incoming shares / deep links while the app is already running
+    // Only listen for deep link shares on native mobile (iOS/Android). Never on web!
+    if (Platform.OS === 'web') return;
+
     const handleUrl = (event: { url: string }) => {
       if (!event.url) return;
       try {
         const redirected = redirectSystemPath({ path: event.url, initial: false });
-        if (redirected && redirected.startsWith('/share-target')) {
+        if (redirected && (redirected.includes('inspiration/new') || redirected.startsWith('/(app)/inspiration/new'))) {
           router.push(redirected as any);
         }
       } catch {}
@@ -35,22 +38,16 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inShareTarget = segments[0] === 'share-target';
     const isRootLanding = !(segments as any)?.[0] || (segments as any)?.[0] === 'index';
     const isAuthRoute = inAuthGroup || isRootLanding;
 
-    if (!user && !isAuthRoute && !inShareTarget) {
+    if (!user && !isAuthRoute) {
       // Redirect to login if trying to access private routes
       router.replace('/');
     } else if (user && isAuthRoute) {
-      if (stagedShare) {
-        // Restore staged share after authentication
-        router.replace('/share-target');
-      } else {
-        router.replace('/(app)/(tabs)/bank');
-      }
+      router.replace('/(app)/(tabs)/bank');
     }
-  }, [user, loading, segments, stagedShare]);
+  }, [user, loading, segments]);
 
   return <>{children}</>;
 }

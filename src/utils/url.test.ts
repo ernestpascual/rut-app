@@ -40,15 +40,15 @@ describe('URL Utilities', () => {
     expect(extractInstagramUrl(rawIgNoProto)).toBe('https://instagram.com/p/C-abc987/');
   });
 
-  test('redirectSystemPath routes mobile Instagram and deep links to /share-target', () => {
+  test('redirectSystemPath routes mobile Instagram and deep links to /(app)/inspiration/new', () => {
     // Standard query intent
     const res1 = redirectSystemPath({ path: 'rut://share?url=https://www.instagram.com/reel/123/', initial: true });
-    expect(res1).toContain('/share-target?');
+    expect(res1).toContain('/(app)/inspiration/new?');
     expect(res1).toContain('https%3A%2F%2Fwww.instagram.com%2Freel%2F123%2F');
 
     // Instagram link directly in scheme
     const res2 = redirectSystemPath({ path: 'rut://https://www.instagram.com/p/abc123/?igsh=test', initial: true });
-    expect(res2).toContain('/share-target?url=');
+    expect(res2).toContain('/(app)/inspiration/new?url=');
     expect(res2).toContain('https%3A%2F%2Fwww.instagram.com%2Fp%2Fabc123%2F');
 
     // Instagram shared text with reel
@@ -56,7 +56,7 @@ describe('URL Utilities', () => {
       path: 'rut://share?text=Check out this reel on Instagram: https://www.instagram.com/reel/123/',
       initial: false
     });
-    expect(res3).toContain('/share-target?');
+    expect(res3).toContain('/(app)/inspiration/new?');
 
     // Standard internal routes remain untouched
     expect(redirectSystemPath({ path: '/(app)/(tabs)/bank', initial: false })).toBe('/(app)/(tabs)/bank');

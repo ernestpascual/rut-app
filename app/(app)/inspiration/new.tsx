@@ -12,7 +12,7 @@ import {
   Pressable,
   ActivityIndicator
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
 import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
@@ -23,7 +23,14 @@ import { Button } from '../../../src/components/ui/Button';
 import { Badge } from '../../../src/components/ui/Badge';
 import { Card } from '../../../src/components/ui/Card';
 import { InspirationCreateSchema } from '../../../src/lib/validation/schemas';
-import { normalizeUrl, detectPlatform, extractDomain, generateContentHash } from '../../../src/utils/url';
+import {
+  normalizeUrl,
+  detectPlatform,
+  extractDomain,
+  generateContentHash,
+  extractInstagramUrl,
+  extractUrlFromText
+} from '../../../src/utils/url';
 import {
   enrichUrlMetadata,
   extractUrlMetadataFromUrl,
@@ -36,18 +43,46 @@ import { getDumpInspirations, setDumpInspirations } from '../../../src/features/
 
 export default function NewInspirationScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    url?: string;
+    text?: string;
+    title?: string;
+  }>();
+
+  const rawParamUrl = typeof params.url === 'string' ? params.url : Array.isArray(params.url) ? params.url[0] : '';
+  const rawParamText = typeof params.text === 'string' ? params.text : Array.isArray(params.text) ? params.text[0] : '';
+  const rawParamTitle = typeof params.title === 'string' ? params.title : Array.isArray(params.title) ? params.title[0] : '';
+
+  const extractedUrl = rawParamText ? (extractInstagramUrl(rawParamText) || extractUrlFromText(rawParamText)) : null;
+  const initialUrl = rawParamUrl || extractedUrl || '';
+  const remainingText = (extractedUrl && rawParamText) ? rawParamText.replace(extractedUrl, '').trim() : rawParamText;
+
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => getStyles(colors), [colors]);
 
-  const [kind, setKind] = useState<'link' | 'note'>('link');
-  const [url, setUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [userNote, setUserNote] = useState('');
+  const [kind, setKind] = useState<'link' | 'note'>(initialUrl ? 'link' : remainingText ? 'note' : 'link');
+  const [url, setUrl] = useState(initialUrl);
+  const [title, setTitle] = useState(rawParamTitle);
+  const [userNote, setUserNote] = useState(remainingText);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Sync if mobile intent parameters arrive after mount
+  useEffect(() => {
+    if (initialUrl && !url) {
+      setUrl(initialUrl);
+      setKind('link');
+    }
+    if (remainingText && !userNote) {
+      setUserNote(remainingText);
+    }
+    if (rawParamTitle && !title) {
+      setTitle(rawParamTitle);
+    }
+  }, [initialUrl, remainingText, rawParamTitle]);
 
   // Extracted URL metadata state
   const [urlMeta, setUrlMeta] = useState<ExtractedUrlMetadata | null>(null);
@@ -69,11 +104,17 @@ export default function NewInspirationScreen() {
 
       // Async live fetch
       let isCurrent = true;
-      enrichUrlMetadata(normalized, title, userNote)
+      enrichUrlMetadata(normalized, title, userNote, remainingText || undefined)
         .then((enriched) => {
           if (isCurrent) {
             setUrlMeta(enriched);
             setIsFetchingMeta(false);
+            if (!title && enriched.title) {
+              setTitle(enriched.title);
+            }
+            if (!userNote && enriched.caption) {
+              setUserNote(enriched.caption);
+            }
           }
         })
         .catch(() => {

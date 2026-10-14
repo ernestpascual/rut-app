@@ -1,8 +1,8 @@
+import { Platform } from 'react-native';
 import { extractInstagramUrl, extractUrlFromText } from '../src/utils/url';
 
 // Native intent handler for Expo Router
-// Rewrites deep links, Instagram share-to actions, and system share intents to /share-target
-
+// Rewrites mobile deep links and Instagram share-to actions directly to /(app)/inspiration/new
 export function redirectSystemPath({
   path,
   initial,
@@ -10,15 +10,18 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
-  if (!path) return path;
+  // CRITICAL: Only handle intents on native mobile apps (iOS/Android). Never on web!
+  if (Platform.OS === 'web' || !path) {
+    return path;
+  }
 
   try {
-    // 1. If already explicitly targeting /share-target, ensure clean leading slash
-    if (path.startsWith('/share-target') || path.startsWith('share-target')) {
+    // If already targeting inspiration/new, let it proceed
+    if (path.includes('inspiration/new')) {
       return path.startsWith('/') ? path : `/${path}`;
     }
 
-    // 2. Decode path if URL encoded
+    // Decode path if URL encoded
     let decoded = path;
     try {
       if (path.includes('%3A') || path.includes('%2F')) {
@@ -26,11 +29,10 @@ export function redirectSystemPath({
       }
     } catch {}
 
-    // 3. Instagram direct share detection (URL or text containing Instagram link)
+    // 1. Instagram direct share detection (URL or text containing Instagram link)
     if (decoded.includes('instagram.com') || decoded.includes('instagr.am')) {
       const igUrl = extractInstagramUrl(decoded);
       if (igUrl) {
-        // Check if there is also caption/text before or after the URL
         const remainingText = decoded
           .replace(igUrl, '')
           .replace(/^rut:\/\/?/, '')
@@ -43,11 +45,11 @@ export function redirectSystemPath({
         if (remainingText && remainingText.length > 2) {
           params.set('text', remainingText);
         }
-        return `/share-target?${params.toString()}`;
+        return `/(app)/inspiration/new?${params.toString()}`;
       }
     }
 
-    // 4. General social or web URL in intent (TikTok, Pinterest, Threads, X, YouTube, or HTTP link)
+    // 2. General social or web URL in intent (TikTok, Pinterest, Threads, X, YouTube, or HTTP link)
     const extractedUrl = extractUrlFromText(decoded);
     if (extractedUrl && (path.startsWith('rut://') || path.includes('share') || !path.startsWith('/'))) {
       const remainingText = decoded
@@ -61,10 +63,10 @@ export function redirectSystemPath({
       if (remainingText && remainingText.length > 2) {
         params.set('text', remainingText);
       }
-      return `/share-target?${params.toString()}`;
+      return `/(app)/inspiration/new?${params.toString()}`;
     }
 
-    // 5. Deep link with query parameters (e.g. rut://share?text=..., rut://?url=..., rut://share-target?...)
+    // 3. Deep link with query parameters (e.g. rut://share?text=..., rut://?url=...)
     if (path.startsWith('rut://') || path.includes('share') || path.includes('url=') || path.includes('text=')) {
       const normalizedPath = path.startsWith('rut://')
         ? path.replace('rut://', 'https://rut.local/')
@@ -76,12 +78,11 @@ export function redirectSystemPath({
       const searchParams = fakeUrl.searchParams;
 
       if (searchParams.has('url') || searchParams.has('text') || searchParams.has('title')) {
-        return `/share-target?${searchParams.toString()}`;
+        return `/(app)/inspiration/new?${searchParams.toString()}`;
       }
 
       if (path.includes('share')) {
-        const sp = searchParams.toString();
-        return sp ? `/share-target?${sp}` : '/share-target';
+        return '/(app)/inspiration/new';
       }
     }
   } catch (e) {
