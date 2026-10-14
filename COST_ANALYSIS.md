@@ -95,6 +95,36 @@ This document provides a comprehensive cost breakdown for all AI and cloud funct
 
 ---
 
+### Function 5: Chrome Extension (Instagram Saved Collections Scraper & Bulk Sync)
+- **When it runs**: When you open an Instagram Web Saved Collection, launch the `rut` Chrome Extension, and click **START SCRAPING** followed by **SYNC TO DUMP BANK**.
+- **Execution Cost Breakdown**:
+  1. **Scraping Phase (Browser DOM)**:
+     - The extension's content script (`instagram-scraper.ts`) automates virtual DOM scrolling, video metadata parsing, caption extraction, and view count detection **100% locally in your browser**.
+     - **Scraping Cost**: **$0.00**. No API tokens, no proxy fees, and no third-party data broker charges.
+  2. **Firestore Batch Write**:
+     - The extension background service worker writes items in batches of 400 to `users/{uid}/inspirations/ig_reel_{shortcode}` with `processingStatus: 'pending'`.
+     - **Firestore Cost**: 1 write per item. Fits completely within Firebase's free tier of 20,000 writes/day ($0.00).
+  3. **Automatic AI Indexing Trigger**:
+     - As each item is written with `pending` status, Firebase Cloud Function `onInspirationWritten` automatically runs Gemini 2.5 Flash + `text-embedding-004` to summarize captions, extract tags, and create vector embeddings.
+     - **AI Cost per Link**: **$0.00008025 USD (~0.008 cents per link)**.
+- **Cost Per Scrape Run by Collection Size**:
+
+| Run Size / Scope | Items Scraped | Browser Scraping | Firestore Writes | AI Indexing Cost | Total Cost for the Run |
+|---|---|---|---|---|---|
+| **Quick Test Run** | 10 reels | $0.00 | $0.00 *(Free Tier)* | $0.0008 USD | **< 1/10th of a cent** |
+| **Small Collection**| 50 reels | $0.00 | $0.00 *(Free Tier)* | $0.0040 USD | **< half a cent** |
+| **Medium Collection**| 100 reels | $0.00 | $0.00 *(Free Tier)* | $0.0080 USD | **~ 0.8 cents** |
+| **Large Collection**| 250 reels | $0.00 | $0.00 *(Free Tier)* | $0.0200 USD | **2.0 cents** |
+| **Heavy Collection**| 500 reels | $0.00 | $0.00 *(Free Tier)* | $0.0401 USD | **4.0 cents** |
+| **Massive Archive** | 1,000 reels | $0.00 | $0.00 *(Free Tier)* | $0.0803 USD | **8.0 cents** |
+| **Mega Library Sync**| 2,500 reels | $0.00 | ~$0.004 USD | $0.2006 USD | **~ 20.5 cents** |
+
+- **Deduplication on Re-runs**:
+  - The extension IDs each document by its immutable Instagram shortcode (`ig_reel_{shortcode}`) with Firestore `{ merge: true }`.
+  - Re-scraping the same collection will **not** create duplicate items, and `contentHash` comparison prevents redundant re-embedding, keeping repeated runs at near-zero incremental cost.
+
+---
+
 ## 4. User Monthly Cost Scenarios
 
 | User Profile | Monthly Activity | Cloud Firestore Cost | Google Gemini AI Cost | Total Estimated Cost / Month |
