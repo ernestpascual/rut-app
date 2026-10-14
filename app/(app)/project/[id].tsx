@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -848,6 +849,134 @@ export default function ProjectDetailScreen() {
     (item) => !links.some((l) => l.inspirationId === item.id)
   );
 
+  // FULL HEIGHT EDIT SCREEN FOR EXTENSIVE NOTES & SPECIFICATIONS
+  if (editing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <TopNav
+          title="rut"
+          subtitle="Edit Idea"
+          onBack={() => setEditing(false)}
+          backTitle="CANCEL"
+          rightAction={
+            <Button
+              title={saving ? 'SAVING...' : 'SAVE IDEA'}
+              onPress={handleSaveEdits}
+              loading={saving}
+              style={{ height: 28, paddingHorizontal: 12 }}
+            />
+          }
+        />
+
+        {toastMessage ? (
+          <View style={styles.toastBanner}>
+            <Text style={styles.toastText}>✓ {toastMessage}</Text>
+          </View>
+        ) : null}
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.editFullContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.editHeaderRow}>
+              <Text style={styles.editHeading}>WRITE / REFINE SPECIFICATIONS</Text>
+            </View>
+
+            <Input
+              label="IDEA TITLE"
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="Idea title..."
+            />
+
+            <Input
+              label="CONCEPT / BRIEF"
+              value={editBrief}
+              onChangeText={setEditBrief}
+              placeholder="Describe your creative concept, problem, or vision..."
+              multiline
+              numberOfLines={3}
+              style={styles.briefInput}
+            />
+
+            <View style={styles.notesSectionContainer}>
+              <Input
+                label="NOTES & SPECIFICATIONS"
+                value={editNotes}
+                onChangeText={setEditNotes}
+                placeholder="Detailed specifications, dimensions, textures, color systems, fabrication notes, references, and train of thought summaries..."
+                multiline
+                numberOfLines={14}
+                containerStyle={styles.notesInputContainer}
+                style={styles.notesInput}
+              />
+            </View>
+
+            <View style={styles.tagInputRow}>
+              <Input
+                value={editTagInput}
+                onChangeText={setEditTagInput}
+                placeholder="Add tag (e.g. ceramics, typography)..."
+                containerStyle={{ flex: 1, marginVertical: 0 }}
+                onSubmitEditing={() => {
+                  const t = editTagInput.trim().toLowerCase();
+                  if (t && !editTags.includes(t)) {
+                    setEditTags([...editTags, t]);
+                    setEditTagInput('');
+                  }
+                }}
+              />
+              <Button
+                title="+ TAG"
+                variant="secondary"
+                onPress={() => {
+                  const t = editTagInput.trim().toLowerCase();
+                  if (t && !editTags.includes(t)) {
+                    setEditTags([...editTags, t]);
+                    setEditTagInput('');
+                  }
+                }}
+                style={{ marginLeft: spacing.xs, height: 46 }}
+              />
+            </View>
+
+            {editTags.length > 0 && (
+              <View style={styles.tagRow}>
+                {Array.from(new Set(editTags)).map((t, idx) => (
+                  <Pressable
+                    key={`edit-tag-${t}-${idx}`}
+                    onPress={() => setEditTags(editTags.filter((tag) => tag !== t))}
+                  >
+                    <Badge label={`#${t} ✕`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.editBottomBar}>
+              <Button
+                title="CANCEL"
+                variant="secondary"
+                onPress={() => setEditing(false)}
+                style={{ flex: 1, height: 44 }}
+              />
+              <Button
+                title={saving ? 'SAVING...' : 'SAVE IDEA'}
+                onPress={handleSaveEdits}
+                loading={saving}
+                style={{ flex: 2, height: 44 }}
+              />
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <TopNav
@@ -878,100 +1007,8 @@ export default function ProjectDetailScreen() {
       ) : null}
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* EDIT / WRITE IDEA FORM */}
-        {editing ? (
-          <Card style={styles.editCard}>
-            <Text style={styles.sectionHeading}>WRITE / REFINE YOUR IDEA</Text>
-            <Input label="IDEA TITLE" value={editTitle} onChangeText={setEditTitle} />
-            <Input
-              label="CONCEPT / BRIEF"
-              value={editBrief}
-              onChangeText={setEditBrief}
-              placeholder="Describe your creative concept, problem, or vision..."
-              multiline
-              numberOfLines={1}
-              style={{
-                height: calculateDynamicInputHeight(editBrief),
-                maxHeight: 124,
-                paddingTop: 10,
-                paddingBottom: 10,
-                textAlignVertical: 'top',
-              }}
-            />
-            <Input
-              label="NOTES &amp; SPECIFICATIONS"
-              value={editNotes}
-              onChangeText={setEditNotes}
-              placeholder="Material details, color palettes, visual references, typography requirements..."
-              multiline
-              numberOfLines={1}
-              style={{
-                height: calculateDynamicInputHeight(editNotes),
-                maxHeight: 124,
-                paddingTop: 10,
-                paddingBottom: 10,
-                textAlignVertical: 'top',
-              }}
-            />
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
-              <Input
-                value={editTagInput}
-                onChangeText={setEditTagInput}
-                placeholder="Add tag (e.g. ceramics, typography)..."
-                containerStyle={{ flex: 1, marginVertical: 0 }}
-                onSubmitEditing={() => {
-                  const t = editTagInput.trim().toLowerCase();
-                  if (t && !editTags.includes(t)) {
-                    setEditTags([...editTags, t]);
-                    setEditTagInput('');
-                  }
-                }}
-              />
-              <Button
-                title="+ TAG"
-                variant="secondary"
-                onPress={() => {
-                  const t = editTagInput.trim().toLowerCase();
-                  if (t && !editTags.includes(t)) {
-                    setEditTags([...editTags, t]);
-                    setEditTagInput('');
-                  }
-                }}
-                style={{ marginLeft: spacing.xs, height: 46 }}
-              />
-            </View>
-
-            <View style={styles.tagRow}>
-              {Array.from(new Set(editTags)).map((t, idx) => (
-                <Pressable
-                  key={`edit-tag-${t}-${idx}`}
-                  onPress={() => setEditTags(editTags.filter((tag) => tag !== t))}
-                >
-                  <Badge label={`#${t} ✕`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: spacing.xs, marginTop: spacing.base }}>
-              <Button
-                title="CANCEL"
-                variant="secondary"
-                onPress={() => setEditing(false)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={saving ? 'SAVING...' : 'SAVE IDEA'}
-                onPress={handleSaveEdits}
-                loading={saving}
-                style={{ flex: 2 }}
-              />
-            </View>
-          </Card>
-        ) : (
-          <View>
-            {/* CLEAN IDEA HEADER */}
-            <View style={styles.headerArea}>
+        {/* CLEAN IDEA HEADER */}
+        <View style={styles.headerArea}>
               <View style={styles.titleRow}>
                 <Text style={styles.projectTitle}>{project.title}</Text>
                 <Button
@@ -1889,8 +1926,6 @@ export default function ProjectDetailScreen() {
                 </View>
               </SafeAreaView>
             </Modal>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1907,6 +1942,57 @@ const getStyles = (colors: ThemeColors) =>
     maxWidth: 680,
     width: '100%',
     alignSelf: 'center',
+  },
+  editFullContent: {
+    flexGrow: 1,
+    padding: spacing.base,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  editHeaderRow: {
+    marginBottom: spacing.xs,
+  },
+  editHeading: {
+    ...typography.captionCap,
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 1,
+  },
+  briefInput: {
+    minHeight: 84,
+    maxHeight: 160,
+    paddingTop: 10,
+    paddingBottom: 10,
+    textAlignVertical: 'top',
+  },
+  notesSectionContainer: {
+    flex: 1,
+    marginVertical: spacing.xs,
+  },
+  notesInputContainer: {
+    flex: 1,
+  },
+  notesInput: {
+    flex: 1,
+    minHeight: 300,
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 10,
+    textAlignVertical: 'top',
+    lineHeight: 22,
+  },
+  tagInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  editBottomBar: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   editCard: {
     padding: spacing.base,
