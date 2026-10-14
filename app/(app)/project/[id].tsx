@@ -91,12 +91,11 @@ export default function ProjectDetailScreen() {
   const [editTagInput, setEditTagInput] = useState('');
   const [editTags, setEditTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  // Collapsible section states to eliminate clutter
-  const [collapseConcept, setCollapseConcept] = useState(false);
-  const [collapseMatcher, setCollapseMatcher] = useState(true);
-  const [collapseReferences, setCollapseReferences] = useState(false);
-  const [collapseThoughts, setCollapseThoughts] = useState(false);
+  // Studio Segmented Tab State ('overview' | 'references' | 'thoughts')
+  const [activeTab, setActiveTab] = useState<'overview' | 'references' | 'thoughts'>('overview');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Manual picker toggle
   const [showManualPicker, setShowManualPicker] = useState(false);
@@ -316,7 +315,7 @@ export default function ProjectDetailScreen() {
   // Get inspirations from the dump matching this idea
   const handleGetInspirationsFromDump = async () => {
     if (!project) return;
-    setCollapseMatcher(false);
+    setActiveTab('references');
     setLoadingSuggestions(true);
 
     if (allDumpItems.length === 0) {
@@ -454,6 +453,7 @@ export default function ProjectDetailScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          setDeleting(true);
           try {
             await deleteProjectLocal(project.id);
             if (user) {
@@ -462,6 +462,8 @@ export default function ProjectDetailScreen() {
             router.back();
           } catch (e: any) {
             Alert.alert('Error', e.message);
+          } finally {
+            setDeleting(false);
           }
         },
       },
@@ -590,16 +592,62 @@ export default function ProjectDetailScreen() {
     setShowModelModal(false);
   };
 
-  // Toggle collapse/expand all sections to minimize clutter
-  const allCollapsed =
-    collapseConcept && collapseMatcher && collapseReferences && collapseThoughts;
+  // Add a train-of-thought message to the project's notes
+  const handleAddThoughtToNotes = async (content: string) => {
+    if (!project || !id) return;
+    const currentNotes = project.notes || '';
+    const formattedAddition = `\n\n--- Thought (${new Date().toLocaleDateString()}) ---\n${content}`;
+    const updatedNotes = (currentNotes ? currentNotes + formattedAddition : content).trim();
 
-  const toggleCollapseAll = () => {
-    const nextState = !allCollapsed;
-    setCollapseConcept(nextState);
-    setCollapseMatcher(nextState);
-    setCollapseReferences(nextState);
-    setCollapseThoughts(nextState);
+    try {
+      const updatedProj: Project = {
+        ...project,
+        notes: updatedNotes,
+        updatedAt: Date.now(),
+      };
+      setProject(updatedProj);
+      setEditNotes(updatedNotes);
+
+      if (!isDummy) {
+        await updateDoc(doc(db, 'users', user!.uid, 'projects', id), {
+          notes: updatedNotes,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      await saveProject(updatedProj, user?.uid || DUMMY_USER_UID);
+      setToastMessage('THOUGHT ADDED TO NOTES');
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err) {
+      console.error('Failed to add thought to idea notes:', err);
+      Alert.alert('Notice', 'Could not save thought to idea notes.');
+    }
+  };
+
+  // Set a train-of-thought message as the concept brief
+  const handleSetThoughtAsBrief = async (content: string) => {
+    if (!project || !id) return;
+    try {
+      const updatedProj: Project = {
+        ...project,
+        brief: content,
+        updatedAt: Date.now(),
+      };
+      setProject(updatedProj);
+      setEditBrief(content);
+
+      if (!isDummy) {
+        await updateDoc(doc(db, 'users', user!.uid, 'projects', id), {
+          brief: content,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      await saveProject(updatedProj, user?.uid || DUMMY_USER_UID);
+      setToastMessage('THOUGHT SET AS BRIEF');
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err) {
+      console.error('Failed to set brief:', err);
+      Alert.alert('Notice', 'Could not update concept brief.');
+    }
   };
 
   // Open modal to view and link existing chats
@@ -822,7 +870,7 @@ export default function ProjectDetailScreen() {
               style={{ height: 28, paddingHorizontal: 8, marginRight: 6 }}
             />
             <Button
-              title={editing ? '✕ CANCEL' : '✎ WRITE / EDIT'}
+              title={editing ? '✕ CANCEL' : '✎ EDIT IDEA'}
               variant="text"
               onPress={() => setEditing(!editing)}
               style={{ height: 28, paddingHorizontal: 6 }}
@@ -830,6 +878,12 @@ export default function ProjectDetailScreen() {
           </View>
         }
       />
+
+      {toastMessage ? (
+        <View style={styles.toastBanner}>
+          <Text style={styles.toastText}>✓ {toastMessage}</Text>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* EDIT / WRITE IDEA FORM */}
@@ -916,94 +970,106 @@ export default function ProjectDetailScreen() {
           </Card>
         ) : (
           <View>
-            {/* IDEA HEADER */}
-            <View style={styles.headerRow}>
-              <View style={{ flex: 1, marginRight: spacing.sm }}>
-                <Text style={styles.title}>{project.title}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Button
-                  title="⤓ EXPORT"
-                  variant="secondary"
-                  onPress={() => setShowExportModal(true)}
-                  style={{ height: 28, paddingHorizontal: 8 }}
-                />
+            {/* CLEAN IDEA HEADER */}
+            <View style={styles.headerArea}>
+              <View style={styles.titleRow}>
+                <Text style={styles.projectTitle}>{project.title}</Text>
                 <Badge label={project.status.toUpperCase()} variant="inverse" />
               </View>
             </View>
 
-            {/* QUICK COLLAPSE / EXPAND ALL BUTTON */}
-            <View style={styles.collapseAllRow}>
+            {/* SLEEK SEGMENTED STUDIO TAB BAR */}
+            <View style={styles.studioTabBar}>
               <Pressable
-                onPress={toggleCollapseAll}
-                style={styles.collapseAllBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle collapse all sections"
+                style={[styles.studioTab, activeTab === 'overview' && styles.studioTabActive]}
+                onPress={() => setActiveTab('overview')}
+                accessibilityRole="tab"
+                accessibilityLabel="Concept & Specs tab"
               >
-                <Text style={styles.collapseAllText}>
-                  {allCollapsed ? '▾ EXPAND ALL SECTIONS' : '▴ COLLAPSE ALL TO REDUCE CLUTTER'}
+                <Text style={[styles.studioTabLabel, activeTab === 'overview' && styles.studioTabLabelActive]}>
+                  01 CONCEPT &amp; SPECS
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.studioTab, activeTab === 'references' && styles.studioTabActive]}
+                onPress={() => setActiveTab('references')}
+                accessibilityRole="tab"
+                accessibilityLabel="References tab"
+              >
+                <Text style={[styles.studioTabLabel, activeTab === 'references' && styles.studioTabLabelActive]}>
+                  02 REFERENCES {links.length > 0 ? `(${links.length})` : ''}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.studioTab, activeTab === 'thoughts' && styles.studioTabActive]}
+                onPress={() => setActiveTab('thoughts')}
+                accessibilityRole="tab"
+                accessibilityLabel="Train of Thought tab"
+              >
+                <Text style={[styles.studioTabLabel, activeTab === 'thoughts' && styles.studioTabLabelActive]}>
+                  03 THOUGHTS {chatMessages.length > 0 ? `(${chatMessages.length})` : ''}
                 </Text>
               </Pressable>
             </View>
 
-            {/* 1. CONCEPT BRIEF & NOTES (COLLAPSIBLE) */}
-            <View style={styles.sectionContainer}>
-              <Pressable
-                style={styles.accordionHeaderTouchable}
-                onPress={() => setCollapseConcept(!collapseConcept)}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle Concept & Specifications"
-              >
-                <View style={styles.accordionTitleGroup}>
-                  <Text style={styles.accordionTitle}>CONCEPT &amp; SPECIFICATIONS</Text>
-                  <Badge
-                    label={project.brief ? 'BRIEF WRITTEN' : 'EMPTY'}
-                    variant={project.brief ? 'inverse' : 'grade'}
-                    style={{ marginLeft: 6 }}
-                  />
-                </View>
-                <View style={styles.collapseToggleChip}>
-                  <Text style={styles.collapseToggleText}>
-                    {collapseConcept ? '▾ EXPAND' : '▴ COLLAPSE'}
-                  </Text>
-                </View>
-              </Pressable>
-
-              {collapseConcept ? (
-                <Pressable
-                  style={styles.collapsedPreviewCard}
-                  onPress={() => setCollapseConcept(false)}
-                >
-                  <Text style={styles.collapsedPreviewText} numberOfLines={2}>
-                    {project.brief ? `“${project.brief}”` : 'No concept brief written yet'}
-                  </Text>
-                  <View style={styles.collapsedMetaRow}>
-                    <Text style={styles.collapsedMetaText}>
-                      {(project.tags || []).length > 0
-                        ? project.tags.map((t) => `#${t}`).join(' ')
-                        : 'No tags'}
-                      {project.notes ? ' • Has specification notes' : ''}
-                    </Text>
-                    <Text style={styles.collapsedOpenHint}>TAP TO VIEW ▾</Text>
+            {/* TAB 1: CONCEPT & SPECS */}
+            {activeTab === 'overview' && (
+              <View style={styles.tabContent}>
+                {project.brief ? (
+                  <View style={styles.specSection}>
+                    <Text style={styles.specSectionLabel}>CONCEPT BRIEF</Text>
+                    <Card style={styles.specCard}>
+                      <Text style={styles.specBodyText}>{project.brief}</Text>
+                    </Card>
                   </View>
-                </Pressable>
-              ) : (
-                <View style={styles.sectionBody}>
-                  {project.brief ? (
-                    <Card style={styles.briefCard}>
-                      <Text style={styles.sectionHeading}>CONCEPT BRIEF</Text>
-                      <Text style={styles.bodyText}>{project.brief}</Text>
-                    </Card>
-                  ) : null}
+                ) : (
+                  <View style={styles.specSection}>
+                    <Text style={styles.specSectionLabel}>CONCEPT BRIEF</Text>
+                    <Pressable
+                      style={styles.specEmptyCard}
+                      onPress={() => setEditing(true)}
+                    >
+                      <Text style={styles.specEmptyText}>No concept brief written yet</Text>
+                      <Button
+                        title="✎ WRITE BRIEF"
+                        variant="secondary"
+                        onPress={() => setEditing(true)}
+                        style={{ height: 28, paddingHorizontal: 10 }}
+                      />
+                    </Pressable>
+                  </View>
+                )}
 
-                  {project.notes ? (
-                    <Card style={styles.notesCard}>
-                      <Text style={styles.sectionHeading}>NOTES &amp; SPECIFICATIONS</Text>
-                      <Text style={styles.bodyText}>{project.notes}</Text>
+                {project.notes ? (
+                  <View style={styles.specSection}>
+                    <Text style={styles.specSectionLabel}>NOTES &amp; SPECIFICATIONS</Text>
+                    <Card style={styles.specCard}>
+                      <Text style={styles.specBodyText}>{project.notes}</Text>
                     </Card>
-                  ) : null}
+                  </View>
+                ) : (
+                  <View style={styles.specSection}>
+                    <Text style={styles.specSectionLabel}>NOTES &amp; SPECIFICATIONS</Text>
+                    <Pressable
+                      style={styles.specEmptyCard}
+                      onPress={() => setEditing(true)}
+                    >
+                      <Text style={styles.specEmptyText}>No specification notes written yet</Text>
+                      <Button
+                        title="✎ ADD NOTES"
+                        variant="secondary"
+                        onPress={() => setEditing(true)}
+                        style={{ height: 28, paddingHorizontal: 10 }}
+                      />
+                    </Pressable>
+                  </View>
+                )}
 
-                  {(project.tags || []).length > 0 ? (
+                {(project.tags || []).length > 0 ? (
+                  <View style={styles.specSection}>
+                    <Text style={styles.specSectionLabel}>TAGS</Text>
                     <View style={styles.tagRow}>
                       {Array.from(new Set(project.tags)).map((t, idx) => (
                         <Badge
@@ -1014,314 +1080,152 @@ export default function ProjectDetailScreen() {
                         />
                       ))}
                     </View>
-                  ) : null}
-                </View>
-              )}
-            </View>
+                  </View>
+                ) : null}
 
-            {/* 2. MATCH INSPIRATIONS FROM DUMP (COLLAPSIBLE) */}
-            <View style={styles.sectionContainer}>
-              <Pressable
-                style={styles.accordionHeaderTouchable}
-                onPress={() => setCollapseMatcher(!collapseMatcher)}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle Dump Inspiration Matcher"
-              >
-                <View style={styles.accordionTitleGroup}>
-                  <Text style={styles.accordionTitle}>MATCH FROM INSPIRATION DUMP</Text>
-                  {matchedResults.length > 0 && (
-                    <Badge
-                      label={`${matchedResults.length} FOUND`}
-                      variant="inverse"
-                      style={{ marginLeft: 6 }}
-                    />
-                  )}
-                </View>
-                <View style={styles.collapseToggleChip}>
-                  <Text style={styles.collapseToggleText}>
-                    {collapseMatcher ? '▾ EXPAND' : '▴ COLLAPSE'}
-                  </Text>
-                </View>
-              </Pressable>
+                {/* Studio Cross-links Strip */}
+                <View style={styles.overviewNavStrip}>
+                  <Pressable
+                    style={styles.overviewNavCard}
+                    onPress={() => setActiveTab('references')}
+                  >
+                    <Text style={styles.overviewNavLabel}>VISUAL REFERENCES</Text>
+                    <Text style={styles.overviewNavCount}>{links.length} Linked</Text>
+                    <Text style={styles.overviewNavHint}>OPEN GALLERY →</Text>
+                  </Pressable>
 
-              {collapseMatcher ? (
-                <Pressable
-                  style={styles.collapsedPreviewCard}
-                  onPress={() => setCollapseMatcher(false)}
-                >
-                  <View style={styles.collapsedMatchRow}>
+                  <Pressable
+                    style={styles.overviewNavCard}
+                    onPress={() => setActiveTab('thoughts')}
+                  >
+                    <Text style={styles.overviewNavLabel}>TRAIN OF THOUGHT</Text>
+                    <Text style={styles.overviewNavCount}>{chatMessages.length} Messages</Text>
+                    <Text style={styles.overviewNavHint}>BRAINSTORM →</Text>
+                  </Pressable>
+                </View>
+
+                {/* DANGER ZONE */}
+                <View style={styles.dangerZoneCard}>
+                  <View style={styles.dangerZoneRow}>
                     <View style={{ flex: 1, marginRight: spacing.sm }}>
-                      <Text style={styles.collapsedPreviewText} numberOfLines={1}>
-                        {matchedResults.length > 0
-                          ? `${matchedResults.length} inspirations matched from your dump items`
-                          : 'Scan saved pins & links to match visual references'}
+                      <Text style={styles.dangerHeading}>DELETE THIS IDEA</Text>
+                      <Text style={styles.dangerText}>
+                        Permanently delete this idea and all associated data.
                       </Text>
                     </View>
+                    <Button
+                      title={deleting ? 'DELETING...' : 'DELETE IDEA'}
+                      onPress={handleDeleteProject}
+                      disabled={deleting}
+                      style={styles.dangerButton}
+                      textStyle={styles.dangerButtonText}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* TAB 2: REFERENCES */}
+            {activeTab === 'references' && (
+              <View style={styles.tabContent}>
+                {/* TOOLBAR */}
+                <View style={styles.tabHeaderToolbar}>
+                  <Text style={styles.tabSectionTitle}>
+                    ATTACHED REFERENCES ({links.length})
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
                     <Button
                       title={loadingSuggestions ? 'SCANNING...' : '⚡ SCAN DUMP'}
                       variant="secondary"
-                      onPress={() => {
-                        handleGetInspirationsFromDump();
-                      }}
-                      style={{ height: 30, paddingHorizontal: 10 }}
-                    />
-                  </View>
-                </Pressable>
-              ) : (
-                <View style={styles.sectionBody}>
-                  <Card style={styles.matchActionCard}>
-                    <Text style={styles.matchActionTitle}>
-                      ⚡ GET INSPIRATIONS FROM DUMP FOR THIS IDEA
-                    </Text>
-                    <Text style={styles.matchActionDesc}>
-                      Scans your saved inspirations from Pinterest, Instagram, TikTok, and Web to match relevant visual references.
-                    </Text>
-                    <Button
-                      title={loadingSuggestions ? 'ANALYZING DUMP...' : '⚡ FIND INSPIRATIONS FROM DUMP'}
                       onPress={handleGetInspirationsFromDump}
                       loading={loadingSuggestions}
-                      style={{ marginTop: spacing.sm, height: 38 }}
+                      style={{ height: 28, paddingHorizontal: 8 }}
                     />
-                  </Card>
-
-                  {matchedResults.length > 0 ? (
-                    <View style={styles.matchedSection}>
-                      <View style={styles.matchedSectionHeader}>
-                        <Text style={styles.sectionHeading}>
-                          MATCHED INSPIRATIONS ({matchedResults.length})
-                        </Text>
-                        <Button
-                          title="ATTACH ALL MATCHES"
-                          variant="primary"
-                          onPress={handleAttachAllMatches}
-                          style={{ height: 30, paddingHorizontal: 10 }}
-                        />
-                      </View>
-
-                      {matchedResults.map((result) => {
-                        const item = result.inspiration;
-                        return (
-                          <Card key={result.inspirationId} style={styles.matchedCard}>
-                            <View style={styles.matchedHeaderRow}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Badge
-                                  label={`${Math.round(result.confidence * 100)}% MATCH`}
-                                  variant="inverse"
-                                  style={{ marginRight: spacing.xs }}
-                                />
-                                {item.sourcePlatform ? (
-                                  <Badge
-                                    label={item.sourcePlatform.toUpperCase()}
-                                    variant="outline"
-                                  />
-                                ) : null}
-                              </View>
-                            </View>
-
-                            {item.remotePreviewImageUrl ? (
-                              <Image
-                                source={{ uri: item.remotePreviewImageUrl }}
-                                style={styles.matchedThumb}
-                                resizeMode="cover"
-                              />
-                            ) : null}
-
-                            <Text style={styles.matchedTitle}>{item.title}</Text>
-                            <Text style={styles.matchedReason}>💡 {result.reason}</Text>
-
-                            {item.url ? (
-                              <Pressable onPress={() => Linking.openURL(item.url!)}>
-                                <Text style={styles.urlLink} numberOfLines={1}>
-                                  ↗ {item.url}
-                                </Text>
-                              </Pressable>
-                            ) : null}
-
-                            <View style={styles.matchedButtonRow}>
-                              <Button
-                                title="+ ATTACH AS REFERENCE"
-                                variant="primary"
-                                onPress={() =>
-                                  handleAttachReference(
-                                    result.inspirationId,
-                                    result.reason,
-                                    result.confidence
-                                  )
-                                }
-                                style={{ height: 32, paddingHorizontal: 12 }}
-                              />
-                              <Button
-                                title="DISMISS"
-                                variant="text"
-                                onPress={() =>
-                                  setMatchedResults((prev) =>
-                                    prev.filter((r) => r.inspirationId !== result.inspirationId)
-                                  )
-                                }
-                                style={{ marginLeft: spacing.sm, height: 32, paddingHorizontal: 10 }}
-                              />
-                            </View>
-                          </Card>
-                        );
-                      })}
-                    </View>
-                  ) : hasSearched ? (
-                    <Card style={[styles.emptyLinksCard, { marginBottom: spacing.base }]}>
-                      <Text style={styles.emptyLinksTitle}>NO DIRECT MATCHES IN DUMP</Text>
-                      <Text style={styles.emptyLinksText}>
-                        No inspirations in your bank matched this idea&apos;s tags or concepts. You can dump more links in your Bank, or use &ldquo;+ BROWSE DUMP&rdquo; below to attach any saved reference manually.
-                      </Text>
-                    </Card>
-                  ) : null}
-                </View>
-              )}
-            </View>
-
-            {/* 3. ATTACHED REFERENCES (COLLAPSIBLE) */}
-            <View style={styles.sectionContainer}>
-              <View style={styles.accordionHeaderTouchable}>
-                <Pressable
-                  style={styles.accordionTitleGroup}
-                  onPress={() => setCollapseReferences(!collapseReferences)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Toggle Attached References"
-                >
-                  <Text style={styles.accordionTitle}>ATTACHED REFERENCES</Text>
-                  <Badge
-                    label={`${links.length}`}
-                    variant={links.length > 0 ? 'inverse' : 'grade'}
-                    style={{ marginLeft: 6 }}
-                  />
-                </Pressable>
-                <View style={styles.accordionActionGroup}>
-                  <Button
-                    title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
-                    variant="secondary"
-                    onPress={() => {
-                      if (collapseReferences) setCollapseReferences(false);
-                      setShowManualPicker(!showManualPicker);
-                    }}
-                    style={{ height: 28, paddingHorizontal: 8, marginRight: 6 }}
-                  />
-                  <Pressable
-                    onPress={() => setCollapseReferences(!collapseReferences)}
-                    style={styles.collapseToggleChip}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.collapseToggleText}>
-                      {collapseReferences ? '▾ EXPAND' : '▴ COLLAPSE'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              {collapseReferences ? (
-                <Pressable
-                  style={styles.collapsedPreviewCard}
-                  onPress={() => setCollapseReferences(false)}
-                >
-                  <View style={styles.collapsedBetweenRow}>
-                    <Text style={styles.collapsedPreviewText}>
-                      {links.length === 0
-                        ? 'No references attached yet'
-                        : `${links.length} visual reference${links.length === 1 ? '' : 's'} linked`}
-                    </Text>
-                    <Text style={styles.collapsedOpenHint}>TAP TO VIEW ▾</Text>
+                    <Button
+                      title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
+                      variant="secondary"
+                      onPress={() => setShowManualPicker(!showManualPicker)}
+                      style={{ height: 28, paddingHorizontal: 8 }}
+                    />
                   </View>
-                </Pressable>
-              ) : (
-                <View style={styles.sectionBody}>
-                  {/* MANUAL DUMP PICKER */}
-                  {showManualPicker ? (
-                    <Card style={styles.pickerCard}>
-                      <Text style={styles.pickerTitle}>SELECT ANY INSPIRATION FROM YOUR DUMP</Text>
-                      {unattachedDumpItems.length === 0 ? (
-                        <Text style={styles.emptyLinksText}>All dump items are already attached!</Text>
-                      ) : (
-                        unattachedDumpItems.map((item) => (
-                          <View key={item.id} style={styles.pickerRow}>
-                            <View style={{ flex: 1, marginRight: spacing.xs }}>
-                              <Text style={styles.pickerItemTitle} numberOfLines={1}>
-                                {item.title}
-                              </Text>
-                              <Text style={styles.pickerItemSub}>
-                                {item.sourcePlatform ? item.sourcePlatform.toUpperCase() : item.kind}
-                              </Text>
-                            </View>
-                            <Button
-                              title="+ ATTACH"
-                              variant="secondary"
-                              onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
-                              style={{ height: 28, paddingHorizontal: 8 }}
-                            />
-                          </View>
-                        ))
-                      )}
-                    </Card>
-                  ) : null}
+                </View>
 
-                  {links.length === 0 ? (
-                    <Card style={styles.emptyLinksCard}>
-                      <Text style={styles.emptyLinksTitle}>NO REFERENCES ATTACHED YET</Text>
-                      <Text style={styles.emptyLinksText}>
-                        Click &ldquo;Find Inspirations From Dump&rdquo; above to automatically match and attach references from your saved items.
+                {/* MANUAL DUMP PICKER */}
+                {showManualPicker ? (
+                  <Card style={styles.pickerCard}>
+                    <Text style={styles.pickerTitle}>SELECT ANY INSPIRATION FROM YOUR DUMP</Text>
+                    {unattachedDumpItems.length === 0 ? (
+                      <Text style={styles.emptyLinksText}>All dump items are already attached!</Text>
+                    ) : (
+                      unattachedDumpItems.map((item) => (
+                        <View key={item.id} style={styles.pickerRow}>
+                          <View style={{ flex: 1, marginRight: spacing.xs }}>
+                            <Text style={styles.pickerItemTitle} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            <Text style={styles.pickerItemSub}>
+                              {item.sourcePlatform ? item.sourcePlatform.toUpperCase() : item.kind}
+                            </Text>
+                          </View>
+                          <Button
+                            title="+ ATTACH"
+                            variant="secondary"
+                            onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
+                            style={{ height: 28, paddingHorizontal: 8 }}
+                          />
+                        </View>
+                      ))
+                    )}
+                  </Card>
+                ) : null}
+
+                {/* AI MATCHED RESULTS */}
+                {matchedResults.length > 0 && (
+                  <View style={styles.matchedSection}>
+                    <View style={styles.matchedSectionHeader}>
+                      <Text style={styles.sectionHeading}>
+                        MATCHED INSPIRATIONS ({matchedResults.length})
                       </Text>
-                    </Card>
-                  ) : (
-                    links.map((link) => {
-                      const item = bankMap[link.inspirationId];
-                      return (
-                        <Card key={link.id} style={styles.linkCard}>
-                          <View style={styles.linkCardHeader}>
-                            <View style={{ flex: 1, marginRight: spacing.xs }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                                {item?.sourcePlatform ? (
-                                  <Badge
-                                    label={item.sourcePlatform.toUpperCase()}
-                                    variant="inverse"
-                                    style={{ marginRight: 6 }}
-                                  />
-                                ) : null}
-                                <Badge
-                                  label={link.linkedBy === 'ai' ? 'ATTACHED MATCH' : 'ATTACHED REFERENCE'}
-                                  variant="grade"
-                                />
-                              </View>
-                              <Text style={styles.linkTitle} numberOfLines={2}>
-                                {item ? item.title : `Reference ${link.inspirationId}`}
-                              </Text>
-                              {item?.editorialContext ? (
-                                <Text style={styles.linkReason} numberOfLines={2}>
-                                  {item.editorialContext}
-                                </Text>
-                              ) : link.reason ? (
-                                <Text style={styles.linkReason}>💡 {link.reason}</Text>
-                              ) : null}
+                      <Button
+                        title="ATTACH ALL MATCHES"
+                        variant="primary"
+                        onPress={handleAttachAllMatches}
+                        style={{ height: 28, paddingHorizontal: 8 }}
+                      />
+                    </View>
 
-                              {item?.tags && item.tags.length > 0 ? (
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                                  {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
-                                    <Badge
-                                      key={`item-tag-${t}-${idx}`}
-                                      label={`#${t}`}
-                                      variant="grade"
-                                      style={{ marginRight: 4, marginBottom: 2 }}
-                                    />
-                                  ))}
-                                </View>
+                    {matchedResults.map((result) => {
+                      const item = result.inspiration;
+                      return (
+                        <Card key={result.inspirationId} style={styles.matchedCard}>
+                          <View style={styles.matchedHeaderRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Badge
+                                label={`${Math.round(result.confidence * 100)}% MATCH`}
+                                variant="inverse"
+                                style={{ marginRight: spacing.xs }}
+                              />
+                              {item.sourcePlatform ? (
+                                <Badge
+                                  label={item.sourcePlatform.toUpperCase()}
+                                  variant="outline"
+                                />
                               ) : null}
                             </View>
-
-                            {item?.remotePreviewImageUrl ? (
-                              <Image
-                                source={{ uri: item.remotePreviewImageUrl }}
-                                style={styles.attachedThumb}
-                                resizeMode="cover"
-                              />
-                            ) : null}
                           </View>
 
-                          {item?.url ? (
+                          {item.remotePreviewImageUrl ? (
+                            <Image
+                              source={{ uri: item.remotePreviewImageUrl }}
+                              style={styles.matchedThumb}
+                              resizeMode="cover"
+                            />
+                          ) : null}
+
+                          <Text style={styles.matchedTitle}>{item.title}</Text>
+                          <Text style={styles.matchedReason}>💡 {result.reason}</Text>
+
+                          {item.url ? (
                             <Pressable onPress={() => Linking.openURL(item.url!)}>
                               <Text style={styles.urlLink} numberOfLines={1}>
                                 ↗ {item.url}
@@ -1329,47 +1233,134 @@ export default function ProjectDetailScreen() {
                             </Pressable>
                           ) : null}
 
-                          <View style={styles.linkActions}>
-                            {item ? (
-                              <Button
-                                title="VIEW IN BANK →"
-                                variant="text"
-                                onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
-                                style={{ marginRight: spacing.base, height: 28, paddingHorizontal: 4 }}
-                              />
-                            ) : null}
+                          <View style={styles.matchedButtonRow}>
                             <Button
-                              title="✕ DETACH"
+                              title="+ ATTACH AS REFERENCE"
+                              variant="primary"
+                              onPress={() =>
+                                handleAttachReference(
+                                  result.inspirationId,
+                                  result.reason,
+                                  result.confidence
+                                )
+                              }
+                              style={{ height: 28, paddingHorizontal: 10 }}
+                            />
+                            <Button
+                              title="DISMISS"
                               variant="text"
-                              onPress={() => handleDetachReference(link.inspirationId)}
-                              style={{ height: 28, paddingHorizontal: 4 }}
+                              onPress={() =>
+                                setMatchedResults((prev) =>
+                                  prev.filter((r) => r.inspirationId !== result.inspirationId)
+                                )
+                              }
+                              style={{ marginLeft: spacing.sm, height: 28, paddingHorizontal: 8 }}
                             />
                           </View>
                         </Card>
                       );
-                    })
-                  )}
-                </View>
-              )}
-            </View>
+                    })}
+                  </View>
+                )}
 
-            {/* 4. TRAIN OF THOUGHT (COLLAPSIBLE & LINKABLE) */}
-            <View style={styles.sectionContainer}>
-              <View style={styles.accordionHeaderTouchable}>
-                <Pressable
-                  style={styles.accordionTitleGroup}
-                  onPress={() => setCollapseThoughts(!collapseThoughts)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Toggle Train of Thought"
-                >
-                  <Text style={styles.accordionTitle}>TRAIN OF THOUGHT</Text>
-                  <Badge
-                    label={`${chatMessages.length} THOUGHTS`}
-                    variant={chatMessages.length > 0 ? 'inverse' : 'grade'}
-                    style={{ marginLeft: 6 }}
-                  />
-                </Pressable>
-                <View style={styles.accordionActionGroup}>
+                {/* ATTACHED REFERENCES LIST */}
+                {links.length === 0 ? (
+                  <Card style={styles.emptyLinksCard}>
+                    <Text style={styles.emptyLinksTitle}>NO REFERENCES ATTACHED YET</Text>
+                    <Text style={styles.emptyLinksText}>
+                      Tap &ldquo;⚡ SCAN DUMP&rdquo; above to automatically match references from your saved items, or &ldquo;+ BROWSE DUMP&rdquo; to attach manually.
+                    </Text>
+                  </Card>
+                ) : (
+                  links.map((link) => {
+                    const item = bankMap[link.inspirationId];
+                    return (
+                      <Card key={link.id} style={styles.linkCard}>
+                        <View style={styles.linkCardHeader}>
+                          <View style={{ flex: 1, marginRight: spacing.xs }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                              {item?.sourcePlatform ? (
+                                <Badge
+                                  label={item.sourcePlatform.toUpperCase()}
+                                  variant="inverse"
+                                  style={{ marginRight: 6 }}
+                                />
+                              ) : null}
+                              <Badge
+                                label={link.linkedBy === 'ai' ? 'ATTACHED MATCH' : 'ATTACHED REFERENCE'}
+                                variant="grade"
+                              />
+                            </View>
+                            <Text style={styles.linkTitle} numberOfLines={2}>
+                              {item ? item.title : `Reference ${link.inspirationId}`}
+                            </Text>
+                            {item?.editorialContext ? (
+                              <Text style={styles.linkReason} numberOfLines={2}>
+                                {item.editorialContext}
+                              </Text>
+                            ) : link.reason ? (
+                              <Text style={styles.linkReason}>💡 {link.reason}</Text>
+                            ) : null}
+
+                            {item?.tags && item.tags.length > 0 ? (
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+                                {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
+                                  <Badge
+                                    key={`item-tag-${t}-${idx}`}
+                                    label={`#${t}`}
+                                    variant="grade"
+                                    style={{ marginRight: 4, marginBottom: 2 }}
+                                  />
+                                ))}
+                              </View>
+                            ) : null}
+                          </View>
+
+                          {item?.remotePreviewImageUrl ? (
+                            <Image
+                              source={{ uri: item.remotePreviewImageUrl }}
+                              style={styles.attachedThumb}
+                              resizeMode="cover"
+                            />
+                          ) : null}
+                        </View>
+
+                        {item?.url ? (
+                          <Pressable onPress={() => Linking.openURL(item.url!)}>
+                            <Text style={styles.urlLink} numberOfLines={1}>
+                              ↗ {item.url}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+
+                        <View style={styles.linkActions}>
+                          {item ? (
+                            <Button
+                              title="VIEW IN BANK →"
+                              variant="text"
+                              onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
+                              style={{ marginRight: spacing.base, height: 28, paddingHorizontal: 4 }}
+                            />
+                          ) : null}
+                          <Button
+                            title="✕ DETACH"
+                            variant="text"
+                            onPress={() => handleDetachReference(link.inspirationId)}
+                            style={{ height: 28, paddingHorizontal: 4 }}
+                          />
+                        </View>
+                      </Card>
+                    );
+                  })
+                )}
+              </View>
+            )}
+
+            {/* TAB 3: THOUGHTS */}
+            {activeTab === 'thoughts' && (
+              <View style={styles.tabContent}>
+                {/* TOOLBAR */}
+                <View style={styles.tabHeaderToolbar}>
                   <Pressable
                     style={styles.modelPillButton}
                     onPress={() => setShowModelModal(true)}
@@ -1380,65 +1371,24 @@ export default function ProjectDetailScreen() {
                       ⚡ {selectedModel.replace('gemini-', '').toUpperCase()} ▾
                     </Text>
                   </Pressable>
-                  <Button
-                    title="+ LINK CHAT"
-                    variant="secondary"
-                    onPress={handleOpenLinkChatModal}
-                    style={{ height: 28, paddingHorizontal: 8, marginHorizontal: 4 }}
-                  />
-                  <Button
-                    title="💬 FULL CHAT ↗"
-                    variant="primary"
-                    onPress={handleOpenFullChat}
-                    style={{ height: 28, paddingHorizontal: 8, marginRight: 4 }}
-                  />
-                  <Pressable
-                    onPress={() => setCollapseThoughts(!collapseThoughts)}
-                    style={styles.collapseToggleChip}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.collapseToggleText}>
-                      {collapseThoughts ? '▾ EXPAND' : '▴ COLLAPSE'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
 
-              {collapseThoughts ? (
-                <Pressable
-                  style={styles.collapsedPreviewCard}
-                  onPress={() => setCollapseThoughts(false)}
-                >
-                  <View style={styles.collapsedBetweenRow}>
-                    <View style={{ flex: 1, marginRight: spacing.sm }}>
-                      <Text style={styles.collapsedTitleText} numberOfLines={1}>
-                        💬 {ideaChat?.title || 'Idea Train of Thought'}
-                      </Text>
-                      <Text style={styles.collapsedMetaText}>
-                        {chatMessages.length > 0
-                          ? `${chatMessages.length} brainstorm message${chatMessages.length === 1 ? '' : 's'} • ${selectedModel.replace('gemini-', '').toUpperCase()}`
-                          : 'Interactive thought stream • Tap to brainstorm'}
-                      </Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Button
-                        title="+ LINK"
-                        variant="secondary"
-                        onPress={handleOpenLinkChatModal}
-                        style={{ height: 28, paddingHorizontal: 8 }}
-                      />
-                      <Button
-                        title="💬 OPEN ↗"
-                        variant="primary"
-                        onPress={handleOpenFullChat}
-                        style={{ height: 28, paddingHorizontal: 8 }}
-                      />
-                    </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <Button
+                      title="+ LINK CHAT"
+                      variant="secondary"
+                      onPress={handleOpenLinkChatModal}
+                      style={{ height: 28, paddingHorizontal: 8 }}
+                    />
+                    <Button
+                      title="💬 FULL CHAT ↗"
+                      variant="primary"
+                      onPress={handleOpenFullChat}
+                      style={{ height: 28, paddingHorizontal: 8 }}
+                    />
                   </View>
-                </Pressable>
-              ) : (
-                <View style={styles.sectionBody}>
-                  <Card style={styles.thoughtCard}>
+                </View>
+
+                <Card style={styles.thoughtCard}>
                     <View style={styles.thoughtBannerRow}>
                       <Text style={styles.thoughtBannerText}>
                         Interactive thought flow linked to &ldquo;{ideaChat?.title || project.title}&rdquo;. Tap any thought to open full-screen view.
@@ -1570,6 +1520,42 @@ export default function ProjectDetailScreen() {
                                       </View>
                                     </View>
                                   )}
+                                  {/* ACTION ROW: ADD THOUGHT TO IDEA NOTES / BRIEF */}
+                                  <View style={styles.thoughtActionRow}>
+                                    <Pressable
+                                      style={styles.thoughtActionBtn}
+                                      onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        handleAddThoughtToNotes(msg.content);
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="Add to idea notes"
+                                    >
+                                      <Text style={styles.thoughtActionBtnText}>+ ADD TO NOTES</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      style={styles.thoughtActionBtn}
+                                      onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        handleSetThoughtAsBrief(msg.content);
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="Set as brief"
+                                    >
+                                      <Text style={styles.thoughtActionBtnText}>SET AS BRIEF</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      style={styles.thoughtActionBtn}
+                                      onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        handleOpenFullChat();
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="Open in full chat"
+                                    >
+                                      <Text style={styles.thoughtActionBtnText}>↗ FULL CHAT</Text>
+                                    </Pressable>
+                                  </View>
                                 </View>
                               </Pressable>
                             );
@@ -1690,7 +1676,6 @@ export default function ProjectDetailScreen() {
                   </Card>
                 </View>
               )}
-            </View>
 
             {/* LINK TRAIN OF THOUGHT MODAL */}
             <Modal visible={showLinkChatModal} animationType="slide" transparent>
@@ -1976,25 +1961,6 @@ export default function ProjectDetailScreen() {
                 </View>
               </SafeAreaView>
             </Modal>
-
-            {/* DANGER ZONE */}
-            <Card style={styles.dangerZoneCard}>
-              <View style={styles.dangerZoneRow}>
-                <View style={{ flex: 1, marginRight: spacing.sm }}>
-                  <Text style={styles.dangerHeading}>DANGER ZONE</Text>
-                  <Text style={styles.dangerText}>
-                    Permanently delete this idea and all linked references.
-                  </Text>
-                </View>
-                <Button
-                  title="DELETE IDEA"
-                  variant="secondary"
-                  onPress={handleDeleteProject}
-                  style={styles.dangerButton}
-                  textStyle={styles.dangerButtonText}
-                />
-              </View>
-            </Card>
           </View>
         )}
       </ScrollView>
@@ -2524,123 +2490,168 @@ const getStyles = (colors: ThemeColors) =>
     ...typography.captionSm,
     color: colors.inkSoft,
   },
-  collapseAllRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: spacing.base,
-  },
-  collapseAllBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    backgroundColor: colors.surfaceGrade,
-  },
-  collapseAllText: {
-    ...typography.captionCap,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.ink,
-    letterSpacing: 0.8,
-  },
-  sectionContainer: {
-    marginBottom: spacing.base,
-  },
-  accordionHeaderRow: {
+  toastBanner: {
+    backgroundColor: colors.ink,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
     marginBottom: spacing.xs,
   },
-  accordionHeaderTouchable: {
+  toastText: {
+    ...typography.captionCap,
+    color: colors.onInk,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+  headerArea: {
+    marginBottom: spacing.sm,
+  },
+  titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: colors.surfaceGrade,
-    borderWidth: 1,
-    borderColor: colors.hairlineSoft,
-    marginBottom: spacing.xs,
   },
-  accordionTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  projectTitle: {
+    ...typography.displayMd,
+    fontSize: 22,
+    color: colors.ink,
     flex: 1,
+    marginRight: spacing.sm,
+  },
+  studioTabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairlineSoft,
+    marginBottom: spacing.base,
+    backgroundColor: colors.canvas,
+  },
+  studioTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
     marginRight: spacing.xs,
   },
-  accordionTitle: {
+  studioTabActive: {
+    borderBottomColor: colors.ink,
+  },
+  studioTabLabel: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+  },
+  studioTabLabelActive: {
+    color: colors.ink,
+    fontWeight: '800',
+  },
+  tabContent: {
+    marginBottom: spacing.base,
+  },
+  tabHeaderToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  tabSectionTitle: {
     ...typography.captionCap,
     fontSize: 10,
     fontWeight: '800',
     color: colors.ink,
     letterSpacing: 0.8,
   },
-  accordionActionGroup: {
+  specSection: {
+    marginBottom: spacing.base,
+  },
+  specSectionLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 1,
+    marginBottom: spacing.xxs,
+  },
+  specCard: {
+    borderWidth: 1,
+    borderColor: colors.hairlineSoft,
+    backgroundColor: colors.surfaceGrade,
+    padding: spacing.base,
+  },
+  specBodyText: {
+    ...typography.bodyMd,
+    color: colors.ink,
+    lineHeight: 22,
+  },
+  specEmptyCard: {
+    borderWidth: 1,
+    borderColor: colors.hairlineSoft,
+    borderStyle: 'dashed',
+    padding: spacing.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  specEmptyText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    marginBottom: spacing.xs,
+  },
+  overviewNavStrip: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.base,
+  },
+  overviewNavCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    padding: spacing.sm,
+  },
+  overviewNavLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    marginBottom: 2,
+  },
+  overviewNavCount: {
+    ...typography.bodyMd,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  overviewNavHint: {
+    ...typography.captionCap,
+    fontSize: 8,
+    color: colors.ink,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  thoughtActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineSoft,
+    gap: 6,
+    flexWrap: 'wrap',
   },
-  collapseToggleChip: {
+  thoughtActionBtn: {
     borderWidth: 1,
     borderColor: colors.hairline,
     backgroundColor: colors.canvas,
     paddingVertical: 3,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
-  collapseToggleText: {
+  thoughtActionBtnText: {
     ...typography.captionCap,
     fontSize: 8,
     fontWeight: '700',
     color: colors.ink,
     letterSpacing: 0.5,
-  },
-  collapsedPreviewCard: {
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    backgroundColor: colors.canvas,
-    padding: spacing.sm,
-  },
-  collapsedPreviewText: {
-    ...typography.bodyMd,
-    fontSize: 12,
-    color: colors.ink,
-    lineHeight: 18,
-  },
-  collapsedMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  collapsedMetaText: {
-    ...typography.captionCap,
-    fontSize: 9,
-    color: colors.inkSoft,
-    flex: 1,
-    marginRight: spacing.xs,
-  },
-  collapsedOpenHint: {
-    ...typography.captionCap,
-    fontSize: 8,
-    fontWeight: '700',
-    color: colors.ink,
-  },
-  collapsedMatchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  collapsedBetweenRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  collapsedTitleText: {
-    ...typography.bodyMd,
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.ink,
-    marginBottom: 2,
-  },
-  sectionBody: {
-    marginTop: 2,
   },
   newChatCard: {
     backgroundColor: colors.surfaceGrade,
