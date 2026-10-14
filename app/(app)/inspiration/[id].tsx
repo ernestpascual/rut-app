@@ -29,6 +29,7 @@ import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
 import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
+import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function InspirationDetailScreen() {
   const router = useRouter();
@@ -272,8 +273,14 @@ export default function InspirationDetailScreen() {
               value={editNote}
               onChangeText={setEditNote}
               multiline
-              numberOfLines={4}
-              style={{ height: 100, textAlignVertical: 'top' }}
+              numberOfLines={1}
+              style={{
+                height: calculateDynamicInputHeight(editNote),
+                maxHeight: 124,
+                paddingTop: 10,
+                paddingBottom: 10,
+                textAlignVertical: 'top',
+              }}
             />
 
             <View style={styles.tagSection}>

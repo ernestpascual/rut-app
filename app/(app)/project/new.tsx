@@ -20,6 +20,7 @@ import { ProjectCreateSchema } from '../../../src/lib/validation/schemas';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { Project } from '../../../src/types';
 import { saveProject } from '../../../src/features/dump/dumpService';
+import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function NewProjectScreen() {
   const router = useRouter();
@@ -162,8 +163,14 @@ export default function NewProjectScreen() {
           onChangeText={setBrief}
           placeholder="What is this project aiming to solve or create?"
           multiline
-          numberOfLines={3}
-          style={{ height: 80, textAlignVertical: 'top' }}
+          numberOfLines={1}
+          style={{
+            height: calculateDynamicInputHeight(brief),
+            maxHeight: 124,
+            paddingTop: 10,
+            paddingBottom: 10,
+            textAlignVertical: 'top',
+          }}
         />
 
         <Input
@@ -172,8 +179,14 @@ export default function NewProjectScreen() {
           onChangeText={setNotes}
           placeholder="Draft thoughts, required components, references..."
           multiline
-          numberOfLines={4}
-          style={{ height: 100, textAlignVertical: 'top' }}
+          numberOfLines={1}
+          style={{
+            height: calculateDynamicInputHeight(notes),
+            maxHeight: 124,
+            paddingTop: 10,
+            paddingBottom: 10,
+            textAlignVertical: 'top',
+          }}
         />
 
         <View style={styles.tagSection}>

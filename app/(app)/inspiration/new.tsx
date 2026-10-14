@@ -40,6 +40,7 @@ import {
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
 import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
+import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function NewInspirationScreen() {
   const router = useRouter();
@@ -383,8 +384,14 @@ export default function NewInspirationScreen() {
             onChangeText={setUserNote}
             placeholder="What does this spark? Key thoughts or concepts..."
             multiline
-            numberOfLines={4}
-            style={{ height: 100, textAlignVertical: 'top' }}
+            numberOfLines={1}
+            style={{
+              height: calculateDynamicInputHeight(userNote),
+              maxHeight: 124,
+              paddingTop: 10,
+              paddingBottom: 10,
+              textAlignVertical: 'top',
+            }}
           />
 
           <View style={styles.tagSection}>

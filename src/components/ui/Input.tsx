@@ -21,6 +21,7 @@ export const Input: React.FC<InputProps> = ({
   error,
   containerStyle,
   style,
+  numberOfLines,
   ...rest
 }) => {
   const { colors } = useTheme();
@@ -29,9 +30,10 @@ export const Input: React.FC<InputProps> = ({
     <View style={[styles.container, containerStyle]}>
       {label ? <Text style={[styles.label, { color: colors.ink }]}>{label}</Text> : null}
       <TextInput
+        numberOfLines={numberOfLines !== undefined ? numberOfLines : (rest.multiline ? 1 : undefined)}
         style={[
           styles.input,
-          rest.multiline ? { height: undefined, minHeight: 44 } : null,
+          rest.multiline ? { height: undefined, minHeight: 44, textAlignVertical: 'top' } : null,
           {
             backgroundColor: colors.canvas,
             borderColor: colors.ink,

@@ -64,6 +64,7 @@ import {
   exportIdeaAsDoc,
   generateIdeaContextMarkdown,
 } from '../../../src/features/ideas/ideaExporter';
+import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -842,8 +843,14 @@ export default function ProjectDetailScreen() {
               onChangeText={setEditBrief}
               placeholder="Describe your creative concept, problem, or vision..."
               multiline
-              numberOfLines={3}
-              style={{ height: 80, textAlignVertical: 'top' }}
+              numberOfLines={1}
+              style={{
+                height: calculateDynamicInputHeight(editBrief),
+                maxHeight: 124,
+                paddingTop: 10,
+                paddingBottom: 10,
+                textAlignVertical: 'top',
+              }}
             />
             <Input
               label="NOTES &amp; SPECIFICATIONS"
@@ -851,8 +858,14 @@ export default function ProjectDetailScreen() {
               onChangeText={setEditNotes}
               placeholder="Material details, color palettes, visual references, typography requirements..."
               multiline
-              numberOfLines={5}
-              style={{ height: 120, textAlignVertical: 'top' }}
+              numberOfLines={1}
+              style={{
+                height: calculateDynamicInputHeight(editNotes),
+                maxHeight: 124,
+                paddingTop: 10,
+                paddingBottom: 10,
+                textAlignVertical: 'top',
+              }}
             />
 
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
@@ -1649,9 +1662,22 @@ export default function ProjectDetailScreen() {
                           value={chatInputText}
                           onChangeText={setChatInputText}
                           placeholder="Type a thought, critique, or inquiry..."
+                          multiline
+                          numberOfLines={1}
+                          style={{
+                            height: calculateDynamicInputHeight(chatInputText),
+                            maxHeight: 124,
+                            paddingTop: 10,
+                            paddingBottom: 10,
+                            textAlignVertical: 'top',
+                          }}
                           containerStyle={{ flex: 1, marginVertical: 0 }}
-                          onSubmitEditing={() => handleSendThought()}
-                          returnKeyType="send"
+                          onKeyPress={(e: any) => {
+                            if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                              e.preventDefault?.();
+                              handleSendThought();
+                            }
+                          }}
                         />
                         <Button
                           title={sendingThought ? '...' : 'THINK →'}
@@ -2461,7 +2487,7 @@ const getStyles = (colors: ThemeColors) =>
   },
   thoughtInputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   modalOverlay: {
     flex: 1,

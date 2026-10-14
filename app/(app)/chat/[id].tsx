@@ -52,6 +52,7 @@ import {
   setWebAccessPreference,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
+import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function ChatWorkspaceScreen() {
   const router = useRouter();
@@ -583,20 +584,19 @@ export default function ChatWorkspaceScreen() {
           </View>
         ) : null}
 
-        {/* Input Bar (Auto-expanding textarea up to 5 lines) */}
+        {/* Input Bar (Auto-expanding textarea up to 5 lines, default 1 line) */}
         <View style={styles.inputBar}>
           <Input
             value={inputText}
             onChangeText={(text) => {
               setInputText(text);
-              if (!text) setInputHeight(44);
+              setInputHeight(calculateDynamicInputHeight(text));
             }}
             multiline
+            numberOfLines={1}
             onContentSizeChange={(e) => {
               const contentHeight = e.nativeEvent.contentSize.height;
-              // Starts at 44px (1 line), expands as lines are added up to 5 lines (~124px max)
-              const calculatedHeight = Math.min(124, Math.max(44, Math.round(contentHeight + 8)));
-              setInputHeight(calculatedHeight);
+              setInputHeight(calculateDynamicInputHeight(inputText, contentHeight));
             }}
             onKeyPress={(e: any) => {
               if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
