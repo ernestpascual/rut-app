@@ -594,45 +594,32 @@ export function synthesizeThoughtTrain(params: {
     q.startsWith('hey ') ||
     q.includes('who are you')
   ) {
-    body = `👋 Hey! I'm **rut Agent** — your creative AI collaborator and design strategist.
+    body = `Hey! I'm **rut Agent** — your creative sounding board and design collaborator.
 
-You can freely converse with me as you brainstorm: explore aesthetic hypotheses, critique ideas, draft copy, or toggle **🌐 WEB** to search live cultural movements.
-
-I also have access to your personal inspiration **Dump** (${candidatePool.length} saves active). I'll draw on your saves whenever relevant, or you can ask me directly to look into them. What are you exploring right now?`;
+We can brainstorm ideas, bounce aesthetic directions around, explore materials, or dig into your inspiration dump (${candidatePool.length} saves currently in your bank). What are you working on or thinking about right now?`;
   }
   // 2. Explicit Dump query or pulling from dump
   else if (isDumpPullQuery && topMatches.length > 0) {
-    body = `### 📥 PULLED FROM YOUR DUMP & INSPIRATION BANK
+    const listItems = topMatches.map((m) => {
+      const item = m.item;
+      const domainStr = item.siteName || item.sourceDomain || (item.sourcePlatform ? item.sourcePlatform.toUpperCase() : 'Web');
+      const note = item.userNote || item.editorialContext || item.previewDescription || '';
+      return `• **"${item.title}"** [ID: ${item.id}] (${domainStr})${note ? ` — *${note}*` : ''}`;
+    }).join('\n');
 
-I took a look into your Dump knowledge base for **${ideaTitle}**. Here are the most resonant saves and conceptual connections:
-
-${topMatches
-  .map((m, idx) => {
-    const item = m.item;
-    const domainStr = item.siteName || item.sourceDomain || (item.sourcePlatform ? item.sourcePlatform.toUpperCase() : 'Web');
-    return `${idx + 1}. **"${item.title}"** [ID: ${item.id}] (${domainStr})
-   • **Aesthetic Note**: ${item.userNote || item.editorialContext || item.previewDescription || 'Saved reference'}
-   • **Connection**: Brings tactile restraint and editorial tension to anchor your concept.`;
-  })
-  .join('\n\n')}
-
-How should we synthesize these references—should we lean into the raw texture or the structured spatial hierarchy?`;
+    body = `I took a look through your saved inspirations for **${ideaTitle}**. Here are the references that resonate most with what you're exploring:\n\n${listItems}\n\nDo you want to lean further into these textures and forms, or take this in a different direction?`;
   }
   // 3. Palette, Materials, & Textures
   else if (q.includes('palette') || q.includes('material') || q.includes('color') || q.includes('texture')) {
     const dumpTieIn = topMatches.length > 0
-      ? `\n\nDrawing inspiration from your saved reference **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], we can balance these surfaces with deliberate negative space.`
+      ? ` Looking at your saved reference **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], that tactile quality would fit right in.`
       : '';
 
-    body = `### MATERIALITY & PALETTE MATRIX
+    body = `For **${ideaTitle}**, you could ground this in a high-contrast palette: sharp optical white against deep obsidian carbon black, softened with warm plaster and slate grey tones.
 
-Here is a tactile materiality and palette direction for **${ideaTitle}**:
+For physical materiality, honed basalt, brushed aluminum, and unbleached paper create a great tactile tension between raw aggregate and machined precision.${dumpTieIn}
 
-• **Monochrome Baseline**: Optical high-contrast white against deep carbon obsidian (#0d0d0d). Clean, clinical, and unapologetic.
-• **Tactile Finishes**: Honed basalt slate, brushed aluminum, porous travertine, and matte unbleached paper. Rough aggregate paired with precision edges.
-• **Atmospheric Mid-Tones**: Muted slate grey (#2a2a2a) and warm plaster dust (#e8e4df).${dumpTieIn}
-
-Which physical surface should dominate the initial prototype: the unpolished stone or the precision metal?`;
+What kind of texture do you want people to notice first—something unpolished and raw, or clean and minimal?`;
   }
   // 4. Conceptual Variations & Angles
   else if (
@@ -642,31 +629,23 @@ Which physical surface should dominate the initial prototype: the unpolished sto
     q.includes('different') ||
     q.includes('conceptual')
   ) {
-    body = `### DIVERGENT CONCEPTUAL ANGLES FOR "${ideaTitle.toUpperCase()}"
+    body = `Here are a few ways we could push **${ideaTitle}**:
 
-1. **The Brutalist Monolith**:
-   Maximize density and visual weight. Treat the entire execution as an imposing, immovable block where negative space is as physically felt as the mass itself.
+One angle is to treat it like a brutalist monolith—maximize the visual density and weight so negative space feels intentional and heavy.
 
-2. **The Deconstructed Lookbook**:
-   Break the concept down into an archival index or sequential fragments. Instead of a single final piece, present it as a clinical study of materials, process, and prototypes.
+Another angle is a deconstructed lookbook or archival index. Instead of presenting a single finished artifact, you treat it like an open study of fragments, process, and raw materials.
 
-3. **High-Contrast Micro-Scale**:
-   Flip conventional proportions. Pair immense typographic scale or monumental framing with ultra-delicate tactile details that reward close inspection.
+You could also flip the scale: use monumental typography and framing contrasted with ultra-subtle tactile details that only reveal themselves up close.
 
-### 💡 SPARK QUESTION
-Which direction creates the most exciting friction with your current vision: absolute monolithic weight or fragmented archival sequencing?`;
+Which of those feels closest to what you have in mind?`;
   }
   // 5. Critique, Refine, Polish
   else if (q.includes('brief') || q.includes('refine') || q.includes('polish') || q.includes('critique')) {
-    body = `### EDITORIAL BRIEF REFINEMENT & PRESSURE TEST
+    body = `Taking a critical look at **${ideaTitle}**, the strongest question to ask is what single tension holds this together. The best work usually contrasts two opposing forces—like clinical minimalism with organic roughness.
 
-Let's pressure-test the core premise of **${ideaTitle}**:
+It might help to strip away any decorative fluff. If a detail isn't directly supporting the silhouette or core tactile experience, try cutting it and see if the concept gets sharper.
 
-• **The Killer Tension**: What is the single unresolved question this project poses? The best work holds two opposing forces in balance.
-• **What to Strip Away**: Cut out decorative padding. If an element doesn't actively support the core silhouette or tactile experience, drop it.
-• **Signature Gesture**: Define one unmistakable hallmark—whether monumental typography, asymmetric whitespace, or single-material construction.
-
-What constraint unlocks the most creativity here: zero smooth curves, monochrome only, or total physical minimalism?`;
+What feels like the most essential, non-negotiable part of this for you?`;
   }
   // 6. General creative brainstorming
   else {
@@ -674,22 +653,16 @@ What constraint unlocks the most creativity here: zero smooth curves, monochrome
       ? ` Connecting this with your save **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], `
       : ' ';
 
-    body = `Exploring **"${userQuery.trim()}"**:${dumpNote}
+    body = `Thinking about "${userQuery.trim()}":${dumpNote}we could strip away the expected baseline and contrast high-density structure with expansive, quiet breathing room. Grounding the abstract idea into physical materials and tactile light will give it immediate weight.
 
-1. **The Boldest Angle**: Strip away the familiar baseline. Contrast high-density information architecture with expansive, quiet breathing room.
-2. **Tactile Reality**: Ground the abstract idea into physical terms. How does it catch light, what weight does it possess, and what does it feel like to touch?
-3. **Subversive Detail**: Break one expected convention while keeping the overall craftsmanship razor-sharp.
-
-Does this feel more like an architectural object, an intimate editorial volume, or a digital experience?`;
+How are you imagining this coming to life—as an architectural space, an editorial publication, or a digital experience?`;
   }
 
   let webSourcesList: Array<{ title: string; uri: string }> | undefined = undefined;
   let webSection = '';
 
   if (webAccess) {
-    webSection = `\n\n### 🌐 LIVE WEB RADAR & CONTEMPORARY PRECEDENTS
-• **Studio Benchmarks**: Contemporary independent design studios are pushing raw monospace index layouts contrasted with hyper-tactile imagery.
-• **Material Trends**: Exhibitions highlight raw cast basalt, optical clear resin, and cold-rolled stainless steel.`;
+    webSection = `\n\nLooking at live precedents, independent studios like Koto and Studio Dumbar are currently pairing raw monospace typography with tactile imagery and sculptural installations.`;
 
     webSourcesList = [
       { title: 'Contemporary Identity & Design Archive', uri: 'https://koto.studio' },
@@ -700,13 +673,13 @@ Does this feel more like an architectural object, an intimate editorial volume, 
 
   const citationsText =
     topMatches.length > 0 && !isDumpPullQuery
-      ? `\n\n**REFERENCED FROM DUMP:**\n` +
+      ? `\n\n*Referenced from your Dump:* ` +
         topMatches
           .map(
             (m) =>
-              `• [ID: ${m.item.id}] "${m.item.title}" (${m.item.siteName || m.item.sourcePlatform || 'WEB'})`
+              `[ID: ${m.item.id}] "${m.item.title}"`
           )
-          .join('\n')
+          .join(', ')
       : '';
 
   const fullResponse = `${body}${webSection}${citationsText}`;
@@ -718,9 +691,11 @@ Does this feel more like an architectural object, an intimate editorial volume, 
   };
 }
 
-const AGENT_SYSTEM_DIRECTIVE = `You are a thoughtful creative design collaborator and brainstorm partner for rut.
-Converse naturally, thoughtfully, and clearly. Format your output using clean Markdown (headers, bullet points, and bold text).
-When relevant saves from the user's inspiration dump are provided, you may cite or draw from them naturally with [ID: item-id].`;
+const AGENT_SYSTEM_DIRECTIVE = `You are rut Agent, a thoughtful, creative, and conversational AI partner for brainstormers, designers, and thinkers.
+Converse naturally, directly, and casually, just like a smart, articulate creative partner chatting in real-time.
+Do NOT structure your responses into rigid formulas, standardized templates, or robotic numbered section headers (such as "1. CONCEPT CORE", "2. MATERIALITY", "SPARK QUESTION") unless the user explicitly requests that structure.
+Speak in clean, conversational prose. Use markdown sparingly and naturally.
+When relevant saves from the user's inspiration dump are provided, weave them seamlessly and naturally into your thoughts, citing them unobtrusively with [ID: item-id].`;
 
 /**
  * Sends a message in a chat session.

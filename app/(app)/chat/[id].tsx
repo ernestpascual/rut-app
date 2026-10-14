@@ -356,7 +356,10 @@ export default function ChatWorkspaceScreen() {
       await deleteChatSession(id, user?.uid);
       setDeleteModalOpen(false);
       setMenuModalOpen(false);
-      router.replace('/(app)/(tabs)/chats');
+      router.replace({
+        pathname: '/(app)/(tabs)/chats',
+        params: { deleted: '1', title: session?.title || 'Train of thought' },
+      });
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to delete chat.');
       setDeletingChat(false);
@@ -965,7 +968,7 @@ export default function ChatWorkspaceScreen() {
                 />
               </Pressable>
 
-              {/* Option 4: Delete Session */}
+              {/* Option 4: Delete Session (Danger Zone) */}
               <Pressable
                 style={[styles.menuItemCard, styles.menuItemDeleteCard]}
                 onPress={() => {
@@ -974,13 +977,13 @@ export default function ChatWorkspaceScreen() {
                 }}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.menuItemSection, { color: colors.ink }]}>DANGER ZONE</Text>
-                  <Text style={[styles.menuItemTitle, { color: colors.ink }]}>Delete Train of Thought</Text>
-                  <Text style={styles.menuItemDesc}>
+                  <Text style={[styles.menuItemSection, styles.dangerText]}>DANGER ZONE</Text>
+                  <Text style={[styles.menuItemTitle, styles.dangerText]}>Delete Train of Thought</Text>
+                  <Text style={[styles.menuItemDesc, styles.dangerDesc]}>
                     Permanently delete this chat session and its full history
                   </Text>
                 </View>
-                <Badge label="DELETE" variant="inverse" />
+                <Badge label="DELETE" variant="inverse" style={styles.dangerBadge} />
               </Pressable>
             </ScrollView>
           </View>
@@ -990,8 +993,8 @@ export default function ChatWorkspaceScreen() {
       {/* Delete Confirmation Modal */}
       <Modal visible={deleteModalOpen} animationType="fade" transparent>
         <View style={styles.confirmModalOverlay}>
-          <View style={styles.confirmModalCard}>
-            <Text style={styles.confirmModalTitle}>DELETE TRAIN OF THOUGHT?</Text>
+          <View style={[styles.confirmModalCard, styles.confirmModalCardDanger]}>
+            <Text style={[styles.confirmModalTitle, styles.dangerTitle]}>DELETE TRAIN OF THOUGHT?</Text>
             <Text style={styles.confirmModalText}>
               Are you sure you want to delete this chat session? All messages and synthesized insights will be permanently erased. This cannot be undone.
             </Text>
@@ -1008,7 +1011,7 @@ export default function ChatWorkspaceScreen() {
                 variant="primary"
                 onPress={handleConfirmDelete}
                 loading={deletingChat}
-                style={{ flex: 1, marginLeft: spacing.xs }}
+                style={{ flex: 1, marginLeft: spacing.xs, backgroundColor: '#E53935', borderColor: '#E53935' }}
               />
             </View>
           </View>
@@ -1458,8 +1461,33 @@ const getStyles = (colors: ThemeColors) =>
     marginBottom: spacing.sm,
   },
   menuItemDeleteCard: {
-    borderColor: colors.ink,
+    borderColor: '#E53935',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(229, 57, 53, 0.08)',
     marginTop: spacing.sm,
+  },
+  dangerText: {
+    color: '#E53935',
+    fontWeight: '700',
+  },
+  dangerDesc: {
+    color: '#D32F2F',
+  },
+  dangerBadge: {
+    backgroundColor: '#E53935',
+    borderColor: '#E53935',
+  },
+  confirmModalCardDanger: {
+    borderColor: '#E53935',
+    borderWidth: 2,
+  },
+  dangerTitle: {
+    color: '#E53935',
+    fontWeight: '800',
+  },
+  dangerDeleteBtn: {
+    backgroundColor: '#E53935',
+    borderColor: '#E53935',
   },
   menuItemSection: {
     ...typography.captionCap,

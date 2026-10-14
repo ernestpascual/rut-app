@@ -72,7 +72,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
       pinnedInspirations: references,
     });
 
-    expect(result.response).toContain('MATERIALITY & PALETTE MATRIX');
+    expect(result.response).toContain('high-contrast palette');
     expect(result.sourceInspirationIds).toContain('dump-pin-1');
     expect(result.response).toContain('[ID: dump-pin-1]');
   });
@@ -148,7 +148,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     expect(userMessage.role).toBe('user');
     expect(userMessage.content).toContain('conceptual variations');
     expect(assistantMessage.role).toBe('assistant');
-    expect(assistantMessage.content).toContain('CONCEPTUAL ANGLES');
+    expect(assistantMessage.content).toContain('brutalist monolith');
     expect(assistantMessage.model).toBe('gemini-3.5-flash-lite');
   });
 
@@ -207,7 +207,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
       }
     );
 
-    expect(assistantMessage.content).toContain('PULLED FROM YOUR DUMP');
+    expect(assistantMessage.content).toContain('saved inspirations');
     expect(assistantMessage.content).toContain('Monolithic Basalt Pavilion');
     expect(assistantMessage.sourceInspirationIds).toContain('dump-arch-1');
   });
@@ -290,7 +290,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
       webAccess: true,
     });
 
-    expect(result.response).toContain('LIVE WEB RADAR & CONTEMPORARY PRECEDENTS');
+    expect(result.response).toContain('live precedents');
     expect(result.webSources).toBeDefined();
     expect(result.webSources!.length).toBeGreaterThan(0);
     expect(result.webSources![0].uri).toContain('http');
@@ -309,7 +309,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     expect(userMessage.webAccess).toBe(true);
     expect(assistantMessage.webAccess).toBe(true);
     expect(assistantMessage.webSources).toBeDefined();
-    expect(assistantMessage.content).toContain('LIVE WEB RADAR');
+    expect(assistantMessage.content).toContain('live precedents');
   });
 });
 

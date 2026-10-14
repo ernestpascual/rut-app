@@ -71,28 +71,17 @@ class MockAIProvider {
         });
         const citedIds = contextItems.slice(0, 3).map((item) => item.id);
         const titles = contextItems.slice(0, 3).map((item) => `"${item.title}"`);
-        let response = `### BRAINSTORMING: ${input.message.toUpperCase()}\n\n`;
+        let response = '';
         const webSources = [];
         if (input.webAccess) {
-            response += `🌐 **LIVE WEB RESEARCH & CONTEMPORARY PRECEDENTS ACTIVE**\n` +
-                `Scanning contemporary design archives, studio lookbooks, and spatial installations:\n\n` +
-                `• **Contemporary Studio Precedent**: Studios like Koto, Studio Dumbar, and Bureau Borsche are currently driving high-tension editorial brutalism—pairing stripped monospace indexes with sculptural organic photography.\n` +
-                `• **Tactile Material Trend**: Contemporary spatial design is moving toward raw aggregate concrete paired with optical glass and brushed stainless steel.\n\n`;
+            response += `Looking into live design archives and contemporary studio work, studios like Koto and Studio Dumbar are actively pairing stripped monospace typography with sculptural, organic visuals and raw materials like honed basalt and optical glass.\n\n`;
             webSources.push({ title: 'Contemporary Editorial & Identity Index', uri: 'https://koto.studio' }, { title: 'Kinetic Typography & Spatial Branding', uri: 'https://studiodumbar.com' });
         }
         if (titles.length > 0) {
-            response += `Cross-pollinating your saved bank references in ${titles.join(' and ')}:\n\n` +
-                `• **Structural Contrast**: Juxtapose the primary form with unexpected raw finishes.\n` +
-                `• **Tactile Manifestation**: Ground this idea in high-contrast optical white and obsidian black.\n\n` +
-                `### ⚡ SPARK QUESTION\n` +
-                `Which direction creates the most compelling friction with your concept?`;
+            response += `Thinking about your idea alongside your saves in ${titles.join(' and ')}, there's an interesting tension you can play with. You could pair the primary structure with unexpected raw, tactile surfaces—balancing deep obsidian tones against stark optical white.\n\nWhat direction feels most compelling to lean into first?`;
         }
         else {
-            response += `Let's break this thought down from multiple creative angles:\n\n` +
-                `• **Angle 1 — Divergent Scale**: Flip expected proportions to create immediate tension.\n` +
-                `• **Angle 2 — Materiality & Texture**: Translate this premise into architectural materials and light.\n\n` +
-                `### ⚡ NEXT MOVE\n` +
-                `What is the one non-negotiable signature detail for this concept?`;
+            response += `Here is how I'd approach "${input.message}". You could either push the scale to an extreme to create immediate tension, or ground it physically in tactile materials and contrast.\n\nWhat aspect of this are you most excited to explore right now?`;
         }
         const inputTokens = Math.max(20, Math.round(input.message.length / 4) + contextItems.length * 40);
         const outputTokens = Math.round(response.length / 4);

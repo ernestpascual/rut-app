@@ -7,9 +7,10 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   collection,
   query,
@@ -29,11 +30,28 @@ import { getChatSessions, deleteChatSession } from '../../../../src/features/cha
 
 export default function ChatsListScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ deleted?: string; title?: string }>();
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => getStyles(colors), [colors]);
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.deleted === '1') {
+      const chatTitle = params.title ? `"${params.title}"` : 'Train of thought';
+      setToastMessage(`✓ ${chatTitle} permanently deleted.`);
+    }
+  }, [params.deleted, params.title]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
 
   useEffect(() => {
     let isMounted = true;
@@ -92,6 +110,7 @@ export default function ChatsListScreen() {
       if (confirmed) {
         await deleteChatSession(chatId, user?.uid);
         setChats((prev) => prev.filter((c) => c.id !== chatId));
+        setToastMessage(`✓ "${title}" permanently deleted.`);
       }
       return;
     }
@@ -104,6 +123,7 @@ export default function ChatsListScreen() {
         onPress: async () => {
           await deleteChatSession(chatId, user?.uid);
           setChats((prev) => prev.filter((c) => c.id !== chatId));
+          setToastMessage(`✓ "${title}" permanently deleted.`);
         },
       },
     ]);
@@ -122,6 +142,25 @@ export default function ChatsListScreen() {
           />
         }
       />
+
+      {toastMessage ? (
+        <View style={styles.toastBanner}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.xs }}>
+            <Badge label="DELETED" variant="inverse" style={styles.toastBadge} />
+            <Text style={styles.toastText} numberOfLines={2}>
+              {toastMessage}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setToastMessage(null)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss notification"
+          >
+            <Text style={styles.toastDismiss}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.centerBox}>
@@ -265,5 +304,33 @@ const getStyles = (colors: ThemeColors) =>
     textAlign: 'center',
     marginBottom: spacing.base,
     lineHeight: 22,
+  },
+  toastBanner: {
+    backgroundColor: '#E53935',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.2)',
+  },
+  toastBadge: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+    marginRight: spacing.xs,
+  },
+  toastText: {
+    ...typography.captionCap,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    flex: 1,
+    letterSpacing: 0.5,
+  },
+  toastDismiss: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    paddingHorizontal: spacing.xs,
   },
 });

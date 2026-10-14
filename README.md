@@ -105,7 +105,25 @@ rut/
 
 ---
 
-## 4. Getting Started
+## 4. Google Cloud & Firebase Ecosystem: How Google Services Are Used
+
+`rut` is built entirely on top of the Google Cloud, Firebase, and Gemini AI ecosystem. Here is how each service is utilized across the project:
+
+| Google Service | Implementation & Location | Purpose & Capabilities |
+| :--- | :--- | :--- |
+| **Google Gemini Generative AI** | `functions/src/ai/gemini-provider.ts`<br>`src/features/chat/chatService.ts` | Multi-model conversational inference (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, `gemini-2.0-flash`). Powers interactive Train of Thought brainstorming, auto-summarization, multi-tag extraction, and project idea conceptual matching. |
+| **Google Search Grounding** | `tools: [{ googleSearch: {} }]`<br>`functions/src/ai/gemini-provider.ts` | Integrated directly into Gemini chat inference. When the user enables `🌐 Live Web Search`, Gemini grounds responses in real-time Google search results, citing contemporary design studios, exhibitions, and spatial precedents with clickable URL pills. |
+| **Google Embeddings (`text-embedding-004`)** | `functions/src/ai/gemini-provider.ts`<br>`functions/src/callable/semanticSearch.ts` | Computes 768-dimensional vector embeddings for user inspiration saves and queries, enabling semantic retrieval over the user's personal dump. |
+| **Cloud Firestore** | Client SDK & Firebase Admin<br>`users/{uid}/*` collections | Primary application database. Handles hierarchical subcollections (`inspirations`, `ideas`, `chats`, `messages`), real-time offline-first snapshot listeners (`onSnapshot`), and high-throughput atomic batch writes (batching up to 400 Instagram saves from the extension). |
+| **Cloud Functions (2nd Gen / Cloud Run)** | `functions/src/index.ts`<br>`functions/src/callable/*`<br>`functions/src/triggers/*` | Serverless backend execution on Node.js 20 with Cloud Run: `chatWithBank` (RAG chat), `onInspirationWritten` (background AI enrichment trigger), `captureMetadata` (OpenGraph extraction), `suggestProjectLinks` (concept clustering), and `deleteAccountData` (privacy data purge). |
+| **Google Secret Manager** | `functions/src/config.ts` | Secure server-side credential isolation. The `GEMINI_API_KEY` is loaded directly via Cloud Functions 2nd Gen secret bindings (`runWith({ secrets: ['GEMINI_API_KEY'] })`), preventing API key leakage in client code. |
+| **Firebase Authentication** | `src/features/auth/AuthContext.tsx`<br>`chrome-extension/src/background/` | Manages user identity, session persistence, and token issuance across React Native, Web, and Chrome Extension (via `firebase/auth/web-extension`). |
+| **Firebase Hosting** | `firebase.json` (`hosting:rut`)<br>URL: [rut.web.app](https://rut.web.app) | Global, high-speed CDN hosting with edge SSL and automated single-page application rewrites for the cross-platform web client. |
+| **Google Chrome Extensions Platform (MV3)** | `chrome-extension/manifest.json`<br>`chrome-extension/src/*` | Companion browser extension leveraging Manifest V3 background service workers, `chrome.storage.local`, content script DOM listeners for Instagram Saved Collections, and `externally_connectable` web messaging. |
+
+---
+
+## 5. Getting Started
 
 ### Prerequisites
 - **Node.js**: `v20.x` or `v22.x`
@@ -136,7 +154,7 @@ Add your Firebase and Gemini credentials to `.env.local` (this file is `.gitigno
 
 ---
 
-## 5. Development & Execution
+## 6. Development & Execution
 
 ### Safe Expo CLI Execution
 > [!IMPORTANT]
@@ -179,7 +197,7 @@ npm run zip
 
 ---
 
-## 6. Testing & Quality Assurance
+## 7. Testing & Quality Assurance
 
 Run all test suites and TypeScript verifications:
 
@@ -196,6 +214,6 @@ cd chrome-extension && npx tsc --noEmit && cd ..
 
 ---
 
-## 7. License
+## 8. License
 
 MIT License. See [LICENSE](LICENSE) for details.
