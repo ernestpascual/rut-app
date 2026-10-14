@@ -49,6 +49,9 @@ import {
   getChatMessages,
   sendChatMessage,
   deleteChatMessage,
+  getChatSessions,
+  saveChatSession,
+  createChatSession,
   AVAILABLE_MODELS,
   DEFAULT_AI_MODEL,
   getUserPreferredModel,
@@ -81,6 +84,12 @@ export default function ProjectDetailScreen() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Collapsible section states to eliminate clutter
+  const [collapseConcept, setCollapseConcept] = useState(false);
+  const [collapseMatcher, setCollapseMatcher] = useState(true);
+  const [collapseReferences, setCollapseReferences] = useState(false);
+  const [collapseThoughts, setCollapseThoughts] = useState(false);
+
   // Manual picker toggle
   const [showManualPicker, setShowManualPicker] = useState(false);
 
@@ -92,6 +101,12 @@ export default function ProjectDetailScreen() {
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
   const [showModelModal, setShowModelModal] = useState(false);
   const thoughtStreamScrollRef = useRef<ScrollView>(null);
+
+  // Link existing Train of Thought chats to this Idea
+  const [showLinkChatModal, setShowLinkChatModal] = useState(false);
+  const [availableChats, setAvailableChats] = useState<ChatSession[]>([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [linkingChatId, setLinkingChatId] = useState<string | null>(null);
 
   // Load user's default preferred model
   useEffect(() => {
@@ -286,6 +301,7 @@ export default function ProjectDetailScreen() {
   // Get inspirations from the dump matching this idea
   const handleGetInspirationsFromDump = async () => {
     if (!project) return;
+    setCollapseMatcher(false);
     setLoadingSuggestions(true);
 
     if (allDumpItems.length === 0) {
@@ -559,6 +575,135 @@ export default function ProjectDetailScreen() {
     setShowModelModal(false);
   };
 
+  // Toggle collapse/expand all sections to minimize clutter
+  const allCollapsed =
+    collapseConcept && collapseMatcher && collapseReferences && collapseThoughts;
+
+  const toggleCollapseAll = () => {
+    const nextState = !allCollapsed;
+    setCollapseConcept(nextState);
+    setCollapseMatcher(nextState);
+    setCollapseReferences(nextState);
+    setCollapseThoughts(nextState);
+  };
+
+  // Open modal to view and link existing chats
+  const handleOpenLinkChatModal = async () => {
+    setShowLinkChatModal(true);
+    setLoadingChats(true);
+    try {
+      const sessions = await getChatSessions(user?.uid);
+      setAvailableChats(sessions.filter((s) => !s.archived));
+    } catch {
+      setAvailableChats([]);
+    } finally {
+      setLoadingChats(false);
+    }
+  };
+
+  // Link selected chat to this idea
+  const handleLinkChat = async (selectedChat: ChatSession) => {
+    if (!project) return;
+    setLinkingChatId(selectedChat.id);
+    try {
+      // 1. Detach old chats currently linked to this project
+      const allChats = await getChatSessions(user?.uid);
+      for (const c of allChats) {
+        if (c.id !== selectedChat.id && c.projectId === project.id) {
+          const detached: ChatSession = {
+            ...c,
+            projectId: null,
+            projectTitle: null,
+            updatedAt: Date.now(),
+          };
+          await saveChatSession(detached, user?.uid);
+        }
+      }
+
+      // 2. Attach selected chat to this project
+      const updatedChat: ChatSession = {
+        ...selectedChat,
+        projectId: project.id,
+        projectTitle: project.title,
+        updatedAt: Date.now(),
+      };
+      await saveChatSession(updatedChat, user?.uid);
+
+      // 3. Update project document
+      const updatedProj: Project = {
+        ...project,
+        chatId: selectedChat.id,
+        updatedAt: Date.now(),
+      };
+      await saveProject(updatedProj);
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid, 'projects', project.id), {
+          chatId: selectedChat.id,
+          updatedAt: Date.now(),
+        }).catch(() => {});
+      }
+
+      setProject(updatedProj);
+      setIdeaChat(updatedChat);
+      const msgs = await getChatMessages(selectedChat.id, user?.uid);
+      setChatMessages(msgs);
+      setShowLinkChatModal(false);
+      Alert.alert(
+        'Chat Linked',
+        `"${selectedChat.title}" is now the active Train of Thought for this idea.`
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to link chat.');
+    } finally {
+      setLinkingChatId(null);
+    }
+  };
+
+  // Create a brand new dedicated train of thought for this idea
+  const handleCreateNewChatForIdea = async () => {
+    if (!project) return;
+    setLinkingChatId('new');
+    try {
+      const attachedItems = links
+        .map((l) => bankMap[l.inspirationId])
+        .filter(Boolean) as InspirationItem[];
+
+      const newSession = await createChatSession(`${project.title} — Train of Thought`, {
+        projectId: project.id,
+        projectTitle: project.title,
+        pinnedInspirationIds: attachedItems.map((a) => a.id),
+        thesisStatement: project.thesisStatement || project.brief || null,
+        uid: user?.uid,
+      });
+
+      const updatedProj: Project = {
+        ...project,
+        chatId: newSession.id,
+        updatedAt: Date.now(),
+      };
+      await saveProject(updatedProj);
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid, 'projects', project.id), {
+          chatId: newSession.id,
+          updatedAt: Date.now(),
+        }).catch(() => {});
+      }
+
+      setProject(updatedProj);
+      setIdeaChat(newSession);
+      setChatMessages([]);
+      setShowLinkChatModal(false);
+      Alert.alert(
+        'New Train of Thought Created',
+        'A fresh dedicated thought stream has been linked to this idea.'
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to create chat.');
+    } finally {
+      setLinkingChatId(null);
+    }
+  };
+
   if (loading || !project) {
     return (
       <SafeAreaView style={styles.container}>
@@ -682,277 +827,450 @@ export default function ProjectDetailScreen() {
           <View>
             {/* IDEA HEADER */}
             <View style={styles.headerRow}>
-              <Text style={styles.title}>{project.title}</Text>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
+                <Text style={styles.title}>{project.title}</Text>
+              </View>
               <Badge label={project.status.toUpperCase()} variant="inverse" />
             </View>
 
-            {project.brief ? (
-              <Card style={styles.briefCard}>
-                <Text style={styles.sectionHeading}>CONCEPT BRIEF</Text>
-                <Text style={styles.bodyText}>{project.brief}</Text>
-              </Card>
-            ) : null}
-
-            {project.notes ? (
-              <Card style={styles.notesCard}>
-                <Text style={styles.sectionHeading}>NOTES &amp; SPECIFICATIONS</Text>
-                <Text style={styles.bodyText}>{project.notes}</Text>
-              </Card>
-            ) : null}
-
-            {/* TAGS */}
-            {(project.tags || []).length > 0 ? (
-              <View style={[styles.tagRow, { marginBottom: spacing.base }]}>
-                {Array.from(new Set(project.tags)).map((t, idx) => (
-                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4 }} />
-                ))}
-              </View>
-            ) : null}
-
-            {/* MATCH ACTION BANNER */}
-            <Card style={styles.matchActionCard}>
-              <Text style={styles.matchActionTitle}>
-                ⚡ GET INSPIRATIONS FROM DUMP FOR THIS IDEA
-              </Text>
-              <Text style={styles.matchActionDesc}>
-                Scans your saved inspirations from Pinterest, Instagram, TikTok, and Web to match relevant visual references.
-              </Text>
-              <Button
-                title={loadingSuggestions ? 'ANALYZING DUMP...' : '⚡ FIND INSPIRATIONS FROM DUMP'}
-                onPress={handleGetInspirationsFromDump}
-                loading={loadingSuggestions}
-                style={{ marginTop: spacing.sm }}
-              />
-            </Card>
-
-            {/* MATCHED INSPIRATIONS (FOUND FROM DUMP) */}
-            {matchedResults.length > 0 ? (
-              <View style={styles.matchedSection}>
-                <View style={styles.matchedSectionHeader}>
-                  <Text style={styles.sectionHeading}>
-                    MATCHED INSPIRATIONS FROM DUMP ({matchedResults.length})
-                  </Text>
-                  <Button
-                    title="ATTACH ALL MATCHES"
-                    variant="primary"
-                    onPress={handleAttachAllMatches}
-                    style={{ height: 32, paddingHorizontal: 10 }}
-                  />
-                </View>
-
-                {matchedResults.map((result) => {
-                  const item = result.inspiration;
-                  return (
-                    <Card key={result.inspirationId} style={styles.matchedCard}>
-                      <View style={styles.matchedHeaderRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Badge
-                            label={`${Math.round(result.confidence * 100)}% MATCH`}
-                            variant="inverse"
-                            style={{ marginRight: spacing.xs }}
-                          />
-                          {item.sourcePlatform ? (
-                            <Badge
-                              label={item.sourcePlatform.toUpperCase()}
-                              variant="outline"
-                            />
-                          ) : null}
-                        </View>
-                      </View>
-
-                      {item.remotePreviewImageUrl ? (
-                        <Image
-                          source={{ uri: item.remotePreviewImageUrl }}
-                          style={styles.matchedThumb}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-
-                      <Text style={styles.matchedTitle}>{item.title}</Text>
-                      <Text style={styles.matchedReason}>💡 {result.reason}</Text>
-
-                      {item.url ? (
-                        <Pressable onPress={() => Linking.openURL(item.url!)}>
-                          <Text style={styles.urlLink} numberOfLines={1}>
-                            ↗ {item.url}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-
-                      <View style={styles.matchedButtonRow}>
-                        <Button
-                          title="+ ATTACH AS REFERENCE"
-                          variant="primary"
-                          onPress={() =>
-                            handleAttachReference(
-                              result.inspirationId,
-                              result.reason,
-                              result.confidence
-                            )
-                          }
-                          style={{ height: 36, paddingHorizontal: 14 }}
-                        />
-                        <Button
-                          title="DISMISS"
-                          variant="text"
-                          onPress={() =>
-                            setMatchedResults((prev) =>
-                              prev.filter((r) => r.inspirationId !== result.inspirationId)
-                            )
-                          }
-                          style={{ marginLeft: spacing.sm }}
-                        />
-                      </View>
-                    </Card>
-                  );
-                })}
-              </View>
-            ) : hasSearched ? (
-              <Card style={[styles.emptyLinksCard, { marginBottom: spacing.base }]}>
-                <Text style={styles.emptyLinksTitle}>NO DIRECT MATCHES IN DUMP</Text>
-                <Text style={styles.emptyLinksText}>
-                  No inspirations in your bank matched this idea&apos;s tags or concepts. You can dump more links in your Bank, or use &ldquo;+ BROWSE DUMP&rdquo; below to attach any saved reference manually.
+            {/* QUICK COLLAPSE / EXPAND ALL BUTTON */}
+            <View style={styles.collapseAllRow}>
+              <Pressable
+                onPress={toggleCollapseAll}
+                style={styles.collapseAllBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle collapse all sections"
+              >
+                <Text style={styles.collapseAllText}>
+                  {allCollapsed ? '▾ EXPAND ALL SECTIONS' : '▴ COLLAPSE ALL TO REDUCE CLUTTER'}
                 </Text>
-              </Card>
-            ) : null}
-
-            {/* ATTACHED REFERENCES SECTION */}
-            <View style={styles.linksHeader}>
-              <Text style={styles.sectionHeading}>
-                ATTACHED REFERENCES ({links.length})
-              </Text>
-              <Button
-                title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
-                variant="secondary"
-                onPress={() => setShowManualPicker(!showManualPicker)}
-                style={{ height: 34, paddingHorizontal: 10 }}
-              />
+              </Pressable>
             </View>
 
-            {/* MANUAL DUMP PICKER */}
-            {showManualPicker ? (
-              <Card style={styles.pickerCard}>
-                <Text style={styles.pickerTitle}>SELECT ANY INSPIRATION FROM YOUR DUMP</Text>
-                {unattachedDumpItems.length === 0 ? (
-                  <Text style={styles.emptyLinksText}>All dump items are already attached!</Text>
-                ) : (
-                  unattachedDumpItems.map((item) => (
-                    <View key={item.id} style={styles.pickerRow}>
-                      <View style={{ flex: 1, marginRight: spacing.xs }}>
-                        <Text style={styles.pickerItemTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.pickerItemSub}>
-                          {item.sourcePlatform ? item.sourcePlatform.toUpperCase() : item.kind}
-                        </Text>
-                      </View>
-                      <Button
-                        title="+ ATTACH"
-                        variant="secondary"
-                        onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
-                        style={{ height: 32, paddingHorizontal: 10 }}
-                      />
-                    </View>
-                  ))
-                )}
-              </Card>
-            ) : null}
+            {/* 1. CONCEPT BRIEF & NOTES (COLLAPSIBLE) */}
+            <View style={styles.sectionContainer}>
+              <Pressable
+                style={styles.accordionHeaderTouchable}
+                onPress={() => setCollapseConcept(!collapseConcept)}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle Concept & Specifications"
+              >
+                <View style={styles.accordionTitleGroup}>
+                  <Text style={styles.accordionTitle}>CONCEPT &amp; SPECIFICATIONS</Text>
+                  <Badge
+                    label={project.brief ? 'BRIEF WRITTEN' : 'EMPTY'}
+                    variant={project.brief ? 'inverse' : 'grade'}
+                    style={{ marginLeft: 6 }}
+                  />
+                </View>
+                <View style={styles.collapseToggleChip}>
+                  <Text style={styles.collapseToggleText}>
+                    {collapseConcept ? '▾ EXPAND' : '▴ COLLAPSE'}
+                  </Text>
+                </View>
+              </Pressable>
 
-            {links.length === 0 ? (
-              <Card style={styles.emptyLinksCard}>
-                <Text style={styles.emptyLinksTitle}>NO REFERENCES ATTACHED YET</Text>
-                <Text style={styles.emptyLinksText}>
-                  Click &ldquo;Find Inspirations From Dump&rdquo; above to automatically match and attach references from your saved items.
-                </Text>
-              </Card>
-            ) : (
-              links.map((link) => {
-                const item = bankMap[link.inspirationId];
-                return (
-                  <Card key={link.id} style={styles.linkCard}>
-                    <View style={styles.linkCardHeader}>
-                      <View style={{ flex: 1, marginRight: spacing.xs }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                          {item?.sourcePlatform ? (
-                            <Badge
-                              label={item.sourcePlatform.toUpperCase()}
-                              variant="inverse"
-                              style={{ marginRight: 6 }}
-                            />
-                          ) : null}
-                          <Badge
-                            label={link.linkedBy === 'ai' ? 'ATTACHED MATCH' : 'ATTACHED REFERENCE'}
-                            variant="grade"
-                          />
-                        </View>
-                        <Text style={styles.linkTitle} numberOfLines={2}>
-                          {item ? item.title : `Reference ${link.inspirationId}`}
-                        </Text>
-                        {item?.editorialContext ? (
-                          <Text style={styles.linkReason} numberOfLines={2}>
-                            {item.editorialContext}
-                          </Text>
-                        ) : link.reason ? (
-                          <Text style={styles.linkReason}>💡 {link.reason}</Text>
-                        ) : null}
+              {collapseConcept ? (
+                <Pressable
+                  style={styles.collapsedPreviewCard}
+                  onPress={() => setCollapseConcept(false)}
+                >
+                  <Text style={styles.collapsedPreviewText} numberOfLines={2}>
+                    {project.brief ? `“${project.brief}”` : 'No concept brief written yet'}
+                  </Text>
+                  <View style={styles.collapsedMetaRow}>
+                    <Text style={styles.collapsedMetaText}>
+                      {(project.tags || []).length > 0
+                        ? project.tags.map((t) => `#${t}`).join(' ')
+                        : 'No tags'}
+                      {project.notes ? ' • Has specification notes' : ''}
+                    </Text>
+                    <Text style={styles.collapsedOpenHint}>TAP TO VIEW ▾</Text>
+                  </View>
+                </Pressable>
+              ) : (
+                <View style={styles.sectionBody}>
+                  {project.brief ? (
+                    <Card style={styles.briefCard}>
+                      <Text style={styles.sectionHeading}>CONCEPT BRIEF</Text>
+                      <Text style={styles.bodyText}>{project.brief}</Text>
+                    </Card>
+                  ) : null}
 
-                        {item?.tags && item.tags.length > 0 ? (
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                            {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
-                              <Badge key={`item-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
-                            ))}
-                          </View>
-                        ) : null}
-                      </View>
+                  {project.notes ? (
+                    <Card style={styles.notesCard}>
+                      <Text style={styles.sectionHeading}>NOTES &amp; SPECIFICATIONS</Text>
+                      <Text style={styles.bodyText}>{project.notes}</Text>
+                    </Card>
+                  ) : null}
 
-                      {item?.remotePreviewImageUrl ? (
-                        <Image
-                          source={{ uri: item.remotePreviewImageUrl }}
-                          style={styles.attachedThumb}
-                          resizeMode="cover"
+                  {(project.tags || []).length > 0 ? (
+                    <View style={styles.tagRow}>
+                      {Array.from(new Set(project.tags)).map((t, idx) => (
+                        <Badge
+                          key={`proj-tag-${t}-${idx}`}
+                          label={`#${t}`}
+                          variant="grade"
+                          style={{ marginRight: 4, marginBottom: 4 }}
                         />
-                      ) : null}
+                      ))}
                     </View>
+                  ) : null}
+                </View>
+              )}
+            </View>
 
-                    {item?.url ? (
-                      <Pressable onPress={() => Linking.openURL(item.url!)}>
-                        <Text style={styles.urlLink} numberOfLines={1}>
-                          ↗ {item.url}
-                        </Text>
-                      </Pressable>
-                    ) : null}
+            {/* 2. MATCH INSPIRATIONS FROM DUMP (COLLAPSIBLE) */}
+            <View style={styles.sectionContainer}>
+              <Pressable
+                style={styles.accordionHeaderTouchable}
+                onPress={() => setCollapseMatcher(!collapseMatcher)}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle Dump Inspiration Matcher"
+              >
+                <View style={styles.accordionTitleGroup}>
+                  <Text style={styles.accordionTitle}>MATCH FROM INSPIRATION DUMP</Text>
+                  {matchedResults.length > 0 && (
+                    <Badge
+                      label={`${matchedResults.length} FOUND`}
+                      variant="inverse"
+                      style={{ marginLeft: 6 }}
+                    />
+                  )}
+                </View>
+                <View style={styles.collapseToggleChip}>
+                  <Text style={styles.collapseToggleText}>
+                    {collapseMatcher ? '▾ EXPAND' : '▴ COLLAPSE'}
+                  </Text>
+                </View>
+              </Pressable>
 
-                    <View style={styles.linkActions}>
-                      {item ? (
-                        <Button
-                          title="VIEW IN BANK →"
-                          variant="text"
-                          onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
-                          style={{ marginRight: spacing.base }}
-                        />
-                      ) : null}
-                      <Button
-                        title="✕ DETACH"
-                        variant="text"
-                        onPress={() => handleDetachReference(link.inspirationId)}
-                      />
+              {collapseMatcher ? (
+                <Pressable
+                  style={styles.collapsedPreviewCard}
+                  onPress={() => setCollapseMatcher(false)}
+                >
+                  <View style={styles.collapsedMatchRow}>
+                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                      <Text style={styles.collapsedPreviewText} numberOfLines={1}>
+                        {matchedResults.length > 0
+                          ? `${matchedResults.length} inspirations matched from your dump items`
+                          : 'Scan saved pins & links to match visual references'}
+                      </Text>
                     </View>
+                    <Button
+                      title={loadingSuggestions ? 'SCANNING...' : '⚡ SCAN DUMP'}
+                      variant="secondary"
+                      onPress={() => {
+                        handleGetInspirationsFromDump();
+                      }}
+                      style={{ height: 30, paddingHorizontal: 10 }}
+                    />
+                  </View>
+                </Pressable>
+              ) : (
+                <View style={styles.sectionBody}>
+                  <Card style={styles.matchActionCard}>
+                    <Text style={styles.matchActionTitle}>
+                      ⚡ GET INSPIRATIONS FROM DUMP FOR THIS IDEA
+                    </Text>
+                    <Text style={styles.matchActionDesc}>
+                      Scans your saved inspirations from Pinterest, Instagram, TikTok, and Web to match relevant visual references.
+                    </Text>
+                    <Button
+                      title={loadingSuggestions ? 'ANALYZING DUMP...' : '⚡ FIND INSPIRATIONS FROM DUMP'}
+                      onPress={handleGetInspirationsFromDump}
+                      loading={loadingSuggestions}
+                      style={{ marginTop: spacing.sm, height: 38 }}
+                    />
                   </Card>
-                );
-              })
-            )}
 
-            {/* TRAIN OF THOUGHT CHAT SECTION */}
-            <View style={styles.thoughtSection}>
-              <View style={styles.thoughtHeaderRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, flex: 1 }}>
-                  <Text style={styles.sectionHeading}>TRAIN OF THOUGHT</Text>
+                  {matchedResults.length > 0 ? (
+                    <View style={styles.matchedSection}>
+                      <View style={styles.matchedSectionHeader}>
+                        <Text style={styles.sectionHeading}>
+                          MATCHED INSPIRATIONS ({matchedResults.length})
+                        </Text>
+                        <Button
+                          title="ATTACH ALL MATCHES"
+                          variant="primary"
+                          onPress={handleAttachAllMatches}
+                          style={{ height: 30, paddingHorizontal: 10 }}
+                        />
+                      </View>
+
+                      {matchedResults.map((result) => {
+                        const item = result.inspiration;
+                        return (
+                          <Card key={result.inspirationId} style={styles.matchedCard}>
+                            <View style={styles.matchedHeaderRow}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Badge
+                                  label={`${Math.round(result.confidence * 100)}% MATCH`}
+                                  variant="inverse"
+                                  style={{ marginRight: spacing.xs }}
+                                />
+                                {item.sourcePlatform ? (
+                                  <Badge
+                                    label={item.sourcePlatform.toUpperCase()}
+                                    variant="outline"
+                                  />
+                                ) : null}
+                              </View>
+                            </View>
+
+                            {item.remotePreviewImageUrl ? (
+                              <Image
+                                source={{ uri: item.remotePreviewImageUrl }}
+                                style={styles.matchedThumb}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+
+                            <Text style={styles.matchedTitle}>{item.title}</Text>
+                            <Text style={styles.matchedReason}>💡 {result.reason}</Text>
+
+                            {item.url ? (
+                              <Pressable onPress={() => Linking.openURL(item.url!)}>
+                                <Text style={styles.urlLink} numberOfLines={1}>
+                                  ↗ {item.url}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            <View style={styles.matchedButtonRow}>
+                              <Button
+                                title="+ ATTACH AS REFERENCE"
+                                variant="primary"
+                                onPress={() =>
+                                  handleAttachReference(
+                                    result.inspirationId,
+                                    result.reason,
+                                    result.confidence
+                                  )
+                                }
+                                style={{ height: 32, paddingHorizontal: 12 }}
+                              />
+                              <Button
+                                title="DISMISS"
+                                variant="text"
+                                onPress={() =>
+                                  setMatchedResults((prev) =>
+                                    prev.filter((r) => r.inspirationId !== result.inspirationId)
+                                  )
+                                }
+                                style={{ marginLeft: spacing.sm, height: 32, paddingHorizontal: 10 }}
+                              />
+                            </View>
+                          </Card>
+                        );
+                      })}
+                    </View>
+                  ) : hasSearched ? (
+                    <Card style={[styles.emptyLinksCard, { marginBottom: spacing.base }]}>
+                      <Text style={styles.emptyLinksTitle}>NO DIRECT MATCHES IN DUMP</Text>
+                      <Text style={styles.emptyLinksText}>
+                        No inspirations in your bank matched this idea&apos;s tags or concepts. You can dump more links in your Bank, or use &ldquo;+ BROWSE DUMP&rdquo; below to attach any saved reference manually.
+                      </Text>
+                    </Card>
+                  ) : null}
+                </View>
+              )}
+            </View>
+
+            {/* 3. ATTACHED REFERENCES (COLLAPSIBLE) */}
+            <View style={styles.sectionContainer}>
+              <View style={styles.accordionHeaderTouchable}>
+                <Pressable
+                  style={styles.accordionTitleGroup}
+                  onPress={() => setCollapseReferences(!collapseReferences)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle Attached References"
+                >
+                  <Text style={styles.accordionTitle}>ATTACHED REFERENCES</Text>
+                  <Badge
+                    label={`${links.length}`}
+                    variant={links.length > 0 ? 'inverse' : 'grade'}
+                    style={{ marginLeft: 6 }}
+                  />
+                </Pressable>
+                <View style={styles.accordionActionGroup}>
+                  <Button
+                    title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
+                    variant="secondary"
+                    onPress={() => {
+                      if (collapseReferences) setCollapseReferences(false);
+                      setShowManualPicker(!showManualPicker);
+                    }}
+                    style={{ height: 28, paddingHorizontal: 8, marginRight: 6 }}
+                  />
+                  <Pressable
+                    onPress={() => setCollapseReferences(!collapseReferences)}
+                    style={styles.collapseToggleChip}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.collapseToggleText}>
+                      {collapseReferences ? '▾ EXPAND' : '▴ COLLAPSE'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {collapseReferences ? (
+                <Pressable
+                  style={styles.collapsedPreviewCard}
+                  onPress={() => setCollapseReferences(false)}
+                >
+                  <View style={styles.collapsedBetweenRow}>
+                    <Text style={styles.collapsedPreviewText}>
+                      {links.length === 0
+                        ? 'No references attached yet'
+                        : `${links.length} visual reference${links.length === 1 ? '' : 's'} linked`}
+                    </Text>
+                    <Text style={styles.collapsedOpenHint}>TAP TO VIEW ▾</Text>
+                  </View>
+                </Pressable>
+              ) : (
+                <View style={styles.sectionBody}>
+                  {/* MANUAL DUMP PICKER */}
+                  {showManualPicker ? (
+                    <Card style={styles.pickerCard}>
+                      <Text style={styles.pickerTitle}>SELECT ANY INSPIRATION FROM YOUR DUMP</Text>
+                      {unattachedDumpItems.length === 0 ? (
+                        <Text style={styles.emptyLinksText}>All dump items are already attached!</Text>
+                      ) : (
+                        unattachedDumpItems.map((item) => (
+                          <View key={item.id} style={styles.pickerRow}>
+                            <View style={{ flex: 1, marginRight: spacing.xs }}>
+                              <Text style={styles.pickerItemTitle} numberOfLines={1}>
+                                {item.title}
+                              </Text>
+                              <Text style={styles.pickerItemSub}>
+                                {item.sourcePlatform ? item.sourcePlatform.toUpperCase() : item.kind}
+                              </Text>
+                            </View>
+                            <Button
+                              title="+ ATTACH"
+                              variant="secondary"
+                              onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
+                              style={{ height: 28, paddingHorizontal: 8 }}
+                            />
+                          </View>
+                        ))
+                      )}
+                    </Card>
+                  ) : null}
+
+                  {links.length === 0 ? (
+                    <Card style={styles.emptyLinksCard}>
+                      <Text style={styles.emptyLinksTitle}>NO REFERENCES ATTACHED YET</Text>
+                      <Text style={styles.emptyLinksText}>
+                        Click &ldquo;Find Inspirations From Dump&rdquo; above to automatically match and attach references from your saved items.
+                      </Text>
+                    </Card>
+                  ) : (
+                    links.map((link) => {
+                      const item = bankMap[link.inspirationId];
+                      return (
+                        <Card key={link.id} style={styles.linkCard}>
+                          <View style={styles.linkCardHeader}>
+                            <View style={{ flex: 1, marginRight: spacing.xs }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                {item?.sourcePlatform ? (
+                                  <Badge
+                                    label={item.sourcePlatform.toUpperCase()}
+                                    variant="inverse"
+                                    style={{ marginRight: 6 }}
+                                  />
+                                ) : null}
+                                <Badge
+                                  label={link.linkedBy === 'ai' ? 'ATTACHED MATCH' : 'ATTACHED REFERENCE'}
+                                  variant="grade"
+                                />
+                              </View>
+                              <Text style={styles.linkTitle} numberOfLines={2}>
+                                {item ? item.title : `Reference ${link.inspirationId}`}
+                              </Text>
+                              {item?.editorialContext ? (
+                                <Text style={styles.linkReason} numberOfLines={2}>
+                                  {item.editorialContext}
+                                </Text>
+                              ) : link.reason ? (
+                                <Text style={styles.linkReason}>💡 {link.reason}</Text>
+                              ) : null}
+
+                              {item?.tags && item.tags.length > 0 ? (
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+                                  {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
+                                    <Badge
+                                      key={`item-tag-${t}-${idx}`}
+                                      label={`#${t}`}
+                                      variant="grade"
+                                      style={{ marginRight: 4, marginBottom: 2 }}
+                                    />
+                                  ))}
+                                </View>
+                              ) : null}
+                            </View>
+
+                            {item?.remotePreviewImageUrl ? (
+                              <Image
+                                source={{ uri: item.remotePreviewImageUrl }}
+                                style={styles.attachedThumb}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+                          </View>
+
+                          {item?.url ? (
+                            <Pressable onPress={() => Linking.openURL(item.url!)}>
+                              <Text style={styles.urlLink} numberOfLines={1}>
+                                ↗ {item.url}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
+                          <View style={styles.linkActions}>
+                            {item ? (
+                              <Button
+                                title="VIEW IN BANK →"
+                                variant="text"
+                                onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
+                                style={{ marginRight: spacing.base, height: 28, paddingHorizontal: 4 }}
+                              />
+                            ) : null}
+                            <Button
+                              title="✕ DETACH"
+                              variant="text"
+                              onPress={() => handleDetachReference(link.inspirationId)}
+                              style={{ height: 28, paddingHorizontal: 4 }}
+                            />
+                          </View>
+                        </Card>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* 4. TRAIN OF THOUGHT (COLLAPSIBLE & LINKABLE) */}
+            <View style={styles.sectionContainer}>
+              <View style={styles.accordionHeaderTouchable}>
+                <Pressable
+                  style={styles.accordionTitleGroup}
+                  onPress={() => setCollapseThoughts(!collapseThoughts)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle Train of Thought"
+                >
+                  <Text style={styles.accordionTitle}>TRAIN OF THOUGHT</Text>
                   <Badge
                     label={`${chatMessages.length} THOUGHTS`}
                     variant={chatMessages.length > 0 ? 'inverse' : 'grade'}
+                    style={{ marginLeft: 6 }}
                   />
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                </Pressable>
+                <View style={styles.accordionActionGroup}>
                   <Pressable
                     style={styles.modelPillButton}
                     onPress={() => setShowModelModal(true)}
@@ -964,245 +1282,420 @@ export default function ProjectDetailScreen() {
                     </Text>
                   </Pressable>
                   <Button
-                    title="💬 OPEN FULL CHAT ↗"
+                    title="+ LINK CHAT"
+                    variant="secondary"
+                    onPress={handleOpenLinkChatModal}
+                    style={{ height: 28, paddingHorizontal: 8, marginHorizontal: 4 }}
+                  />
+                  <Button
+                    title="💬 FULL CHAT ↗"
                     variant="primary"
                     onPress={handleOpenFullChat}
-                    style={{ height: 32, paddingHorizontal: 10 }}
+                    style={{ height: 28, paddingHorizontal: 8, marginRight: 4 }}
                   />
+                  <Pressable
+                    onPress={() => setCollapseThoughts(!collapseThoughts)}
+                    style={styles.collapseToggleChip}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.collapseToggleText}>
+                      {collapseThoughts ? '▾ EXPAND' : '▴ COLLAPSE'}
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
 
-              <Card style={styles.thoughtCard}>
-                <View style={styles.thoughtBannerRow}>
-                  <Text style={styles.thoughtBannerText}>
-                    Interactive thought flow powered by {selectedModel}. Tap any thought to open the full chat interface.
-                  </Text>
-                  <Pressable onPress={handleOpenFullChat} hitSlop={8}>
-                    <Text style={styles.thoughtBannerAction}>EXPAND ↗</Text>
-                  </Pressable>
-                </View>
-
-                {/* SCROLLABLE CHAT MESSAGES STREAM */}
-                <View style={styles.chatStreamContainer}>
-                  {chatMessages.length > 0 ? (
-                    <ScrollView
-                      nestedScrollEnabled
-                      ref={thoughtStreamScrollRef}
-                      style={styles.chatMessageScroll}
-                      contentContainerStyle={styles.chatMessageScrollContent}
-                      showsVerticalScrollIndicator
-                    >
-                      {chatMessages.map((msg) => {
-                        const isUser = msg.role === 'user';
-                        return (
-                          <Pressable
-                            key={msg.id}
-                            onPress={handleOpenFullChat}
-                            style={({ pressed }) => [
-                              styles.chatBubbleWrapper,
-                              isUser ? styles.chatUserWrapper : styles.chatAssistantWrapper,
-                              pressed && { opacity: 0.8 },
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.chatBubble,
-                                isUser ? styles.chatUserBubble : styles.chatAssistantBubble,
-                              ]}
-                            >
-                              <View style={styles.chatBubbleMetaRow}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                  <Text
-                                    style={[
-                                      styles.chatRoleTag,
-                                      isUser ? styles.chatUserRoleTag : styles.chatAssistantRoleTag,
-                                    ]}
-                                  >
-                                    {isUser ? 'YOU' : 'RUT'}
-                                  </Text>
-                                  {!isUser && (
-                                    <Badge
-                                      label={msg.model ? msg.model.replace('gemini-', '').toUpperCase() : selectedModel.replace('gemini-', '').toUpperCase()}
-                                      variant="grade"
-                                      style={{ marginLeft: 6, paddingVertical: 1, paddingHorizontal: 4 }}
-                                    />
-                                  )}
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                  <Text
-                                    style={[
-                                      styles.chatTimestamp,
-                                      isUser ? styles.chatUserTimestamp : styles.chatAssistantTimestamp,
-                                    ]}
-                                  >
-                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </Text>
-                                  <Pressable
-                                    onPress={handleOpenFullChat}
-                                    hitSlop={8}
-                                    style={styles.openInChatChip}
-                                  >
-                                    <Text style={styles.openInChatChipText}>↗ FULL CHAT</Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={(e) => {
-                                      e.stopPropagation?.();
-                                      handleDeleteThought(msg.id);
-                                    }}
-                                    hitSlop={8}
-                                    style={{ marginLeft: 8 }}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.chatDeleteBtn,
-                                        isUser ? styles.chatUserDeleteBtn : styles.chatAssistantDeleteBtn,
-                                      ]}
-                                    >
-                                      ✕
-                                    </Text>
-                                  </Pressable>
-                                </View>
-                              </View>
-
-                              {isUser ? (
-                                <Text style={styles.chatUserText} selectable>
-                                  {msg.content}
-                                </Text>
-                              ) : (
-                                <MarkdownRenderer content={msg.content} />
-                              )}
-
-                              {/* Cited references */}
-                              {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
-                                <View style={styles.chatCitationsBox}>
-                                  <Text style={styles.chatCitationsTitle}>CITED REFERENCES:</Text>
-                                  <View style={styles.chatCitationsRow}>
-                                    {msg.sourceInspirationIds.map((sid) => {
-                                      const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
-                                      return (
-                                        <Pressable
-                                          key={sid}
-                                          style={styles.citationPill}
-                                          onPress={(e) => {
-                                            e.stopPropagation?.();
-                                            router.push(`/(app)/inspiration/${sid}`);
-                                          }}
-                                        >
-                                          <Text style={styles.citationPillText} numberOfLines={1}>
-                                            🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
-                                          </Text>
-                                        </Pressable>
-                                      );
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-                            </View>
-                          </Pressable>
-                        );
-                      })}
-                    </ScrollView>
-                  ) : (
-                    <Pressable
-                      style={styles.emptyThoughtBox}
-                      onPress={handleOpenFullChat}
-                    >
-                      <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
-                      <Text style={styles.emptyThoughtText}>
-                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat interface.
+              {collapseThoughts ? (
+                <Pressable
+                  style={styles.collapsedPreviewCard}
+                  onPress={() => setCollapseThoughts(false)}
+                >
+                  <View style={styles.collapsedBetweenRow}>
+                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                      <Text style={styles.collapsedTitleText} numberOfLines={1}>
+                        💬 {ideaChat?.title || 'Idea Train of Thought'}
                       </Text>
+                      <Text style={styles.collapsedMetaText}>
+                        {chatMessages.length > 0
+                          ? `${chatMessages.length} brainstorm message${chatMessages.length === 1 ? '' : 's'} • ${selectedModel.replace('gemini-', '').toUpperCase()}`
+                          : 'Interactive thought stream • Tap to brainstorm'}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
                       <Button
-                        title="💬 OPEN FULL CHAT INTERFACE ↗"
+                        title="+ LINK"
+                        variant="secondary"
+                        onPress={handleOpenLinkChatModal}
+                        style={{ height: 28, paddingHorizontal: 8 }}
+                      />
+                      <Button
+                        title="💬 OPEN ↗"
                         variant="primary"
                         onPress={handleOpenFullChat}
-                        style={{ marginTop: spacing.sm, alignSelf: 'center' }}
+                        style={{ height: 28, paddingHorizontal: 8 }}
                       />
-                    </Pressable>
-                  )}
-                </View>
-
-                {sendingThought ? (
-                  <View style={styles.thinkingIndicator}>
-                    <ActivityIndicator size="small" color={colors.ink} />
-                    <Text style={styles.thinkingText}>
-                      DEVELOPING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
-                    </Text>
+                    </View>
                   </View>
-                ) : null}
-
-                {/* QUICK PROMPT CHIPS CAROUSEL */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.quickPromptScroll}
-                  contentContainerStyle={styles.quickPromptScrollContent}
-                >
-                  <Pressable
-                    style={styles.quickChip}
-                    onPress={() => handleSendThought(`Explore conceptual variations and bold angles for ${project.title}`)}
-                  >
-                    <Text style={styles.quickChipText}>💡 Concept Variations</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.quickChip}
-                    onPress={() => handleSendThought(`Suggest materiality, textures, and color palette for ${project.title}`)}
-                  >
-                    <Text style={styles.quickChipText}>🎨 Material & Palette</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.quickChip}
-                    onPress={() => handleSendThought(`Synthesize this idea with all attached inspirations`)}
-                  >
-                    <Text style={styles.quickChipText}>🔗 Synthesize References</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.quickChip}
-                    onPress={() => handleSendThought(`Critique and sharpen the editorial brief for ${project.title}`)}
-                  >
-                    <Text style={styles.quickChipText}>✍️ Polish Brief</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.quickChip}
-                    onPress={() => handleSendThought(`What spatial or physical installation would best manifest ${project.title}?`)}
-                  >
-                    <Text style={styles.quickChipText}>📐 Spatial & Form</Text>
-                  </Pressable>
-                </ScrollView>
-
-                {/* INLINE CHAT INPUT DOCK */}
-                <View style={styles.chatInputDock}>
-                  <View style={styles.chatInputTopRow}>
-                    <Pressable
-                      style={styles.chatInputModelBadge}
-                      onPress={() => setShowModelModal(true)}
-                    >
-                      <Text style={styles.chatInputModelText}>
-                        ⚡ {selectedModel} ▾
+                </Pressable>
+              ) : (
+                <View style={styles.sectionBody}>
+                  <Card style={styles.thoughtCard}>
+                    <View style={styles.thoughtBannerRow}>
+                      <Text style={styles.thoughtBannerText}>
+                        Interactive thought flow linked to &ldquo;{ideaChat?.title || project.title}&rdquo;. Tap any thought to open full-screen view.
                       </Text>
-                    </Pressable>
-                    <Text style={styles.chatInputHelpText}>
-                      Tap model to switch • Persists across sessions
-                    </Text>
-                  </View>
-                  <View style={styles.thoughtInputRow}>
-                    <Input
-                      value={chatInputText}
-                      onChangeText={setChatInputText}
-                      placeholder="Type a thought, critique, or inquiry..."
-                      containerStyle={{ flex: 1, marginVertical: 0 }}
-                      onSubmitEditing={() => handleSendThought()}
-                      returnKeyType="send"
-                    />
-                    <Button
-                      title={sendingThought ? '...' : 'THINK →'}
-                      onPress={() => handleSendThought()}
-                      disabled={!chatInputText.trim() || sendingThought}
-                      style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 16 }}
-                    />
-                  </View>
+                      <Pressable onPress={handleOpenFullChat} hitSlop={8}>
+                        <Text style={styles.thoughtBannerAction}>EXPAND ↗</Text>
+                      </Pressable>
+                    </View>
+
+                    {/* SCROLLABLE CHAT MESSAGES STREAM */}
+                    <View style={styles.chatStreamContainer}>
+                      {chatMessages.length > 0 ? (
+                        <ScrollView
+                          nestedScrollEnabled
+                          ref={thoughtStreamScrollRef}
+                          style={styles.chatMessageScroll}
+                          contentContainerStyle={styles.chatMessageScrollContent}
+                          showsVerticalScrollIndicator
+                        >
+                          {chatMessages.map((msg) => {
+                            const isUser = msg.role === 'user';
+                            return (
+                              <Pressable
+                                key={msg.id}
+                                onPress={handleOpenFullChat}
+                                style={({ pressed }) => [
+                                  styles.chatBubbleWrapper,
+                                  isUser ? styles.chatUserWrapper : styles.chatAssistantWrapper,
+                                  pressed && { opacity: 0.8 },
+                                ]}
+                              >
+                                <View
+                                  style={[
+                                    styles.chatBubble,
+                                    isUser ? styles.chatUserBubble : styles.chatAssistantBubble,
+                                  ]}
+                                >
+                                  <View style={styles.chatBubbleMetaRow}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                      <Text
+                                        style={[
+                                          styles.chatRoleTag,
+                                          isUser ? styles.chatUserRoleTag : styles.chatAssistantRoleTag,
+                                        ]}
+                                      >
+                                        {isUser ? 'YOU' : 'RUT'}
+                                      </Text>
+                                      {!isUser && (
+                                        <Badge
+                                          label={
+                                            msg.model
+                                              ? msg.model.replace('gemini-', '').toUpperCase()
+                                              : selectedModel.replace('gemini-', '').toUpperCase()
+                                          }
+                                          variant="grade"
+                                          style={{ marginLeft: 6, paddingVertical: 1, paddingHorizontal: 4 }}
+                                        />
+                                      )}
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                      <Text
+                                        style={[
+                                          styles.chatTimestamp,
+                                          isUser ? styles.chatUserTimestamp : styles.chatAssistantTimestamp,
+                                        ]}
+                                      >
+                                        {new Date(msg.createdAt).toLocaleTimeString([], {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </Text>
+                                      <Pressable
+                                        onPress={handleOpenFullChat}
+                                        hitSlop={8}
+                                        style={styles.openInChatChip}
+                                      >
+                                        <Text style={styles.openInChatChipText}>↗ FULL CHAT</Text>
+                                      </Pressable>
+                                      <Pressable
+                                        onPress={(e) => {
+                                          e.stopPropagation?.();
+                                          handleDeleteThought(msg.id);
+                                        }}
+                                        hitSlop={8}
+                                        style={{ marginLeft: 8 }}
+                                      >
+                                        <Text
+                                          style={[
+                                            styles.chatDeleteBtn,
+                                            isUser ? styles.chatUserDeleteBtn : styles.chatAssistantDeleteBtn,
+                                          ]}
+                                        >
+                                          ✕
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  </View>
+
+                                  {isUser ? (
+                                    <Text style={styles.chatUserText} selectable>
+                                      {msg.content}
+                                    </Text>
+                                  ) : (
+                                    <MarkdownRenderer content={msg.content} />
+                                  )}
+
+                                  {/* Cited references */}
+                                  {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
+                                    <View style={styles.chatCitationsBox}>
+                                      <Text style={styles.chatCitationsTitle}>CITED REFERENCES:</Text>
+                                      <View style={styles.chatCitationsRow}>
+                                        {msg.sourceInspirationIds.map((sid) => {
+                                          const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
+                                          return (
+                                            <Pressable
+                                              key={sid}
+                                              style={styles.citationPill}
+                                              onPress={(e) => {
+                                                e.stopPropagation?.();
+                                                router.push(`/(app)/inspiration/${sid}`);
+                                              }}
+                                            >
+                                              <Text style={styles.citationPillText} numberOfLines={1}>
+                                                🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
+                                              </Text>
+                                            </Pressable>
+                                          );
+                                        })}
+                                      </View>
+                                    </View>
+                                  )}
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      ) : (
+                        <Pressable
+                          style={styles.emptyThoughtBox}
+                          onPress={handleOpenFullChat}
+                        >
+                          <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
+                          <Text style={styles.emptyThoughtText}>
+                            Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat interface.
+                          </Text>
+                          <Button
+                            title="💬 OPEN FULL CHAT INTERFACE ↗"
+                            variant="primary"
+                            onPress={handleOpenFullChat}
+                            style={{ marginTop: spacing.sm, alignSelf: 'center', height: 32, paddingHorizontal: 12 }}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+
+                    {sendingThought ? (
+                      <View style={styles.thinkingIndicator}>
+                        <ActivityIndicator size="small" color={colors.ink} />
+                        <Text style={styles.thinkingText}>
+                          DEVELOPING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {/* QUICK PROMPT CHIPS CAROUSEL */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.quickPromptScroll}
+                      contentContainerStyle={styles.quickPromptScrollContent}
+                    >
+                      <Pressable
+                        style={styles.quickChip}
+                        onPress={() => handleSendThought(`Explore conceptual variations and bold angles for ${project.title}`)}
+                      >
+                        <Text style={styles.quickChipText}>💡 Concept Variations</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.quickChip}
+                        onPress={() => handleSendThought(`Suggest materiality, textures, and color palette for ${project.title}`)}
+                      >
+                        <Text style={styles.quickChipText}>🎨 Material &amp; Palette</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.quickChip}
+                        onPress={() => handleSendThought(`Synthesize this idea with all attached inspirations`)}
+                      >
+                        <Text style={styles.quickChipText}>🔗 Synthesize References</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.quickChip}
+                        onPress={() => handleSendThought(`Critique and sharpen the editorial brief for ${project.title}`)}
+                      >
+                        <Text style={styles.quickChipText}>✍️ Polish Brief</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.quickChip}
+                        onPress={() => handleSendThought(`What spatial or physical installation would best manifest ${project.title}?`)}
+                      >
+                        <Text style={styles.quickChipText}>📐 Spatial &amp; Form</Text>
+                      </Pressable>
+                    </ScrollView>
+
+                    {/* INLINE CHAT INPUT DOCK */}
+                    <View style={styles.chatInputDock}>
+                      <View style={styles.chatInputTopRow}>
+                        <Pressable
+                          style={styles.chatInputModelBadge}
+                          onPress={() => setShowModelModal(true)}
+                        >
+                          <Text style={styles.chatInputModelText}>
+                            ⚡ {selectedModel} ▾
+                          </Text>
+                        </Pressable>
+                        <Text style={styles.chatInputHelpText}>
+                          Tap model to switch • Persists across sessions
+                        </Text>
+                      </View>
+                      <View style={styles.thoughtInputRow}>
+                        <Input
+                          value={chatInputText}
+                          onChangeText={setChatInputText}
+                          placeholder="Type a thought, critique, or inquiry..."
+                          containerStyle={{ flex: 1, marginVertical: 0 }}
+                          onSubmitEditing={() => handleSendThought()}
+                          returnKeyType="send"
+                        />
+                        <Button
+                          title={sendingThought ? '...' : 'THINK →'}
+                          onPress={() => handleSendThought()}
+                          disabled={!chatInputText.trim() || sendingThought}
+                          style={{ marginLeft: spacing.xs, height: 42, paddingHorizontal: 16 }}
+                        />
+                      </View>
+                    </View>
+                  </Card>
                 </View>
-              </Card>
+              )}
             </View>
+
+            {/* LINK TRAIN OF THOUGHT MODAL */}
+            <Modal visible={showLinkChatModal} animationType="slide" transparent>
+              <SafeAreaView style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <TopNav
+                    title="rut"
+                    subtitle="Link Train of Thought"
+                    rightAction={
+                      <Button
+                        title="DONE"
+                        variant="text"
+                        onPress={() => setShowLinkChatModal(false)}
+                      />
+                    }
+                  />
+                  <ScrollView style={{ padding: spacing.base }}>
+                    <Text style={styles.modalSubhead}>
+                      Attach any of your existing train of thought brainstorms to &ldquo;{project.title}&rdquo;, or spin up a new dedicated stream.
+                    </Text>
+
+                    <Card style={styles.newChatCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flex: 1, marginRight: spacing.sm }}>
+                          <Text style={styles.newChatTitle}>+ NEW DEDICATED STREAM</Text>
+                          <Text style={styles.newChatDesc}>
+                            Create a fresh, focused brainstorm session exclusively for this idea.
+                          </Text>
+                        </View>
+                        <Button
+                          title={linkingChatId === 'new' ? 'CREATING...' : '+ CREATE NEW'}
+                          variant="primary"
+                          onPress={handleCreateNewChatForIdea}
+                          loading={linkingChatId === 'new'}
+                          style={{ height: 32, paddingHorizontal: 10 }}
+                        />
+                      </View>
+                    </Card>
+
+                    <Text style={[styles.sectionHeading, { marginTop: spacing.base, marginBottom: spacing.xs }]}>
+                      YOUR EXISTING TRAIN OF THOUGHT CHATS ({availableChats.length})
+                    </Text>
+
+                    {loadingChats ? (
+                      <ActivityIndicator color={colors.ink} size="small" style={{ marginVertical: spacing.xl }} />
+                    ) : availableChats.length === 0 ? (
+                      <Card style={styles.emptyLinksCard}>
+                        <Text style={styles.emptyLinksTitle}>NO CHATS FOUND</Text>
+                        <Text style={styles.emptyLinksText}>
+                          You do not have any other chat sessions yet. Tap &ldquo;+ Create New&rdquo; above to start a brainstorm stream.
+                        </Text>
+                      </Card>
+                    ) : (
+                      availableChats.map((c) => {
+                        const isCurrentlyLinked = (ideaChat?.id === c.id) || (project.chatId === c.id);
+                        const isLinking = linkingChatId === c.id;
+                        return (
+                          <Card
+                            key={c.id}
+                            style={[
+                              styles.chatItemCard,
+                              isCurrentlyLinked && styles.chatItemActiveCard,
+                            ]}
+                          >
+                            <View style={styles.chatItemRow}>
+                              <View style={{ flex: 1, marginRight: spacing.sm }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                                  <Text style={styles.chatItemTitle} numberOfLines={1}>
+                                    {c.title}
+                                  </Text>
+                                  {isCurrentlyLinked && (
+                                    <Badge label="ACTIVE LINK ✓" variant="inverse" style={{ marginLeft: 6 }} />
+                                  )}
+                                </View>
+                                <Text style={styles.chatItemSub}>
+                                  {c.projectId === project.id
+                                    ? 'Linked to this idea'
+                                    : c.projectTitle
+                                    ? `Linked to: ${c.projectTitle}`
+                                    : 'General brainstorm thread'}
+                                  {c.updatedAt
+                                    ? ` • ${new Date(c.updatedAt).toLocaleDateString([], {
+                                        month: 'short',
+                                        day: 'numeric',
+                                      })}`
+                                    : ''}
+                                </Text>
+                              </View>
+
+                              {isCurrentlyLinked ? (
+                                <Button
+                                  title="OPEN ↗"
+                                  variant="secondary"
+                                  onPress={() => {
+                                    setShowLinkChatModal(false);
+                                    router.push(`/(app)/chat/${c.id}`);
+                                  }}
+                                  style={{ height: 30, paddingHorizontal: 10 }}
+                                />
+                              ) : (
+                                <Button
+                                  title={isLinking ? 'LINKING...' : 'LINK TO IDEA'}
+                                  variant="primary"
+                                  onPress={() => handleLinkChat(c)}
+                                  loading={isLinking}
+                                  style={{ height: 30, paddingHorizontal: 10 }}
+                                />
+                              )}
+                            </View>
+                          </Card>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
+              </SafeAreaView>
+            </Modal>
 
             {/* MODEL SELECTION MODAL */}
             <Modal visible={showModelModal} animationType="slide" transparent>
@@ -1261,14 +1754,24 @@ export default function ProjectDetailScreen() {
               </SafeAreaView>
             </Modal>
 
-            {/* DELETE IDEA BUTTON */}
-            <View style={styles.footerSection}>
-              <Button
-                title="DELETE IDEA"
-                variant="secondary"
-                onPress={handleDeleteProject}
-              />
-            </View>
+            {/* DANGER ZONE */}
+            <Card style={styles.dangerZoneCard}>
+              <View style={styles.dangerZoneRow}>
+                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <Text style={styles.dangerHeading}>DANGER ZONE</Text>
+                  <Text style={styles.dangerText}>
+                    Permanently delete this idea and all linked references.
+                  </Text>
+                </View>
+                <Button
+                  title="DELETE IDEA"
+                  variant="secondary"
+                  onPress={handleDeleteProject}
+                  style={styles.dangerButton}
+                  textStyle={styles.dangerButtonText}
+                />
+              </View>
+            </Card>
           </View>
         )}
       </ScrollView>
@@ -1797,5 +2300,211 @@ const getStyles = (colors: ThemeColors) =>
   modelItemDesc: {
     ...typography.captionSm,
     color: colors.inkSoft,
+  },
+  collapseAllRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: spacing.base,
+  },
+  collapseAllBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+  },
+  collapseAllText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: 0.8,
+  },
+  sectionContainer: {
+    marginBottom: spacing.base,
+  },
+  accordionHeaderRow: {
+    marginBottom: spacing.xs,
+  },
+  accordionHeaderTouchable: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairlineSoft,
+    marginBottom: spacing.xs,
+  },
+  accordionTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: spacing.xs,
+  },
+  accordionTitle: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.8,
+  },
+  accordionActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collapseToggleChip: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
+  collapseToggleText: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  collapsedPreviewCard: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    padding: spacing.sm,
+  },
+  collapsedPreviewText: {
+    ...typography.bodyMd,
+    fontSize: 12,
+    color: colors.ink,
+    lineHeight: 18,
+  },
+  collapsedMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  collapsedMetaText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    flex: 1,
+    marginRight: spacing.xs,
+  },
+  collapsedOpenHint: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  collapsedMatchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  collapsedBetweenRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  collapsedTitleText: {
+    ...typography.bodyMd,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 2,
+  },
+  sectionBody: {
+    marginTop: 2,
+  },
+  newChatCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  newChatTitle: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.ink,
+    marginBottom: 2,
+  },
+  newChatDesc: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: colors.inkSoft,
+    lineHeight: 16,
+  },
+  chatItemCard: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  chatItemActiveCard: {
+    borderColor: colors.ink,
+    borderWidth: 1.5,
+    backgroundColor: colors.surfaceGrade,
+  },
+  chatItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chatItemTitle: {
+    ...typography.bodyMd,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  chatItemSub: {
+    ...typography.captionSm,
+    fontSize: 10,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  dangerZoneCard: {
+    borderWidth: 1.5,
+    borderColor: '#E53935',
+    backgroundColor: 'rgba(229, 57, 53, 0.05)',
+    padding: spacing.base,
+    marginTop: spacing.xl,
+    marginBottom: spacing.base,
+  },
+  dangerZoneRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dangerHeading: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#E53935',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  dangerText: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: '#D32F2F',
+    lineHeight: 16,
+  },
+  dangerButton: {
+    backgroundColor: '#E53935',
+    borderColor: '#E53935',
+    borderWidth: 1,
+    height: 32,
+    paddingHorizontal: 12,
+  },
+  dangerButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 10,
   },
 });
