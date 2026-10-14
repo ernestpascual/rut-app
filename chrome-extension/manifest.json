@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "rut — Instagram Saved to Insight Bank",
+  "version": "1.0.0",
+  "description": "Scrape Instagram Saved Collections & Reels directly into your rut Insight Bank with auto-enrichment.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "identity"
+  ],
+  "host_permissions": [
+    "*://*.instagram.com/*"
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "rut — Sync Instagram Saved Collection"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "src/content/instagram-scraper.ts"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://rut.web.app/*",
+      "http://localhost:*/*"
+    ]
+  }
+}
