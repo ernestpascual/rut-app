@@ -11,6 +11,7 @@ import {
   Linking,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -57,6 +58,12 @@ import {
   getUserPreferredModel,
   setUserPreferredModel,
 } from '../../../src/features/chat/chatService';
+import {
+  copyIdeaAsMarkdown,
+  exportIdeaAsPDF,
+  exportIdeaAsDoc,
+  generateIdeaContextMarkdown,
+} from '../../../src/features/ideas/ideaExporter';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -107,6 +114,13 @@ export default function ProjectDetailScreen() {
   const [availableChats, setAvailableChats] = useState<ChatSession[]>([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [linkingChatId, setLinkingChatId] = useState<string | null>(null);
+
+  // Export idea context states
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingDoc, setExportingDoc] = useState(false);
+  const [showPreviewMarkdown, setShowPreviewMarkdown] = useState(false);
 
   // Load user's default preferred model
   useEffect(() => {
@@ -704,6 +718,61 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  // Export handlers
+  const handleCopyMarkdown = async () => {
+    if (!project) return;
+    const success = await copyIdeaAsMarkdown(
+      project,
+      links,
+      bankMap,
+      ideaChat,
+      chatMessages
+    );
+    if (success) {
+      setCopiedMarkdown(true);
+      setTimeout(() => setCopiedMarkdown(false), 2500);
+      Alert.alert('Copied to Clipboard', 'Full idea context markdown has been copied to your clipboard.');
+    } else {
+      Alert.alert('Notice', 'Unable to copy to clipboard automatically.');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!project) return;
+    setExportingPDF(true);
+    try {
+      await exportIdeaAsPDF(
+        project,
+        links,
+        bankMap,
+        ideaChat,
+        chatMessages
+      );
+    } catch (e: any) {
+      Alert.alert('PDF Export Notice', e.message || 'Could not export as PDF.');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportDoc = async () => {
+    if (!project) return;
+    setExportingDoc(true);
+    try {
+      await exportIdeaAsDoc(
+        project,
+        links,
+        bankMap,
+        ideaChat,
+        chatMessages
+      );
+    } catch (e: any) {
+      Alert.alert('Document Export Notice', e.message || 'Could not export as Document.');
+    } finally {
+      setExportingDoc(false);
+    }
+  };
+
   if (loading || !project) {
     return (
       <SafeAreaView style={styles.container}>
@@ -744,11 +813,20 @@ export default function ProjectDetailScreen() {
         }}
         backTitle="IDEAS"
         rightAction={
-          <Button
-            title={editing ? '✕ CANCEL' : '✎ WRITE / EDIT'}
-            variant="text"
-            onPress={() => setEditing(!editing)}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Button
+              title="⤓ EXPORT"
+              variant="secondary"
+              onPress={() => setShowExportModal(true)}
+              style={{ height: 28, paddingHorizontal: 8, marginRight: 6 }}
+            />
+            <Button
+              title={editing ? '✕ CANCEL' : '✎ WRITE / EDIT'}
+              variant="text"
+              onPress={() => setEditing(!editing)}
+              style={{ height: 28, paddingHorizontal: 6 }}
+            />
+          </View>
         }
       />
 
@@ -830,7 +908,15 @@ export default function ProjectDetailScreen() {
               <View style={{ flex: 1, marginRight: spacing.sm }}>
                 <Text style={styles.title}>{project.title}</Text>
               </View>
-              <Badge label={project.status.toUpperCase()} variant="inverse" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Button
+                  title="⤓ EXPORT"
+                  variant="secondary"
+                  onPress={() => setShowExportModal(true)}
+                  style={{ height: 28, paddingHorizontal: 8 }}
+                />
+                <Badge label={project.status.toUpperCase()} variant="inverse" />
+              </View>
             </View>
 
             {/* QUICK COLLAPSE / EXPAND ALL BUTTON */}
@@ -1754,6 +1840,117 @@ export default function ProjectDetailScreen() {
               </SafeAreaView>
             </Modal>
 
+            {/* EXPORT IDEA CONTEXT MODAL */}
+            <Modal visible={showExportModal} animationType="slide" transparent>
+              <SafeAreaView style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <TopNav
+                    title="rut"
+                    subtitle="Export Idea Context"
+                    rightAction={
+                      <Button
+                        title="DONE"
+                        variant="text"
+                        onPress={() => setShowExportModal(false)}
+                      />
+                    }
+                  />
+                  <ScrollView style={{ padding: spacing.base }}>
+                    <Text style={styles.modalSubhead}>
+                      Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and the full train of thought transcript.
+                    </Text>
+
+                    {/* OPTION 1: COPY AS MARKDOWN */}
+                    <Card style={styles.exportOptionCard}>
+                      <View style={styles.exportOptionHeader}>
+                        <View style={{ flex: 1, marginRight: spacing.sm }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                            <Text style={styles.exportOptionTitle}>📋 COPY AS MARKDOWN</Text>
+                            {copiedMarkdown && (
+                              <Badge label="COPIED ✓" variant="inverse" style={{ marginLeft: 6 }} />
+                            )}
+                          </View>
+                          <Text style={styles.exportOptionDesc}>
+                            Compiles complete structured Markdown context for AI prompts (Claude, ChatGPT, Gemini), Obsidian, or developer docs.
+                          </Text>
+                        </View>
+                        <Button
+                          title={copiedMarkdown ? 'COPIED ✓' : 'COPY ⎘'}
+                          variant={copiedMarkdown ? 'primary' : 'secondary'}
+                          onPress={handleCopyMarkdown}
+                          style={{ height: 32, paddingHorizontal: 12 }}
+                        />
+                      </View>
+                    </Card>
+
+                    {/* OPTION 2: EXPORT AS PDF */}
+                    <Card style={styles.exportOptionCard}>
+                      <View style={styles.exportOptionHeader}>
+                        <View style={{ flex: 1, marginRight: spacing.sm }}>
+                          <Text style={styles.exportOptionTitle}>📄 EXPORT AS PDF</Text>
+                          <Text style={styles.exportOptionDesc}>
+                            Generates an editorial print-ready PDF document with metadata badges, visual citations, and interactive transcripts.
+                          </Text>
+                        </View>
+                        <Button
+                          title={exportingPDF ? 'GENERATING...' : 'PRINT / PDF ↗'}
+                          variant="primary"
+                          onPress={handleExportPDF}
+                          loading={exportingPDF}
+                          style={{ height: 32, paddingHorizontal: 12 }}
+                        />
+                      </View>
+                    </Card>
+
+                    {/* OPTION 3: EXPORT AS DOC */}
+                    <Card style={styles.exportOptionCard}>
+                      <View style={styles.exportOptionHeader}>
+                        <View style={{ flex: 1, marginRight: spacing.sm }}>
+                          <Text style={styles.exportOptionTitle}>📝 EXPORT AS DOC</Text>
+                          <Text style={styles.exportOptionDesc}>
+                            Downloads a Microsoft Word and Google Docs compatible (.doc) file for editorial reviews, proposals, and briefs.
+                          </Text>
+                        </View>
+                        <Button
+                          title={exportingDoc ? 'PREPARING...' : 'DOWNLOAD .DOC ⤓'}
+                          variant="secondary"
+                          onPress={handleExportDoc}
+                          loading={exportingDoc}
+                          style={{ height: 32, paddingHorizontal: 12 }}
+                        />
+                      </View>
+                    </Card>
+
+                    {/* CONTEXT MARKDOWN PREVIEW */}
+                    <View style={{ marginTop: spacing.base, marginBottom: spacing.xl }}>
+                      <Pressable
+                        style={styles.previewToggleBtn}
+                        onPress={() => setShowPreviewMarkdown(!showPreviewMarkdown)}
+                      >
+                        <Text style={styles.previewToggleText}>
+                          {showPreviewMarkdown ? '▴ HIDE RAW MARKDOWN PREVIEW' : '▾ VIEW COMPILED MARKDOWN CONTEXT'}
+                        </Text>
+                      </Pressable>
+
+                      {showPreviewMarkdown && (
+                        <Card style={styles.rawMarkdownCard}>
+                          <Text style={styles.rawMarkdownText} selectable>
+                            {generateIdeaContextMarkdown(
+                              project,
+                              links,
+                              bankMap,
+                              ideaChat,
+                              chatMessages
+                            )}
+                          </Text>
+                        </Card>
+                      )}
+                    </View>
+                  </ScrollView>
+                </View>
+              </SafeAreaView>
+            </Modal>
+
             {/* DANGER ZONE */}
             <Card style={styles.dangerZoneCard}>
               <View style={styles.dangerZoneRow}>
@@ -2506,5 +2703,60 @@ const getStyles = (colors: ThemeColors) =>
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 10,
+  },
+  exportOptionCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    padding: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  exportOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  exportOptionTitle: {
+    ...typography.bodyMd,
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  exportOptionDesc: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: colors.inkSoft,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  previewToggleBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    alignItems: 'center',
+  },
+  previewToggleText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: 0.8,
+  },
+  rawMarkdownCard: {
+    marginTop: spacing.xs,
+    padding: spacing.sm,
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    maxHeight: 280,
+  },
+  rawMarkdownText: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 10,
+    color: colors.ink,
+    lineHeight: 16,
   },
 });

@@ -9,7 +9,10 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@react-native-async-storage/async-storage$': '<rootDir>/src/__mocks__/async-storage.ts',
-    '^react-native$': '<rootDir>/src/__mocks__/react-native.ts'
+    '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
+    '^expo-clipboard$': '<rootDir>/src/__mocks__/expo-clipboard.ts',
+    '^expo-print$': '<rootDir>/src/__mocks__/expo-print.ts',
+    '^expo-sharing$': '<rootDir>/src/__mocks__/expo-sharing.ts'
   },
   modulePathIgnorePatterns: ['<rootDir>/functions/']
 };
