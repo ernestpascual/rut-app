@@ -100,6 +100,12 @@ export default function ChatWorkspaceScreen() {
   const [createProjectContent, setCreateProjectContent] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
 
+  // Hamburger menu, Delete confirmation modal, and Collapsible thesis states
+  const [menuModalOpen, setMenuModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingChat, setDeletingChat] = useState(false);
+  const [thesisExpanded, setThesisExpanded] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
 
   // Load session & messages with dual-mode fallback (local + Firestore)
@@ -318,6 +324,14 @@ export default function ChatWorkspaceScreen() {
   };
 
   const handleDeleteMessage = (messageId: string) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
+      if (window.confirm('Are you sure you want to delete this message?')) {
+        if (!id) return;
+        deleteChatMessage(id, messageId, user?.uid);
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+      return;
+    }
     Alert.alert('Delete Insight', 'Are you sure you want to delete this message?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -333,18 +347,21 @@ export default function ChatWorkspaceScreen() {
   };
 
   const handleDeleteChat = () => {
-    Alert.alert('Delete Train of Thought', 'Are you sure you want to delete this entire chat?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (!id) return;
-          await deleteChatSession(id, user?.uid);
-          router.replace('/(app)/(tabs)/chats');
-        },
-      },
-    ]);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!id) return;
+    setDeletingChat(true);
+    try {
+      await deleteChatSession(id, user?.uid);
+      setDeleteModalOpen(false);
+      setMenuModalOpen(false);
+      router.replace('/(app)/(tabs)/chats');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to delete chat.');
+      setDeletingChat(false);
+    }
   };
 
   if (loading && !session) {
@@ -388,59 +405,17 @@ export default function ChatWorkspaceScreen() {
         }}
         backTitle="CHATS"
         rightAction={
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Button
-              title="DELETE"
-              variant="text"
-              onPress={handleDeleteChat}
-              style={{ marginRight: spacing.xs }}
-            />
-            <Pressable
-              onPress={handleToggleWebAccess}
-              style={[
-                styles.webToggleBtn,
-                webAccessEnabled ? styles.webToggleBtnActive : styles.webToggleBtnInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.webToggleText,
-                  webAccessEnabled ? styles.webToggleTextActive : styles.webToggleTextInactive,
-                ]}
-              >
-                {webAccessEnabled ? '🌐 WEB: ON' : '🌐 WEB: OFF'}
-              </Text>
-            </Pressable>
-            <Button
-              title="📥 PULL DUMP"
-              variant="secondary"
-              onPress={() => setPullDumpModalOpen(true)}
-              style={{ height: 34, paddingHorizontal: 10, marginRight: spacing.xs }}
-            />
-            <Button
-              title={`PIN (${(session?.pinnedInspirationIds || []).length})`}
-              variant="secondary"
-              onPress={() => setPinModalOpen(true)}
-              style={{ height: 34, paddingHorizontal: 10, marginRight: spacing.xs }}
-            />
-            <Button
-              title={`⚡ ${selectedModel.replace('gemini-', '').toUpperCase()}`}
-              variant="secondary"
-              onPress={() => setShowModelModal(true)}
-              style={{ height: 34, paddingHorizontal: 10 }}
-            />
-          </View>
+          <Pressable
+            onPress={() => setMenuModalOpen(true)}
+            style={styles.hamburgerBtn}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Chat options menu"
+          >
+            <Text style={styles.hamburgerIcon}>☰</Text>
+          </Pressable>
         }
       />
-
-      {/* Live Web Grounding Banner */}
-      {webAccessEnabled ? (
-        <View style={styles.webAccessActiveBanner}>
-          <Text style={styles.webAccessActiveText}>
-            🌐 LIVE INTERNET GROUNDING ACTIVE — Synthesizing real-time design movements & web precedents
-          </Text>
-        </View>
-      ) : null}
 
       {/* Linked Idea Banner if connected to an Idea */}
       {session?.projectId ? (
@@ -458,18 +433,36 @@ export default function ChatWorkspaceScreen() {
         </Pressable>
       ) : null}
 
-      {/* Thesis Statement Banner on top */}
+      {/* Collapsible Thesis Statement Banner on top */}
       <View style={styles.thesisBar}>
-        <View style={styles.thesisHeaderRow}>
-          <Badge label="💡 THESIS STATEMENT" variant="inverse" style={{ marginRight: spacing.xs }} />
-          <Text style={styles.thesisSubtitle}>1-2 sentence thought synthesis</Text>
-        </View>
-        <Text style={styles.thesisStatementText}>
-          {session?.thesisStatement ||
-            (session?.projectTitle
-              ? `Exploring ${session.projectTitle}: interact through the chat to distill and synthesize the core thesis statement.`
-              : 'Interact through the chat to distill and maintain a 1-2 sentence thesis statement.')}
-        </Text>
+        <Pressable
+          style={styles.thesisHeaderRow}
+          onPress={() => setThesisExpanded(!thesisExpanded)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle thesis statement"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.xs }}>
+            <Badge label="💡 THESIS" variant="inverse" style={{ marginRight: spacing.xs }} />
+            <Text style={styles.thesisSubtitle} numberOfLines={1}>
+              {thesisExpanded
+                ? '1-2 sentence thought synthesis'
+                : (session?.thesisStatement || 'Tap to expand 1-2 sentence synthesis')}
+            </Text>
+          </View>
+          <Text style={styles.thesisToggleText}>
+            {thesisExpanded ? '▴ HIDE' : '▾ EXPAND'}
+          </Text>
+        </Pressable>
+
+        {thesisExpanded ? (
+          <Text style={styles.thesisStatementText}>
+            {session?.thesisStatement ||
+              (session?.projectTitle
+                ? `Exploring ${session.projectTitle}: interact through the chat to distill and synthesize the core thesis statement.`
+                : 'Interact through the chat to distill and maintain a 1-2 sentence thesis statement.')}
+          </Text>
+        ) : null}
       </View>
 
       {/* Pinned inspirations banner if any */}
@@ -504,47 +497,8 @@ export default function ChatWorkspaceScreen() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>START A TRAIN OF THOUGHT</Text>
               <Text style={styles.emptySubtitle}>
-                Pose a creative query, explore design hypotheses, or synthesize with your dump.
+                Pose a creative query, hypothesize, or tap the ☰ menu to pull inspirations and toggle live web search.
               </Text>
-              <View style={styles.promptChipsContainer}>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() =>
-                    handleSendMessage('Brainstorm 3 bold, unexpected concept angles for an experimental design project')
-                  }
-                >
-                  <Text style={styles.promptChipText}>💡 Concept Variations</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Suggest tactile materiality, textures, and an editorial color palette')}
-                >
-                  <Text style={styles.promptChipText}>🎨 Material & Palette</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Critique and pressure-test this design concept to find the killer tension')}
-                >
-                  <Text style={styles.promptChipText}>✍️ Polish Brief</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.promptChip, webAccessEnabled && styles.promptChipActive]}
-                  onPress={() => {
-                    if (!webAccessEnabled) setWebAccessEnabled(true);
-                    handleSendMessage('Scan the live web for contemporary design precedents, spatial installations, and brand movements in 2026');
-                  }}
-                >
-                  <Text style={[styles.promptChipText, webAccessEnabled && styles.promptChipTextActive]}>
-                    🌐 Live Web Trends
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Check my dump and pull all relevant inspirations for this thought train')}
-                >
-                  <Text style={styles.promptChipText}>📥 Check & Pull From Dump</Text>
-                </Pressable>
-              </View>
             </View>
           }
           renderItem={({ item }) => (
@@ -672,72 +626,16 @@ export default function ChatWorkspaceScreen() {
           </View>
         ) : null}
 
-        {/* Quick Brainstorm Action Bar */}
-        <View style={styles.brainstormSparksBar}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.brainstormSparksContent}
-          >
-            <Pressable
-              style={[
-                styles.brainstormSparkPill,
-                webAccessEnabled && styles.brainstormSparkPillWeb,
-              ]}
-              onPress={() => {
-                if (!webAccessEnabled) setWebAccessEnabled(true);
-                handleSendMessage('Search the web for cutting-edge contemporary design trends, spatial installations, and brand movements relevant to this concept');
-              }}
-            >
-              <Text style={[styles.brainstormSparkText, webAccessEnabled && styles.brainstormSparkTextWeb]}>
-                🌐 Live Web Trends
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.brainstormSparkPill}
-              onPress={() => handleSendMessage('Give me 3 wild, counter-intuitive conceptual angles for this idea')}
-            >
-              <Text style={styles.brainstormSparkText}>⚡ Wild Angle</Text>
-            </Pressable>
-            <Pressable
-              style={styles.brainstormSparkPill}
-              onPress={() => handleSendMessage('Suggest sensory materials, tactile textures, and a color palette')}
-            >
-              <Text style={styles.brainstormSparkText}>🎨 Materials & Palette</Text>
-            </Pressable>
-            <Pressable
-              style={styles.brainstormSparkPill}
-              onPress={() => handleSendMessage('Critique this concept: what feels clichéd, and what is the killer hallmark detail?')}
-            >
-              <Text style={styles.brainstormSparkText}>🔍 Pressure Test</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.brainstormSparkPill, { borderColor: colors.ink }]}
-              onPress={() => handleSendMessage('Search my dump knowledge base for the most relevant inspirations and synthesize their core ideas')}
-            >
-              <Text style={[styles.brainstormSparkText, { fontWeight: '700' }]}>📚 Query Dump KB</Text>
-            </Pressable>
-            <Pressable
-              style={styles.brainstormSparkPill}
-              onPress={() => handleSendMessage('What is the single most compelling tangible experiment or prototype to build next?')}
-            >
-              <Text style={styles.brainstormSparkText}>🚀 Next Move</Text>
-            </Pressable>
-          </ScrollView>
-        </View>
-
         {/* Input Bar */}
         <View style={styles.inputBar}>
-          <Button
-            title="📥 DUMP"
-            variant="secondary"
-            onPress={() => setPullDumpModalOpen(true)}
-            style={{ marginRight: spacing.xs, height: 46, paddingHorizontal: 12 }}
-          />
           <Input
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Chat freely with Gemini, search web, or ask about dump..."
+            placeholder={
+              webAccessEnabled
+                ? 'Ask Gemini (Live Web Search active)...'
+                : 'Pose a creative query, hypothesize, or explore...'
+            }
             containerStyle={{ flex: 1, marginVertical: 0 }}
             onSubmitEditing={() => handleSendMessage()}
           />
@@ -1017,6 +915,137 @@ export default function ChatWorkspaceScreen() {
             </ScrollView>
           </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* Hamburger Options Menu Modal */}
+      <Modal visible={menuModalOpen} animationType="slide" transparent>
+        <SafeAreaView style={styles.menuModalBackdrop}>
+          <View style={styles.menuModalSheet}>
+            <View style={styles.menuModalHeader}>
+              <View>
+                <Text style={styles.menuModalBrand}>RUT // OPTIONS</Text>
+                <Text style={styles.menuModalTitle}>Train of Thought Menu</Text>
+              </View>
+              <Pressable
+                onPress={() => setMenuModalOpen(false)}
+                style={styles.menuCloseBtn}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close menu"
+              >
+                <Text style={styles.menuCloseText}>✕</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.menuBody} showsVerticalScrollIndicator={false}>
+              {/* Option 1: Gemini Model */}
+              <Pressable
+                style={styles.menuItemCard}
+                onPress={() => {
+                  setMenuModalOpen(false);
+                  setShowModelModal(true);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemSection}>AI INFERENCE MODEL</Text>
+                  <Text style={styles.menuItemTitle}>
+                    {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name || selectedModel}
+                  </Text>
+                  <Text style={styles.menuItemDesc}>
+                    Tap to switch reasoning model & speed
+                  </Text>
+                </View>
+                <Badge label="CHANGE →" variant="outline" />
+              </Pressable>
+
+              {/* Option 2: Pull from Dump */}
+              <Pressable
+                style={styles.menuItemCard}
+                onPress={() => {
+                  setMenuModalOpen(false);
+                  setPullDumpModalOpen(true);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemSection}>KNOWLEDGE BASE</Text>
+                  <Text style={styles.menuItemTitle}>Pull & Check From Dump</Text>
+                  <Text style={styles.menuItemDesc}>
+                    Browse saved inspirations, pin items into context, or ask AI directly
+                  </Text>
+                </View>
+                <Badge label="BROWSE →" variant="outline" />
+              </Pressable>
+
+              {/* Option 3: Web Search Toggle */}
+              <Pressable
+                style={styles.menuItemCard}
+                onPress={() => {
+                  setWebAccessEnabled((prev) => !prev);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemSection}>LIVE WEB SEARCH</Text>
+                  <Text style={styles.menuItemTitle}>
+                    {webAccessEnabled ? '🌐 Live Web Search: ACTIVE' : '🌐 Live Web Search: OFF'}
+                  </Text>
+                  <Text style={styles.menuItemDesc}>
+                    Ground responses with live Google web results and contemporary design trends
+                  </Text>
+                </View>
+                <Badge
+                  label={webAccessEnabled ? 'ENABLED ✓' : 'TURN ON'}
+                  variant={webAccessEnabled ? 'inverse' : 'grade'}
+                />
+              </Pressable>
+
+              {/* Option 4: Delete Session */}
+              <Pressable
+                style={[styles.menuItemCard, styles.menuItemDeleteCard]}
+                onPress={() => {
+                  setMenuModalOpen(false);
+                  setDeleteModalOpen(true);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuItemSection, { color: colors.ink }]}>DANGER ZONE</Text>
+                  <Text style={[styles.menuItemTitle, { color: colors.ink }]}>Delete Train of Thought</Text>
+                  <Text style={styles.menuItemDesc}>
+                    Permanently delete this chat session and its full history
+                  </Text>
+                </View>
+                <Badge label="DELETE" variant="inverse" />
+              </Pressable>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal visible={deleteModalOpen} animationType="fade" transparent>
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>DELETE TRAIN OF THOUGHT?</Text>
+            <Text style={styles.confirmModalText}>
+              Are you sure you want to delete this chat session? All messages and synthesized insights will be permanently erased. This cannot be undone.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <Button
+                title="CANCEL"
+                variant="secondary"
+                onPress={() => setDeleteModalOpen(false)}
+                disabled={deletingChat}
+                style={{ flex: 1, marginRight: spacing.xs }}
+              />
+              <Button
+                title={deletingChat ? 'DELETING...' : 'DELETE FOREVER'}
+                variant="primary"
+                onPress={handleConfirmDelete}
+                loading={deletingChat}
+                style={{ flex: 1, marginLeft: spacing.xs }}
+              />
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1418,5 +1447,136 @@ const getStyles = (colors: ThemeColors) =>
     lineHeight: 18,
     color: colors.ink,
     fontWeight: '600',
+  },
+  thesisToggleText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  hamburgerBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hamburgerIcon: {
+    fontSize: 22,
+    color: colors.ink,
+    lineHeight: 24,
+  },
+  menuModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  menuModalSheet: {
+    backgroundColor: colors.canvas,
+    borderTopWidth: 2,
+    borderTopColor: colors.ink,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.xl,
+    maxHeight: '85%',
+  },
+  menuModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+    paddingBottom: spacing.sm,
+  },
+  menuModalBrand: {
+    ...typography.captionCap,
+    fontSize: 10,
+    color: colors.inkSoft,
+    letterSpacing: 1.2,
+    marginBottom: 2,
+  },
+  menuModalTitle: {
+    ...typography.bodyLg,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  menuCloseBtn: {
+    padding: spacing.xs,
+  },
+  menuCloseText: {
+    fontSize: 18,
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  menuBody: {
+    paddingBottom: spacing.base,
+  },
+  menuItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.base,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    marginBottom: spacing.sm,
+  },
+  menuItemDeleteCard: {
+    borderColor: colors.ink,
+    marginTop: spacing.sm,
+  },
+  menuItemSection: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  menuItemTitle: {
+    ...typography.bodyMd,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  menuItemDesc: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: 2,
+    paddingRight: spacing.sm,
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.base,
+  },
+  confirmModalCard: {
+    backgroundColor: colors.canvas,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 420,
+  },
+  confirmModalTitle: {
+    ...typography.bodyLg,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: spacing.xs,
+  },
+  confirmModalText: {
+    ...typography.bodyMd,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.inkSoft,
+    marginBottom: spacing.lg,
+  },
+  confirmModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

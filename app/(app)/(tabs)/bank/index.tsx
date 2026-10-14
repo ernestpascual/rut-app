@@ -56,9 +56,6 @@ export default function BankScreen() {
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [semanticMode, setSemanticMode] = useState(false);
-  const [semanticResults, setSemanticResults] = useState<string[] | null>(null);
-  const [searching, setSearching] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('ALL');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<DumpSortOption>('newest');
@@ -143,38 +140,6 @@ export default function BankScreen() {
     }
   }, [user]);
 
-
-  const handleSemanticSearch = async () => {
-    if (!searchQuery.trim() || !user) {
-      setSemanticResults(null);
-      return;
-    }
-    setSearching(true);
-    try {
-      const searchFn = httpsCallable<{ query: string }, { inspirationIds: string[] }>(
-        functions,
-        'semanticSearch'
-      );
-      const res = await searchFn({ query: searchQuery.trim() });
-      setSemanticResults(res.data.inspirationIds || []);
-    } catch (err) {
-      // Local keyword fallback
-      const q = searchQuery.toLowerCase();
-      const matched = items
-        .filter(
-          (i) =>
-            i.title.toLowerCase().includes(q) ||
-            (i.aiSummary || '').toLowerCase().includes(q) ||
-            (i.concepts || []).some((c) => c.toLowerCase().includes(q)) ||
-            (i.tags || []).some((t) => t.toLowerCase().includes(q))
-        )
-        .map((i) => i.id);
-      setSemanticResults(matched);
-    } finally {
-      setSearching(false);
-    }
-  };
-
   const handleRetryIndexing = async (itemId: string) => {
     if (!user) return;
     try {
@@ -237,9 +202,6 @@ export default function BankScreen() {
 
     // Search query
     if (searchQuery.trim()) {
-      if (semanticMode && semanticResults !== null) {
-        return semanticResults.includes(item.id);
-      }
       const queryLower = searchQuery.toLowerCase();
       const matchTitle = item.title?.toLowerCase().includes(queryLower);
       const matchNote = item.userNote?.toLowerCase().includes(queryLower);
@@ -493,7 +455,6 @@ export default function BankScreen() {
               <Pressable
                 onPress={() => {
                   setSearchQuery('');
-                  setSemanticResults(null);
                 }}
                 style={styles.activeFilterChip}
               >
@@ -522,7 +483,6 @@ export default function BankScreen() {
             <Pressable
               onPress={() => {
                 setSearchQuery('');
-                setSemanticResults(null);
                 setSelectedPlatform('ALL');
                 setSelectedTag(null);
               }}
@@ -539,33 +499,19 @@ export default function BankScreen() {
             <View style={styles.searchRow}>
               <Input
                 value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                  if (!text.trim()) setSemanticResults(null);
-                }}
-                placeholder={
-                  semanticMode
-                    ? 'Semantic AI search (e.g. brutalist typography)...'
-                    : 'Filter by keyword or title...'
-                }
+                onChangeText={setSearchQuery}
+                placeholder="Filter by keyword, title, note, or tag..."
                 containerStyle={{ flex: 1, marginVertical: 0 }}
-                onSubmitEditing={semanticMode ? handleSemanticSearch : undefined}
                 autoFocus
               />
-              <Button
-                title={semanticMode ? 'AI ON' : 'AI OFF'}
-                variant={semanticMode ? 'primary' : 'secondary'}
-                onPress={() => {
-                  const next = !semanticMode;
-                  setSemanticMode(next);
-                  if (next && searchQuery.trim()) {
-                    handleSemanticSearch();
-                  } else {
-                    setSemanticResults(null);
-                  }
-                }}
-                style={{ height: 46, marginLeft: spacing.xs, paddingHorizontal: 14 }}
-              />
+              {searchQuery.trim().length > 0 ? (
+                <Button
+                  title="CLEAR"
+                  variant="secondary"
+                  onPress={() => setSearchQuery('')}
+                  style={{ height: 46, marginLeft: spacing.xs, paddingHorizontal: 14 }}
+                />
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -645,12 +591,10 @@ export default function BankScreen() {
       </View>
 
       {/* ITEMS LIST */}
-      {loading || searching ? (
+      {loading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator color={colors.ink} size="small" />
-          <Text style={styles.loadingText}>
-            {searching ? 'SEARCHING INSPIRATIONS...' : 'LOADING BANK...'}
-          </Text>
+          <Text style={styles.loadingText}>LOADING BANK...</Text>
         </View>
       ) : sortedAndFilteredItems.length === 0 ? (
         <View style={styles.centerBox}>

@@ -6,6 +6,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -85,7 +86,16 @@ export default function ChatsListScreen() {
     }
   }, [user]);
 
-  const handleDeleteChat = (chatId: string, title: string) => {
+  const handleDeleteChat = async (chatId: string, title: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm(`Delete Train of Thought?\n\nAre you sure you want to permanently delete "${title}"? This cannot be undone.`);
+      if (confirmed) {
+        await deleteChatSession(chatId, user?.uid);
+        setChats((prev) => prev.filter((c) => c.id !== chatId));
+      }
+      return;
+    }
+
     Alert.alert('Delete Train of Thought', `Are you sure you want to delete "${title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {

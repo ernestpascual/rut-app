@@ -17,5 +17,11 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "chrome-extension",
+    "dist",
+    "web-build",
+    "node_modules"
   ]
 }
