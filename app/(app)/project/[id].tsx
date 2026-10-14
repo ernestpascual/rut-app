@@ -32,6 +32,7 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { MarkdownRenderer } from '../../../src/components/ui/MarkdownRenderer';
 import { Project, ProjectInspirationLink, InspirationItem, ChatMessage, ChatSession } from '../../../src/types';
 import {
   getDumpInspirations,
@@ -448,6 +449,9 @@ export default function ProjectDetailScreen() {
     getOrCreateIdeaChat(project, attachedItems, user?.uid).then(async (chat) => {
       if (!isMounted) return;
       setIdeaChat(chat);
+      if (chat.thesisStatement && !project.thesisStatement) {
+        setProject((p) => (p ? { ...p, thesisStatement: chat.thesisStatement } : p));
+      }
       const msgs = await getChatMessages(chat.id, user?.uid);
       if (isMounted) {
         setChatMessages(msgs);
@@ -458,6 +462,26 @@ export default function ProjectDetailScreen() {
       isMounted = false;
     };
   }, [project?.id, project?.title, links.length, user?.uid]);
+
+  // Open the full dedicated chat interface for this thought / idea
+  const handleOpenFullChat = async () => {
+    if (ideaChat) {
+      router.push(`/(app)/chat/${ideaChat.id}`);
+      return;
+    }
+    if (!project) return;
+    try {
+      const attachedItems = links
+        .map((l) => bankMap[l.inspirationId])
+        .filter(Boolean) as InspirationItem[];
+      const chat = await getOrCreateIdeaChat(project, attachedItems, user?.uid);
+      setIdeaChat(chat);
+      router.push(`/(app)/chat/${chat.id}`);
+    } catch {
+      // Fallback
+      router.push('/(app)/(tabs)/chats');
+    }
+  };
 
   // Send a thought or query in the idea's train of thought
   const handleSendThought = async (customPrompt?: string) => {
@@ -492,8 +516,15 @@ export default function ProjectDetailScreen() {
         return [...filtered, result.userMessage, result.assistantMessage];
       });
 
+      if (result.thesisStatement) {
+        setIdeaChat((prev) =>
+          prev ? { ...prev, thesisStatement: result.thesisStatement || prev.thesisStatement } : prev
+        );
+      }
+
       const updatedProj: Project = {
         ...project,
+        thesisStatement: result.thesisStatement || project.thesisStatement,
         thoughtCount: (project.thoughtCount || 0) + 1,
         chatId: ideaChat.id,
         updatedAt: Date.now(),
@@ -932,21 +963,47 @@ export default function ProjectDetailScreen() {
                       ⚡ {selectedModel.replace('gemini-', '').toUpperCase()} ▾
                     </Text>
                   </Pressable>
-                  {ideaChat ? (
-                    <Button
-                      title="↗ FULL CHAT"
-                      variant="secondary"
-                      onPress={() => router.push(`/(app)/chat/${ideaChat.id}`)}
-                      style={{ height: 32, paddingHorizontal: 10 }}
-                    />
-                  ) : null}
+                  <Button
+                    title="💬 OPEN FULL CHAT ↗"
+                    variant="primary"
+                    onPress={handleOpenFullChat}
+                    style={{ height: 32, paddingHorizontal: 10 }}
+                  />
                 </View>
               </View>
 
-              <Card style={styles.thoughtCard}>
-                <Text style={styles.thoughtBannerText}>
-                  Interactive thought flow powered by {selectedModel}. Attached inspirations ({links.length}) are anchored into reasoning context.
+              {/* THESIS STATEMENT CARD ON TOP OF TRAIN OF THOUGHT */}
+              <Card style={styles.thesisCard}>
+                <View style={styles.thesisHeaderRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Badge label="💡 THESIS STATEMENT" variant="inverse" style={{ marginRight: spacing.xs }} />
+                    <Text style={styles.thesisSubtitle}>Distilled thought synthesis</Text>
+                  </View>
+                  <Pressable
+                    onPress={handleOpenFullChat}
+                    hitSlop={8}
+                    style={styles.openChatLinkBtn}
+                  >
+                    <Text style={styles.openChatLinkText}>OPEN FULL CHAT ↗</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.thesisStatementText}>
+                  {project.thesisStatement ||
+                    ideaChat?.thesisStatement ||
+                    project.brief ||
+                    'Interact with this thought through chat to synthesize an evolving 1-2 sentence thesis statement.'}
                 </Text>
+              </Card>
+
+              <Card style={styles.thoughtCard}>
+                <View style={styles.thoughtBannerRow}>
+                  <Text style={styles.thoughtBannerText}>
+                    Interactive thought flow powered by {selectedModel}. Tap any thought to open the full chat interface.
+                  </Text>
+                  <Pressable onPress={handleOpenFullChat} hitSlop={8}>
+                    <Text style={styles.thoughtBannerAction}>EXPAND ↗</Text>
+                  </Pressable>
+                </View>
 
                 {/* SCROLLABLE CHAT MESSAGES STREAM */}
                 <View style={styles.chatStreamContainer}>
@@ -961,11 +1018,13 @@ export default function ProjectDetailScreen() {
                       {chatMessages.map((msg) => {
                         const isUser = msg.role === 'user';
                         return (
-                          <View
+                          <Pressable
                             key={msg.id}
-                            style={[
+                            onPress={handleOpenFullChat}
+                            style={({ pressed }) => [
                               styles.chatBubbleWrapper,
                               isUser ? styles.chatUserWrapper : styles.chatAssistantWrapper,
+                              pressed && { opacity: 0.8 },
                             ]}
                           >
                             <View
@@ -1002,7 +1061,17 @@ export default function ProjectDetailScreen() {
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </Text>
                                   <Pressable
-                                    onPress={() => handleDeleteThought(msg.id)}
+                                    onPress={handleOpenFullChat}
+                                    hitSlop={8}
+                                    style={styles.openInChatChip}
+                                  >
+                                    <Text style={styles.openInChatChipText}>↗ FULL CHAT</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={(e) => {
+                                      e.stopPropagation?.();
+                                      handleDeleteThought(msg.id);
+                                    }}
                                     hitSlop={8}
                                     style={{ marginLeft: 8 }}
                                   >
@@ -1018,15 +1087,13 @@ export default function ProjectDetailScreen() {
                                 </View>
                               </View>
 
-                              <Text
-                                style={[
-                                  styles.chatMessageText,
-                                  isUser ? styles.chatUserText : styles.chatAssistantText,
-                                ]}
-                                selectable
-                              >
-                                {msg.content}
-                              </Text>
+                              {isUser ? (
+                                <Text style={styles.chatUserText} selectable>
+                                  {msg.content}
+                                </Text>
+                              ) : (
+                                <MarkdownRenderer content={msg.content} />
+                              )}
 
                               {/* Cited references */}
                               {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
@@ -1039,7 +1106,10 @@ export default function ProjectDetailScreen() {
                                         <Pressable
                                           key={sid}
                                           style={styles.citationPill}
-                                          onPress={() => router.push(`/(app)/inspiration/${sid}`)}
+                                          onPress={(e) => {
+                                            e.stopPropagation?.();
+                                            router.push(`/(app)/inspiration/${sid}`);
+                                          }}
                                         >
                                           <Text style={styles.citationPillText} numberOfLines={1}>
                                             🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
@@ -1051,17 +1121,26 @@ export default function ProjectDetailScreen() {
                                 </View>
                               )}
                             </View>
-                          </View>
+                          </Pressable>
                         );
                       })}
                     </ScrollView>
                   ) : (
-                    <View style={styles.emptyThoughtBox}>
+                    <Pressable
+                      style={styles.emptyThoughtBox}
+                      onPress={handleOpenFullChat}
+                    >
                       <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
                       <Text style={styles.emptyThoughtText}>
-                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}.
+                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat interface.
                       </Text>
-                    </View>
+                      <Button
+                        title="💬 OPEN FULL CHAT INTERFACE ↗"
+                        variant="primary"
+                        onPress={handleOpenFullChat}
+                        style={{ marginTop: spacing.sm, alignSelf: 'center' }}
+                      />
+                    </Pressable>
                   )}
                 </View>
 
@@ -1473,11 +1552,77 @@ const getStyles = (colors: ThemeColors) =>
     borderColor: colors.ink,
     padding: spacing.base,
   },
+  thesisCard: {
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    padding: spacing.base,
+    marginBottom: spacing.base,
+  },
+  thesisHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  thesisSubtitle: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+  },
+  thesisStatementText: {
+    ...typography.captionSm,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.ink,
+    fontWeight: '600',
+  },
+  openChatLinkBtn: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  openChatLinkText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  thoughtBannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+  },
   thoughtBannerText: {
     ...typography.captionSm,
     color: colors.inkSoft,
     lineHeight: 18,
-    marginBottom: spacing.sm,
+    flex: 1,
+  },
+  thoughtBannerAction: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.ink,
+    marginLeft: spacing.xs,
+  },
+  openInChatChip: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginLeft: 6,
+  },
+  openInChatChipText: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.ink,
   },
   chatStreamContainer: {
     borderWidth: 1,

@@ -72,6 +72,7 @@ export interface ChatSession {
   title: string;
   pinnedInspirationIds: string[];
   summary: string | null;
+  thesisStatement?: string | null;
   projectId?: string | null;
   projectTitle?: string | null;
   webAccessEnabled?: boolean;
@@ -100,6 +101,7 @@ export interface Project {
   autoLinkEnabled: boolean;
   autoLinkConfidenceThreshold: number;
   chatId?: string | null;
+  thesisStatement?: string | null;
   thoughtCount?: number;
   createdAt: number;
   updatedAt: number;

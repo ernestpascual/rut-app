@@ -244,10 +244,11 @@ export default function ChatWorkspaceScreen() {
         return [...withoutDups, result.userMessage, result.assistantMessage];
       });
 
-      // Update session summary in local state
+      // Update session summary and thesis statement in local state
       if (session) {
         setSession({
           ...session,
+          thesisStatement: result.thesisStatement || session.thesisStatement,
           summary: textToSend.slice(0, 100),
           updatedAt: Date.now(),
         });
@@ -456,6 +457,20 @@ export default function ChatWorkspaceScreen() {
           <Text style={styles.linkedIdeaLink}>↗ VIEW IDEA</Text>
         </Pressable>
       ) : null}
+
+      {/* Thesis Statement Banner on top */}
+      <View style={styles.thesisBar}>
+        <View style={styles.thesisHeaderRow}>
+          <Badge label="💡 THESIS STATEMENT" variant="inverse" style={{ marginRight: spacing.xs }} />
+          <Text style={styles.thesisSubtitle}>1-2 sentence thought synthesis</Text>
+        </View>
+        <Text style={styles.thesisStatementText}>
+          {session?.thesisStatement ||
+            (session?.projectTitle
+              ? `Exploring ${session.projectTitle}: interact through the chat to distill and synthesize the core thesis statement.`
+              : 'Interact through the chat to distill and maintain a 1-2 sentence thesis statement.')}
+        </Text>
+      </View>
 
       {/* Pinned inspirations banner if any */}
       {pinnedItems.length > 0 ? (
@@ -1377,5 +1392,31 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 10,
     color: colors.inkSoft,
     marginTop: 2,
+  },
+  thesisBar: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surfaceGrade,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink,
+  },
+  thesisHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  thesisSubtitle: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+  },
+  thesisStatementText: {
+    ...typography.captionSm,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.ink,
+    fontWeight: '600',
   },
 });

@@ -15,7 +15,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions, auth } from '../../lib/firebase/client';
 import { DUMMY_USER_UID } from '../auth/AuthContext';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../types';
-import { getDumpInspirations } from '../dump/dumpService';
+import { getDumpInspirations, getProjects, saveProject } from '../dump/dumpService';
 
 const CHATS_STORAGE_KEY = '@rut_chats_v2';
 const MESSAGES_STORAGE_PREFIX = '@rut_chat_messages_v2:';
@@ -234,6 +234,7 @@ export async function createChatSession(
     projectId?: string | null;
     projectTitle?: string | null;
     pinnedInspirationIds?: string[];
+    thesisStatement?: string | null;
     uid?: string | null;
   }
 ): Promise<ChatSession> {
@@ -247,6 +248,7 @@ export async function createChatSession(
     title: cleanTitle,
     pinnedInspirationIds: options?.pinnedInspirationIds || [],
     summary: null,
+    thesisStatement: options?.thesisStatement || null,
     projectId: options?.projectId || null,
     projectTitle: options?.projectTitle || null,
     archived: false,
@@ -297,11 +299,14 @@ export async function getOrCreateIdeaChat(
       }
     });
 
-    if (changed || matched.projectTitle !== idea.title) {
+    const currentThesis = matched.thesisStatement || idea.thesisStatement || idea.brief || null;
+
+    if (changed || matched.projectTitle !== idea.title || matched.thesisStatement !== currentThesis) {
       matched = {
         ...matched,
         projectTitle: idea.title,
         pinnedInspirationIds: Array.from(existingPinned),
+        thesisStatement: currentThesis,
         updatedAt: Date.now(),
       };
       await saveChatSession(matched, uid);
@@ -314,6 +319,7 @@ export async function getOrCreateIdeaChat(
     projectId: idea.id,
     projectTitle: idea.title,
     pinnedInspirationIds: referenceIds,
+    thesisStatement: idea.thesisStatement || idea.brief || null,
     uid,
   });
 
@@ -740,7 +746,7 @@ export async function sendChatMessage(
     model?: string;
     webAccess?: boolean;
   }
-): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> {
+): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage; thesisStatement?: string }> {
   const cleanContent = messageContent.trim();
   const uid = options?.uid || DUMMY_USER_UID;
   const isWebAccess = Boolean(options?.webAccess);
@@ -956,17 +962,109 @@ export async function sendChatMessage(
     } catch {}
   }
 
-  // 5. Update session preview
+  // 5. Update session preview & thesis statement
+  let thesisStatement: string | null = null;
   const session = await getChatSession(chatId, uid);
   if (session) {
+    thesisStatement = generateThesisStatement(
+      cleanContent,
+      assistantResponse,
+      session.projectTitle || session.title
+    );
+
     const updatedSession: ChatSession = {
       ...session,
       summary: cleanContent.slice(0, 100),
+      thesisStatement,
       updatedAt: Date.now(),
     };
     await saveChatSession(updatedSession, uid);
+
+    // If attached to a project / idea, update the idea's thesis statement too
+    if (session.projectId) {
+      try {
+        const projs = await getProjects(uid || undefined);
+        const currentProj = projs.find((p) => p.id === session.projectId);
+        if (currentProj) {
+          await saveProject(
+            {
+              ...currentProj,
+              thesisStatement,
+              thoughtCount: finalMessages.length,
+              updatedAt: Date.now(),
+            },
+            uid || undefined
+          );
+        }
+      } catch (pErr) {
+        console.warn('Failed to update project thesis statement:', pErr);
+      }
+    }
   }
 
-  return { userMessage, assistantMessage };
+  return { userMessage, assistantMessage, thesisStatement: thesisStatement || undefined };
+}
+
+/**
+ * Generates a concise 1-2 sentence thesis statement that captures the core thought process
+ * after interacting with the thought through the chat.
+ */
+export function generateThesisStatement(
+  userQuery: string,
+  assistantResponse: string,
+  contextTitle?: string
+): string {
+  const cleanResp = assistantResponse.replace(/\[ID:[^\]]+\]/g, '').replace(/###+/g, '');
+  const lines = cleanResp
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(
+      (l) =>
+        l.length > 25 &&
+        !l.startsWith('•') &&
+        !l.startsWith('-') &&
+        !l.startsWith('*') &&
+        !/^\d+\./.test(l) &&
+        !l.toLowerCase().includes('live web') &&
+        !l.toLowerCase().includes('referenced from')
+    );
+
+  // Look for a line containing core thesis keywords
+  const candidate = lines.find((l) =>
+    /\b(explor|focus|tension|contrast|anchor|synthesiz|concept|ground|material|silhouette|manifest|direction)\b/i.test(l)
+  );
+
+  if (candidate && candidate.length <= 260) {
+    const clean = candidate.replace(/^[*\s"'-]+|[*\s"'-]+$/g, '').trim();
+    if (clean.length > 30) {
+      return clean;
+    }
+  }
+
+  // Fallback: extract the first 1-2 coherent sentences from the response body
+  const sentences = cleanResp
+    .replace(/[#*`_]/g, '')
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter(
+      (s) =>
+        s.length > 25 &&
+        !s.startsWith('http') &&
+        !s.toLowerCase().includes('referenced') &&
+        !s.toLowerCase().includes('dump')
+    );
+
+  if (sentences.length >= 2) {
+    const two = `${sentences[0]} ${sentences[1]}`.trim();
+    if (two.length <= 280) {
+      return two;
+    }
+    return sentences[0];
+  } else if (sentences.length === 1) {
+    return sentences[0];
+  }
+
+  const subject = contextTitle || 'This creative thought';
+  return `${subject} synthesizes deliberate material tensions and bold structural restraint to define a distinctive design thesis.`;
 }
 
