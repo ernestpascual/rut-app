@@ -155,10 +155,6 @@ export default function ProjectsListScreen() {
                 <Text style={styles.projectTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Badge
-                  label={item.status.toUpperCase()}
-                  variant={item.status === 'active' ? 'inverse' : 'grade'}
-                />
               </View>
 
               {item.brief ? (
@@ -167,31 +163,27 @@ export default function ProjectsListScreen() {
                 </Text>
               ) : null}
 
-              <View style={styles.tagRow}>
-                <Badge label="INSPIRATION MATCHER" variant="outline" />
-                <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
-                {Array.from(new Set(item.tags || [])).map((t, idx) => (
-                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
-                ))}
-              </View>
+              {item.tags && item.tags.length > 0 ? (
+                <View style={styles.tagRow}>
+                  {Array.from(new Set(item.tags)).map((t, idx) => (
+                    <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
+                  ))}
+                </View>
+              ) : null}
 
               <View style={styles.cardFooterRow}>
-                <Text style={styles.cardFooterSub}>
-                  {item.thoughtCount ? `${item.thoughtCount} THOUGHTS LOGGED` : 'CONNECTED TO BANK'}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Button
-                    title="DELETE"
-                    variant="text"
-                    onPress={() => handleDeleteProject(item.id, item.title)}
-                    style={{ marginRight: spacing.xs }}
-                  />
-                  <Button
-                    title="THINK →"
-                    variant="text"
-                    onPress={() => router.push(`/(app)/project/${item.id}`)}
-                  />
-                </View>
+                {item.thoughtCount ? (
+                  <Text style={styles.cardFooterSub}>
+                    {item.thoughtCount} THOUGHTS LOGGED
+                  </Text>
+                ) : (
+                  <View />
+                )}
+                <Button
+                  title="DELETE"
+                  variant="text"
+                  onPress={() => handleDeleteProject(item.id, item.title)}
+                />
               </View>
             </Card>
           ))}
@@ -210,10 +202,6 @@ export default function ProjectsListScreen() {
                 <Text style={styles.projectTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Badge
-                  label={item.status.toUpperCase()}
-                  variant={item.status === 'active' ? 'inverse' : 'grade'}
-                />
               </View>
 
               {item.brief ? (
@@ -222,31 +210,27 @@ export default function ProjectsListScreen() {
                 </Text>
               ) : null}
 
-              <View style={styles.tagRow}>
-                <Badge label="INSPIRATION MATCHER" variant="outline" />
-                <Badge label="💬 TRAIN OF THOUGHT" variant="inverse" />
-                {Array.from(new Set(item.tags || [])).map((t, idx) => (
-                  <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
-                ))}
-              </View>
+              {item.tags && item.tags.length > 0 ? (
+                <View style={styles.tagRow}>
+                  {Array.from(new Set(item.tags)).map((t, idx) => (
+                    <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
+                  ))}
+                </View>
+              ) : null}
 
               <View style={styles.cardFooterRow}>
-                <Text style={styles.cardFooterSub}>
-                  {item.thoughtCount ? `${item.thoughtCount} THOUGHTS LOGGED` : 'CONNECTED TO BANK'}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Button
-                    title="DELETE"
-                    variant="text"
-                    onPress={() => handleDeleteProject(item.id, item.title)}
-                    style={{ marginRight: spacing.xs }}
-                  />
-                  <Button
-                    title="THINK →"
-                    variant="text"
-                    onPress={() => router.push(`/(app)/project/${item.id}`)}
-                  />
-                </View>
+                {item.thoughtCount ? (
+                  <Text style={styles.cardFooterSub}>
+                    {item.thoughtCount} THOUGHTS LOGGED
+                  </Text>
+                ) : (
+                  <View />
+                )}
+                <Button
+                  title="DELETE"
+                  variant="text"
+                  onPress={() => handleDeleteProject(item.id, item.title)}
+                />
               </View>
             </Card>
           )}

@@ -980,8 +980,7 @@ export default function ProjectDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <TopNav
-        title="rut"
-        subtitle="Idea Studio"
+        title=""
         onBack={() => {
           if (router.canGoBack()) {
             router.back();
@@ -1173,12 +1172,9 @@ export default function ProjectDetailScreen() {
               <View style={styles.tabContent}>
                 {/* TOOLBAR */}
                 <View style={styles.tabHeaderToolbar}>
-                  <Text style={styles.tabSectionTitle}>
-                    ATTACHED REFERENCES ({links.length})
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
                     <Button
-                      title={loadingSuggestions ? 'SCANNING...' : '⚡ SCAN DUMP'}
+                      title={loadingSuggestions ? 'SCANNING...' : 'SCAN DUMP'}
                       variant="secondary"
                       onPress={handleGetInspirationsFromDump}
                       loading={loadingSuggestions}
