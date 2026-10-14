@@ -163,24 +163,43 @@ export const chatWithBank = onCall(async (request) => {
       ? (scoredPositive.length > 0 ? scoredPositive.slice(0, 4) : scoredList.slice(0, 3)).map((sc) => sc.item)
       : scoredPositive.slice(0, 3).map((sc) => sc.item);
 
-    // 4. Fetch recent chat history window (last 6 messages)
-    const historySnap = await db
-      .collection('users')
-      .doc(uid)
-      .collection('chats')
-      .doc(chatId)
-      .collection('messages')
-      .orderBy('createdAt', 'desc')
-      .limit(6)
-      .get();
+    // 4. Multi-turn conversation history window (up to 12 messages for full dialogue memory)
+    let chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
-    const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    historySnap.docs.reverse().forEach((d) => {
-      const m = d.data();
-      if (m.role === 'user' || m.role === 'assistant') {
-        chatHistory.push({ role: m.role, content: m.content });
+    if (Array.isArray(request.data?.chatHistory) && request.data.chatHistory.length > 0) {
+      chatHistory = request.data.chatHistory
+        .filter((m: any) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .map((m: any) => ({ role: m.role, content: m.content.trim() }));
+    } else {
+      try {
+        const historySnap = await db
+          .collection('users')
+          .doc(uid)
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .orderBy('createdAt', 'desc')
+          .limit(12)
+          .get();
+
+        historySnap.docs.reverse().forEach((d) => {
+          const m = d.data();
+          if (m.role === 'user' || m.role === 'assistant') {
+            chatHistory.push({ role: m.role, content: (m.content || '').trim() });
+          }
+        });
+      } catch (hErr) {
+        console.warn('[Chat] History fetch error:', hErr);
       }
-    });
+    }
+
+    // Strip out the current message if it was already saved and present at the end of chatHistory
+    if (chatHistory.length > 0) {
+      const last = chatHistory[chatHistory.length - 1];
+      if (last.role === 'user' && last.content === userMessage) {
+        chatHistory = chatHistory.slice(0, -1);
+      }
+    }
 
     // 5. Generate AI Chat response
     const chatResult = await aiProvider.generateChatResponse({

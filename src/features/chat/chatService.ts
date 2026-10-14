@@ -443,12 +443,22 @@ export async function callDirectGoogleGemini(params: {
 
   const targetModel = (model || 'gemini-2.0-flash').trim();
 
-  const contents = messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    }));
+  const rawFiltered = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
+  const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+  for (const m of rawFiltered) {
+    if (!m.content) continue;
+    const role = m.role === 'user' ? 'user' : 'model';
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts[0].text += `\n\n${m.content}`;
+    } else {
+      contents.push({ role, parts: [{ text: m.content }] });
+    }
+  }
+
+  while (contents.length > 0 && contents[0].role !== 'user') {
+    contents.shift();
+  }
 
   const payload: Record<string, unknown> = {
     contents,
@@ -522,6 +532,7 @@ export async function callDirectGoogleGemini(params: {
  */
 export function synthesizeThoughtTrain(params: {
   userQuery: string;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   ideaContext?: {
     title: string;
     brief?: string | null;
@@ -536,8 +547,16 @@ export function synthesizeThoughtTrain(params: {
   sourceInspirationIds: string[];
   webSources?: Array<{ title?: string; uri?: string }>;
 } {
-  const { userQuery, ideaContext, pinnedInspirations = [], allInspirations = [], webAccess = false } = params;
+  const {
+    userQuery,
+    conversationHistory = [],
+    ideaContext,
+    pinnedInspirations = [],
+    allInspirations = [],
+    webAccess = false,
+  } = params;
   const q = userQuery.toLowerCase().trim();
+  const isOngoing = conversationHistory.length > 0;
 
   const isDumpPullQuery =
     q.includes('dump') ||
@@ -586,17 +605,23 @@ export function synthesizeThoughtTrain(params: {
 
   // 1. Natural greeting check
   if (
-    q === 'hi' ||
-    q === 'hello' ||
-    q === 'hey' ||
-    q.startsWith('hi ') ||
-    q.startsWith('hello ') ||
-    q.startsWith('hey ') ||
-    q.includes('who are you')
+    !isOngoing &&
+    (q === 'hi' ||
+      q === 'hello' ||
+      q === 'hey' ||
+      q.startsWith('hi ') ||
+      q.startsWith('hello ') ||
+      q.startsWith('hey ') ||
+      q.includes('who are you'))
   ) {
     body = `Hey! I'm **rut Agent** — your creative sounding board and design collaborator.
 
 We can brainstorm ideas, bounce aesthetic directions around, explore materials, or dig into your inspiration dump (${candidatePool.length} saves currently in your bank). What are you working on or thinking about right now?`;
+  } else if (
+    isOngoing &&
+    (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hi ') || q.startsWith('hey '))
+  ) {
+    body = `Hey! Still exploring this thread with you. What direction do you want to explore next?`;
   }
   // 2. Explicit Dump query or pulling from dump
   else if (isDumpPullQuery && topMatches.length > 0) {
@@ -647,15 +672,19 @@ It might help to strip away any decorative fluff. If a detail isn't directly sup
 
 What feels like the most essential, non-negotiable part of this for you?`;
   }
-  // 6. General creative brainstorming
+  // 6. General creative brainstorming / ongoing dialogue
   else {
     const dumpNote = topMatches.length > 0
       ? ` Connecting this with your save **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], `
       : ' ';
 
-    body = `Thinking about "${userQuery.trim()}":${dumpNote}we could strip away the expected baseline and contrast high-density structure with expansive, quiet breathing room. Grounding the abstract idea into physical materials and tactile light will give it immediate weight.
+    if (isOngoing) {
+      body = `Continuing on "${userQuery.trim()}":${dumpNote}keeping that core direction in focus, we can sharpen this by contrasting raw tactile materiality against stripped minimal structure.\n\nShould we iterate on the aesthetic finish or the functional layout next?`;
+    } else {
+      body = `Thinking about "${userQuery.trim()}":${dumpNote}we could strip away the expected baseline and contrast high-density structure with expansive, quiet breathing room. Grounding the abstract idea into physical materials and tactile light will give it immediate weight.
 
 How are you imagining this coming to life—as an architectural space, an editorial publication, or a digital experience?`;
+    }
   }
 
   let webSourcesList: Array<{ title: string; uri: string }> | undefined = undefined;
@@ -788,10 +817,16 @@ export async function sendChatMessage(
   // Tier 1: Attempt Firebase Cloud Function chatWithBank
   if (isLiveAuth(uid)) {
     try {
+      const historyToSend = currentMessages
+        .slice(-12)
+        .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, content: m.content }));
+
       const chatFn = httpsCallable<
         {
           chatId: string;
           message: string;
+          chatHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
           model?: string;
           webAccess?: boolean;
           dumpContext?: any[];
@@ -811,6 +846,7 @@ export async function sendChatMessage(
       const result = await chatFn({
         chatId,
         message: cleanContent,
+        chatHistory: historyToSend,
         model: options?.model,
         webAccess: isWebAccess,
         dumpContext,
@@ -896,8 +932,14 @@ export async function sendChatMessage(
 
   // Tier 3: Conversational client agent fallback
   if (!inferenceSuccess) {
+    const historyToSend = currentMessages
+      .slice(-12)
+      .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content }));
+
     const synthesized = synthesizeThoughtTrain({
       userQuery: cleanContent,
+      conversationHistory: historyToSend,
       ideaContext: options?.ideaContext,
       pinnedInspirations: options?.pinnedInspirations,
       allInspirations: options?.allInspirations,

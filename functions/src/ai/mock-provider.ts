@@ -102,10 +102,21 @@ export class MockAIProvider implements AIProvider {
       );
     }
 
+    const history = input.chatHistory || [];
+    const isOngoingConversation = history.length > 0;
+
     if (titles.length > 0) {
-      response += `Thinking about your idea alongside your saves in ${titles.join(' and ')}, there's an interesting tension you can play with. You could pair the primary structure with unexpected raw, tactile surfaces—balancing deep obsidian tones against stark optical white.\n\nWhat direction feels most compelling to lean into first?`;
+      if (isOngoingConversation) {
+        response += `Building on our conversation and your references in ${titles.join(' and ')}, leaning into that physical contrast will make "${input.message}" feel much more grounded.\n\nShould we focus on material textures or spatial hierarchy next?`;
+      } else {
+        response += `Thinking about your idea alongside your saves in ${titles.join(' and ')}, there's an interesting tension you can play with. You could pair the primary structure with unexpected raw, tactile surfaces—balancing deep obsidian tones against stark optical white.\n\nWhat direction feels most compelling to lean into first?`;
+      }
     } else {
-      response += `Here is how I'd approach "${input.message}". You could either push the scale to an extreme to create immediate tension, or ground it physically in tactile materials and contrast.\n\nWhat aspect of this are you most excited to explore right now?`;
+      if (isOngoingConversation) {
+        response += `Continuing on "${input.message}": we can push this further by keeping the silhouette stripped and focusing on tactile details.\n\nWhat aspect feels most crucial to resolve next?`;
+      } else {
+        response += `Here is how I'd approach "${input.message}". You could either push the scale to an extreme to create immediate tension, or ground it physically in tactile materials and contrast.\n\nWhat aspect of this are you most excited to explore right now?`;
+      }
     }
 
     const inputTokens = Math.max(20, Math.round(input.message.length / 4) + contextItems.length * 40);

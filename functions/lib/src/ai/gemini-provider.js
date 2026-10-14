@@ -86,23 +86,38 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
             ? `\nLive internet search grounding is active. Perform real-time searches when helpful to reference current precedents.`
             : '';
         const systemInstructionText = `${prompts_1.CHAT_SYSTEM_PROMPT}${webAccessDirective}${contextFormatted}`;
-        // Multi-turn conversation history
+        // Clean, alternating multi-turn conversation history
         const contents = [];
-        if (input.chatHistory && input.chatHistory.length > 0) {
-            for (const msg of input.chatHistory) {
-                if (msg.content && (msg.role === 'user' || msg.role === 'assistant')) {
-                    contents.push({
-                        role: msg.role === 'user' ? 'user' : 'model',
-                        parts: [{ text: msg.content }],
-                    });
-                }
+        const rawHistory = input.chatHistory || [];
+        for (const msg of rawHistory) {
+            if (!msg.content)
+                continue;
+            const role = msg.role === 'user' ? 'user' : 'model';
+            // If previous message had the same role, combine them to keep strictly alternating turns
+            if (contents.length > 0 && contents[contents.length - 1].role === role) {
+                contents[contents.length - 1].parts[0].text += `\n\n${msg.content}`;
+            }
+            else {
+                contents.push({
+                    role,
+                    parts: [{ text: msg.content }],
+                });
             }
         }
-        // Add current user message
-        contents.push({
-            role: 'user',
-            parts: [{ text: input.message }],
-        });
+        // Ensure the conversation ends with the current user message
+        if (contents.length > 0 && contents[contents.length - 1].role === 'user') {
+            contents[contents.length - 1].parts[0].text = input.message;
+        }
+        else {
+            contents.push({
+                role: 'user',
+                parts: [{ text: input.message }],
+            });
+        }
+        // Ensure the first turn is always from 'user'
+        while (contents.length > 0 && contents[0].role !== 'user') {
+            contents.shift();
+        }
         // Helper to generate with target or fallback model
         const tryGenerate = async (modelName) => {
             const modelOptions = {
