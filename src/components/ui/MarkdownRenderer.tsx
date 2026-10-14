@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, ScrollView } from 'react-native';
 import { typography, spacing, rounded } from '../../design/tokens';
 import { useTheme } from '../../design/ThemeContext';
 
@@ -9,9 +9,11 @@ interface MarkdownRendererProps {
 }
 
 interface Block {
-  type: 'h1' | 'h2' | 'h3' | 'blockquote' | 'codeblock' | 'ul' | 'ol' | 'paragraph';
+  type: 'h1' | 'h2' | 'h3' | 'blockquote' | 'codeblock' | 'ul' | 'ol' | 'paragraph' | 'table';
   content: string;
   orderNumber?: string;
+  tableHeaders?: string[];
+  tableRows?: string[][];
 }
 
 /**
@@ -85,10 +87,43 @@ function parseBlocks(raw: string): Block[] {
         content: match ? match[2] : trimmed,
       });
     }
-    // Standard paragraph
-    else {
-      blocks.push({ type: 'paragraph', content: trimmed });
+    // Markdown Table check
+    if (
+      trimmed.startsWith('|') &&
+      trimmed.endsWith('|') &&
+      i + 1 < lines.length &&
+      /^[|\s-:]+$/.test(lines[i + 1].trim())
+    ) {
+      const headers = trimmed
+        .slice(1, -1)
+        .split('|')
+        .map((c) => c.trim());
+      i++; // advance past delimiter row
+      const tableRows: string[][] = [];
+      while (
+        i + 1 < lines.length &&
+        lines[i + 1].trim().startsWith('|') &&
+        lines[i + 1].trim().endsWith('|')
+      ) {
+        i++;
+        const rowCells = lines[i]
+          .trim()
+          .slice(1, -1)
+          .split('|')
+          .map((c) => c.trim());
+        tableRows.push(rowCells);
+      }
+      blocks.push({
+        type: 'table',
+        content: '',
+        tableHeaders: headers,
+        tableRows,
+      });
+      continue;
     }
+
+    // Standard paragraph
+    blocks.push({ type: 'paragraph', content: trimmed });
   }
 
   // Handle unclosed code block if any
@@ -340,6 +375,79 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
               </View>
             );
 
+          case 'table':
+            return (
+              <ScrollView
+                key={`b-${idx}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.tableScroll}
+              >
+                <View
+                  style={[
+                    styles.tableContainer,
+                    { borderColor: isUser ? colors.onInk : colors.hairline },
+                  ]}
+                >
+                  {block.tableHeaders && block.tableHeaders.length > 0 ? (
+                    <View
+                      style={[
+                        styles.tableRow,
+                        styles.tableHeaderRow,
+                        {
+                          backgroundColor: isUser
+                            ? 'rgba(255,255,255,0.15)'
+                            : colors.surfaceGrade,
+                          borderBottomColor: isUser ? colors.onInk : colors.hairline,
+                        },
+                      ]}
+                    >
+                      {block.tableHeaders.map((header, hIdx) => (
+                        <View key={`th-${hIdx}`} style={styles.tableCell}>
+                          <Text style={[styles.tableHeaderText, { color: textColor }]}>
+                            {renderInlineFormatted(
+                              header,
+                              styles.tableHeaderText,
+                              textColor,
+                              secondaryColor,
+                              isUser
+                            )}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {block.tableRows?.map((row, rIdx) => (
+                    <View
+                      key={`tr-${rIdx}`}
+                      style={[
+                        styles.tableRow,
+                        { borderBottomColor: isUser ? 'rgba(255,255,255,0.1)' : colors.hairlineGrade },
+                        rIdx === (block.tableRows?.length || 0) - 1
+                          ? { borderBottomWidth: 0 }
+                          : { borderBottomWidth: 1 },
+                      ]}
+                    >
+                      {row.map((cell, cIdx) => (
+                        <View key={`td-${cIdx}`} style={styles.tableCell}>
+                          <Text style={[baseTextStyle, { fontSize: 13, lineHeight: 18 }]}>
+                            {renderInlineFormatted(
+                              cell,
+                              baseTextStyle,
+                              textColor,
+                              secondaryColor,
+                              isUser
+                            )}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            );
+
           case 'paragraph':
           default:
             return (
@@ -437,5 +545,32 @@ const styles = StyleSheet.create({
   },
   listContent: {
     flex: 1,
+  },
+  tableScroll: {
+    marginVertical: spacing.xs,
+    maxWidth: '100%',
+  },
+  tableContainer: {
+    borderWidth: 1,
+    minWidth: '100%',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tableHeaderRow: {
+    borderBottomWidth: 1.5,
+  },
+  tableCell: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minWidth: 90,
+    justifyContent: 'center',
+  },
+  tableHeaderText: {
+    ...typography.captionCap,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

@@ -105,6 +105,12 @@ export default function ChatWorkspaceScreen() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
 
+  // Collapsible citations state (keyed by message ID)
+  const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
+
+  // Dynamic input height for auto-expanding textarea (max 5 lines)
+  const [inputHeight, setInputHeight] = useState(44);
+
   const flatListRef = useRef<FlatList>(null);
 
   // Load session & messages with dual-mode fallback (local + Firestore)
@@ -218,6 +224,7 @@ export default function ChatWorkspaceScreen() {
     const textToSend = (customText !== undefined ? customText : inputText).trim();
     if (!textToSend || !id || sending) return;
     setInputText('');
+    setInputHeight(44);
     setSending(true);
 
     try {
@@ -504,29 +511,50 @@ export default function ChatWorkspaceScreen() {
                 isUser={item.role === 'user'}
               />
 
-              {/* Clickable Source Cards for Assistant citations */}
+              {/* Clickable Source Cards for Assistant citations (Collapsible) */}
               {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
                 <View style={styles.sourcesContainer}>
-                  <Text style={styles.sourcesHeader}>
-                    📚 DUMP KNOWLEDGE BASE CITATIONS ({item.sourceInspirationIds.length}):
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {item.sourceInspirationIds.map((sid: string) => {
-                      const sourceItem = pinnedMap[sid];
-                      if (!sourceItem) return null;
-                      return (
-                        <SourceCard
-                          key={sid}
-                          id={sid}
-                          title={sourceItem.title}
-                          domain={sourceItem.sourceDomain}
-                          platform={sourceItem.sourcePlatform}
-                          snippet={sourceItem.aiSummary || sourceItem.userNote}
-                          onPress={() => router.push(`/(app)/inspiration/${sid}`)}
-                        />
-                      );
-                    })}
-                  </ScrollView>
+                  <Pressable
+                    onPress={() => {
+                      setExpandedCitations((prev) => ({
+                        ...prev,
+                        [item.id]: !prev[item.id],
+                      }));
+                    }}
+                    style={styles.sourcesCollapsibleHeader}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle Dump Citations"
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Text style={styles.sourcesHeader}>
+                        📚 DUMP KNOWLEDGE BASE CITATIONS ({item.sourceInspirationIds.length})
+                      </Text>
+                      <Text style={styles.sourcesToggleIndicator}>
+                        {expandedCitations[item.id] ? '▲ COLLAPSE' : '▼ EXPAND'}
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  {expandedCitations[item.id] ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.xs }}>
+                      {item.sourceInspirationIds.map((sid: string) => {
+                        const sourceItem = pinnedMap[sid];
+                        if (!sourceItem) return null;
+                        return (
+                          <SourceCard
+                            key={sid}
+                            id={sid}
+                            title={sourceItem.title}
+                            domain={sourceItem.sourceDomain}
+                            platform={sourceItem.sourcePlatform}
+                            snippet={sourceItem.aiSummary || sourceItem.userNote}
+                            onPress={() => router.push(`/(app)/inspiration/${sid}`)}
+                          />
+                        );
+                      })}
+                    </ScrollView>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -560,20 +588,6 @@ export default function ChatWorkspaceScreen() {
 
               {/* Actions on Message */}
               <View style={styles.messageActions}>
-                {item.role === 'assistant' && item.status !== 'failed' ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs }}>
-                    <Button
-                      title="💬 DIVE DEEPER"
-                      variant="text"
-                      onPress={() => handleSendMessage(`Let's unpack and expand on this specific angle further: "${item.content.slice(0, 80)}..."`)}
-                    />
-                    <Button
-                      title="→ SAVE AS NEW IDEA"
-                      variant="text"
-                      onPress={() => openCreateProjectModal(item.content)}
-                    />
-                  </View>
-                ) : null}
                 <Button
                   title="DELETE"
                   variant="text"
@@ -596,24 +610,46 @@ export default function ChatWorkspaceScreen() {
           </View>
         ) : null}
 
-        {/* Input Bar */}
+        {/* Input Bar (Auto-expanding textarea up to 5 lines) */}
         <View style={styles.inputBar}>
           <Input
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={(text) => {
+              setInputText(text);
+              if (!text) setInputHeight(44);
+            }}
+            multiline
+            onContentSizeChange={(e) => {
+              const contentHeight = e.nativeEvent.contentSize.height;
+              // Starts at 44px (1 line), expands as lines are added up to 5 lines (~124px max)
+              const calculatedHeight = Math.min(124, Math.max(44, Math.round(contentHeight + 8)));
+              setInputHeight(calculatedHeight);
+            }}
+            onKeyPress={(e: any) => {
+              if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                e.preventDefault?.();
+                handleSendMessage();
+              }
+            }}
             placeholder={
               webAccessEnabled
                 ? 'Ask Gemini (Live Web Search active)...'
                 : 'Pose a creative query, hypothesize, or explore...'
             }
+            style={{
+              height: inputHeight,
+              maxHeight: 124,
+              paddingTop: 10,
+              paddingBottom: 10,
+              textAlignVertical: 'top',
+            }}
             containerStyle={{ flex: 1, marginVertical: 0 }}
-            onSubmitEditing={() => handleSendMessage()}
           />
           <Button
             title="SEND →"
             onPress={() => handleSendMessage()}
             disabled={!inputText.trim() || sending}
-            style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 14 }}
+            style={{ marginLeft: spacing.xs, height: 44, paddingHorizontal: 14 }}
           />
         </View>
       </KeyboardAvoidingView>
@@ -1212,11 +1248,21 @@ const getStyles = (colors: ThemeColors) =>
   },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     padding: spacing.base,
     borderTopWidth: 1,
     borderTopColor: colors.hairline,
     backgroundColor: colors.canvas,
+  },
+  sourcesCollapsibleHeader: {
+    paddingVertical: 2,
+  },
+  sourcesToggleIndicator: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.6,
   },
   centerBox: {
     flex: 1,

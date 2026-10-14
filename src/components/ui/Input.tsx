@@ -31,6 +31,7 @@ export const Input: React.FC<InputProps> = ({
       <TextInput
         style={[
           styles.input,
+          rest.multiline ? { height: undefined, minHeight: 44 } : null,
           {
             backgroundColor: colors.canvas,
             borderColor: colors.ink,
