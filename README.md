@@ -1,203 +1,185 @@
 # rut: Universal Inspiration Bank & Idea Studio
 
-`rut` is a cross-platform (iOS, Android, Web, and installable PWA) private inspiration bank. Dump links, snippets, thoughts, and shared social posts from Pinterest, Instagram, TikTok, X, Threads, YouTube, and the web. Organize and sort your dump, write creative ideas, and automatically match inspirations from your dump to attach as references.
+`rut` is a cross-platform (iOS, Android, Web, and Chrome Extension) private creative workspace and inspiration bank. Dump links, snippets, thoughts, and shared social posts from Instagram, Pinterest, TikTok, X, Threads, YouTube, and the web. Organize your dump, draft creative ideas, auto-match saved inspirations as references, and brainstorm in an interactive AI Train of Thought with live internet grounding and evolving thesis synthesis.
 
-Built with **Expo 52+**, **Expo Router**, **Cloud Firestore**, and **Firebase Cloud Functions**. Follows the editorial monochrome design system (`DESIGN.md`).
+Live Web App: **[rut.web.app](https://rut.web.app)**
 
 ---
 
 ## 1. Product Overview
 
-`rut` solves creative fragmentation. When you discover inspiring material on Pinterest, Instagram, TikTok, X, or any website:
-1. **Share From Phone ➔ Dump**: When you share from your phone (iOS, Android, or PWA share target), it instantly captures the inspiration. All incoming material goes into a folder called **Dump**. Everything starts there.
-2. **Sort & Filter**: In your Dump, sort inspirations by date (newest/oldest), platform source, title (A-Z / Z-A), or tag density.
-3. **Write Ideas & Attach References**: In the Idea Studio, write your creative concept, brief, and notes. Hit **Find Inspirations From Dump** to match your saved references from the dump and attach them to the idea.
-4. **Test Mode (No Auth Required)**: Instant 1-tap dummy login allows testing all dumping, sorting, and idea reference matching features without setting up Firebase Authentication accounts.
+`rut` solves creative fragmentation:
+1. **Share From Phone ➔ Dump**: Share from your phone (iOS, Android, or PWA share target) or browser to instantly capture inspiration. Everything starts in the **Dump** folder.
+2. **Instagram Collection Importer (Chrome Extension)**: Connect your Chrome Extension to your Instagram Saved Collections. The extension auto-scrolls the virtualized DOM and syncs Reels, captions, and thumbnails directly to your Insight Bank.
+3. **Sort, Filter & Semantic Search**: Filter by platform (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`, etc.) or sort by date, platform, title, or tag density.
+4. **Idea Studio & Concept Matcher**: Write your creative concept, brief, and specifications. Run **Find Inspirations From Dump** to automatically score and attach relevant references from your bank.
+5. **Interactive AI Train of Thought**: Brainstorm directly on any idea or chat. Query with RAG over your personal dump, toggle live internet grounding (`🌐 WEB: ON/OFF`), switch Gemini models, and maintain an evolving **1–2 sentence Thesis Statement** dynamically updated on top.
 
 ---
 
-## 2. Key Features
+## 2. Key Features & Technologies
 
-### Universal Phone Share ➔ Dump Folder (Everything Starts Here)
-- **Folder: Dump**: All inspirations shared from mobile apps or dumped via URL automatically belong to the `dump` folder. This is the primary inbox for all incoming inspiration.
-- **Incoming OS Share Target**: Native Android/iOS share target and PWA `share_target` capture incoming links and immediately add them to your Dump folder.
-- **Quick Dump Bar**: Paste any Pinterest pin (`pinterest.com`, `pin.it`), Instagram post or reel (`instagram.com`), TikTok, X/Twitter, or web URL directly from the Dump screen with live platform detection.
-- **Clean Slate**: Starts with a clean, empty dump ready for your own links and notes (no mock data clutter).
+### 💡 Interactive AI Train of Thought & Brainstorming
+- **RAG Over Your Personal Dump**: The AI inference engine anchors your saved inspirations into reasoning context, citing specific references inline with direct links.
+- **Live Internet Access Toggle**: One-tap toggle (`🌐 WEB: ON / OFF`) to perform real-time search synthesis, extracting design precedents and contemporary movements alongside personal references.
+- **Evolving 1–2 Sentence Thesis Statement**:
+  - Maintained persistently at the top of every Idea page and Chat workspace.
+  - After each chat turn, the assistant distills your conversation into a sharp 1–2 sentence thesis statement that stays synchronized across views.
+  - Tapping any thought bubble in an Idea instantly expands it into the full chat workspace.
+- **Multi-Model Switcher**: Switch on the fly between Google Gemini models (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, etc.) with user preferences saved across sessions.
+- **Formatted Markdown & Source Citations**: Powered by a custom cross-platform [`MarkdownRenderer`](src/components/ui/MarkdownRenderer.tsx) supporting headings, bullet lists, bold emphasis, inline code, and clickable source pills.
 
-### Real-Time Dump Sorting & Filtering
-- **Multi-Criteria Sorting**:
-  - `NEWEST`: Most recently dumped items first.
-  - `OLDEST`: Chronological discovery order.
-  - `PLATFORM`: Grouped/alphabetized by platform (Pinterest, Instagram, TikTok, X, Web).
-  - `TITLE A-Z` & `TITLE Z-A`: Alphabetical browsing.
-  - `TAGS`: Items with the highest tag and concept density.
-- **Platform Pills**: Instant filtering by `ALL`, `PINTEREST`, `INSTAGRAM`, `TIKTOK`, `X`, `THREADS`, `YOUTUBE`, or `WEB`.
-- **Search**: Keyword search and semantic search over titles, summaries, user notes, and concepts.
+### 🧩 Instagram Saved Collection Chrome Extension (`/chrome-extension`)
+- **Manifest V3 & CSP Compliant**: Built with Vite and `@crxjs/vite-plugin`, leveraging `firebase/auth/web-extension` to prevent Content Security Policy violations.
+- **Virtualized DOM Scraper**: Handles Instagram's DOM recycling by harvesting Reel shortcodes, canonical links, captions, and CDN thumbnails on every scroll tick with randomized jitter (1200ms–1600ms) to avoid rate limits.
+- **Deterministic Batch Sync**: Deduplicates and batches writes in chunks of 400 directly to `users/{uid}/inspirations/ig_reel_{shortcode}`.
+- **Auto-Enrichment Trigger**: Writes with `processingStatus: 'pending'` to automatically trigger background Cloud Functions for AI auto-tagging, summarization, and vector embeddings.
+- **One-Command Distribution**: `npm run zip` packages `rut-extension.zip` for instant sharing with teammates and beta testers.
 
-### Idea Studio (Idea ➔ Dump Match ➔ Reference Attachment)
-- **Draft Creative Ideas**: Formulate the idea title, concept brief, notes & specifications, and tags.
-- **Dump Reference Matcher**:
-  - Scans your saved dump inspirations using concept clustering and token affinity.
-  - Ranks matches with a confidence score (e.g. `96% MATCH`) and transparent reasoning (*e.g. "Matches ceramic, organic, tableware in dump tags and concepts"*).
-- **One-Tap Reference Attachment**:
-  - Click `+ ATTACH AS REFERENCE` on individual suggestions or `ATTACH ALL MATCHES`.
-  - Attached references feature visual thumbnail cards, platform badges, external source links, and detachable controls.
-  - `+ BROWSE DUMP`: Manually browse and attach any unlinked item from your bank.
+### 📥 Universal Phone Share ➔ Dump Folder
+- **Single Inbox Architecture**: All incoming material begins in the `dump` folder, keeping discovery separate from structured project ideas.
+- **Native OS & PWA Share Targets**: Native iOS/Android share sheets and PWA Web Share Target API capture links directly into the database.
+- **Quick Dump Input**: Paste links from Pinterest, Instagram, TikTok, X, YouTube, or any website with automatic platform detection, metadata extraction, and canonicalization.
 
-### Editorial Light & Dark Modes
-- **High-Contrast Monochrome**: Strictly conforms to the pure editorial fashion layout philosophy defined in `DESIGN.md`. Zero gradients on interactive chrome, crisp hairlines, and 0px right-angle geometry.
-- **Dynamic Theming**:
-  - `LIGHT`: Pure white canvas (`#ffffff`), pure black ink (`#000000`), hairline borders.
-  - `DARK`: Pure pitch canvas (`#000000`), pure white ink (`#ffffff`), refined hairline borders (`#333333`).
-  - `SYSTEM`: Automatically synchronizes with OS device appearance.
-- **Fast Access & Persistence**:
-  - Quick toggle button right in the top navigation header (`LIGHT` / `DARK`).
-  - Dedicated **Appearance** preference controls in Settings (`LIGHT`, `DARK`, `SYSTEM`).
-  - Choice is saved in `AsyncStorage` and restored across application reloads.
+### 🎯 Idea Studio & Reference Attachment
+- **Structured Idea Workspace**: Formulate titles, briefs, notes, specifications, and tags.
+- **Dump Reference Matcher**: Scans saved inspirations with concept clustering and token affinity, providing transparent match reasoning (*e.g., "94% MATCH — Matches brutalist, typography, poster in dump tags"*).
+- **One-Tap Linking**: Attach individual matches, attach all, or manually browse and connect inspirations.
 
-### Test Mode & Offline Persistence
-- **1-Tap Dummy Login**: Click `⚡ ENTER WITH DUMMY LOGIN (TEST)` on the login screen or landing page to enter immediately with zero friction.
-- **Local Storage Layer**: All dumped items, ideas, and attached references persist locally via `AsyncStorage` when running in test mode or when offline.
-- **Firebase Dual-Mode**: Seamlessly integrates with Cloud Firestore when authenticated with live Firebase credentials.
+### 🎨 Editorial Monochrome Design System
+- **High-Contrast Fashion Layout**: Strict adherence to [`DESIGN.md`](DESIGN.md) — 0px sharp corners, pure `#000000` / `#ffffff` contrasts, clean hairlines, and modern typographic hierarchies.
+- **Light & Dark Themes**: Instant toggle with persistence in `AsyncStorage`.
 
 ---
 
-## 3. Technology Stack & Architecture
+## 3. Architecture & Tech Stack
 
-- **Client**: Expo SDK 52+, React Native 0.76+, Expo Router, React Native Web.
-- **Design System**: Editorial monochrome (`#000000` / `#ffffff`), 0px border radius, high-contrast typography following [`DESIGN.md`](DESIGN.md).
-- **Local Persistence**: `@react-native-async-storage/async-storage`.
-- **Backend**: Firebase Cloud Functions (Node.js 20, TypeScript), Firebase Admin SDK.
-- **Database**: Cloud Firestore with user-scoped rules.
-- **AI Matching**: Smart client-side matcher (`src/features/ideas/ideaMatcher.ts`) + optional Cloud Function callable (`suggestProjectLinks`).
-
----
-
-## 4. Repository Structure
-
-```text
-app/
-  _layout.tsx             # Root layout with AuthProvider & NavigationGuard
-  index.tsx               # Editorial landing page with 1-tap test access
-  +not-found.tsx          # 404 screen
-  +native-intent.ts       # Native deep link & share intent handler
-  share-target.tsx        # Incoming share capture UI (native & PWA)
-  (auth)/
-    login.tsx             # Login screen with 1-tap test dummy access
-    sign-up.tsx           # Email registration
-    forgot-password.tsx   # Password recovery
-  (app)/
-    (tabs)/
-      _layout.tsx         # Bottom tab navigation (DUMP, CHATS, IDEAS, SETTINGS)
-      bank/index.tsx      # Dump folder with Quick Dump & Sorting controls
-      projects/index.tsx  # Ideas Studio workspace list
-      chats/index.tsx     # Trains of thought list
-      settings/index.tsx  # User account & telemetry settings
-    inspiration/
-      new.tsx             # Manual link / note creation
-      [id].tsx            # Detail, edit, and archive view
-    project/
-      new.tsx             # Write new idea
-      [id].tsx            # Idea Studio: write idea, match dump, attach references
-    chat/
-      new.tsx             # Start new train of thought
-      [id].tsx            # Interactive brainstorming chat
-src/
-  components/ui/          # Button, Input, Card, Badge, TopNav, AnnouncementBar
-  design/tokens.ts        # Typography, colors, spacing, and component styles
-  features/
-    auth/                 # AuthContext with dummy user support & session storage
-    capture/              # Staging storage & share hook
-    dump/                 # Dump service: storage, quick dumping, sorting
-    ideas/                # Idea matcher engine with concept clusters & scoring
-  lib/                    # Firebase client initialization & Zod validation
-  utils/                  # URL normalization, platform detection (Pinterest, IG, etc.)
-functions/
-  src/
-    ai/                   # Gemini & Mock AI providers
-    callable/             # semanticSearch, chatWithBank, suggestProjectLinks
-    triggers/             # onInspirationWritten indexing trigger
+```
+rut/
+├── app/                        # Expo Router cross-platform app (iOS, Android, Web)
+│   ├── (auth)/                 # Auth flows (Login, Sign-up, Forgot Password)
+│   ├── (app)/
+│   │   ├── (tabs)/             # Tab navigation: Bank (Dump), Ideas, Chats, Settings
+│   │   ├── project/[id].tsx    # Idea Studio & Train of Thought workspace
+│   │   ├── chat/[id].tsx       # Full Chat interface with live web & model picker
+│   │   └── inspiration/[id].tsx# Inspiration detail & edit view
+│   └── share-target.tsx        # Mobile OS & PWA incoming share receiver
+├── chrome-extension/           # Standalone Manifest V3 Chrome Extension
+│   ├── src/
+│   │   ├── background/         # Service worker: MV3 Auth & Firestore batch sync
+│   │   ├── content/            # Instagram DOM virtualized scraper
+│   │   ├── popup/              # React Popup UI (4 states)
+│   │   └── types/              # Mirrored schemas & message contracts
+│   └── manifest.json           # Chrome MV3 manifest with externally_connectable
+├── functions/                  # Firebase Cloud Functions (Node.js 20, TypeScript)
+│   └── src/
+│       ├── ai/                 # Gemini API integration & vector embeddings
+│       ├── callable/           # captureMetadata, semanticSearch, chatWithBank
+│       └── triggers/           # onInspirationWritten (auto AI enrichment)
+└── src/
+    ├── components/ui/          # Design system components & MarkdownRenderer
+    ├── design/                 # Tokens (typography, monochrome palette, spacing)
+    ├── features/
+    │   ├── auth/               # AuthContext, dummy login fallback, session sync
+    │   ├── chat/               # Chat service, thesis generator, model manager
+    │   ├── dump/               # Dump CRUD, sorting algorithms, enrichment
+    │   └── ideas/              # Concept cluster matcher engine
+    ├── lib/firebase/           # Firebase client initialization
+    └── utils/                  # URL normalization, domain detection, metadata
 ```
 
+- **Frontend**: React Native 0.86, Expo SDK 52+, Expo Router v4, React 19.
+- **Chrome Extension**: Vite 6, `@crxjs/vite-plugin`, React 19, TypeScript.
+- **Backend**: Firebase Cloud Functions v2 (TypeScript), Cloud Firestore.
+- **AI & Reasoning**: Google Gemini API, custom thesis distillation, client-side concept matcher.
+- **Hosting**: Firebase Hosting (`https://rut.web.app`).
+
 ---
 
-## 5. Getting Started
+## 4. Getting Started
 
 ### Prerequisites
-- **Node.js**: `v20` or higher
-- **npm**: `v10` or higher
-- **Expo CLI**: Included with project
+- **Node.js**: `v20.x` or `v22.x`
+- **npm**: `v10.x` or higher
 
 ### Installation
 ```bash
-# Clone the repository
-git clone https://github.com/example/rut.git
+# 1. Clone the repository
+git clone https://github.com/ernestpascual/rut-app.git
 cd rut
 
-# Install client dependencies
+# 2. Install main app dependencies
 npm install
 
-# Install functions dependencies (if deploying backend)
+# 3. Install Cloud Functions dependencies (optional)
 cd functions && npm install && cd ..
+
+# 4. Install Chrome Extension dependencies (optional)
+cd chrome-extension && npm install && cd ..
 ```
 
-### Running Locally (Safe Execution)
-> [!IMPORTANT]
-> Adhere to [`AGENTS.md`](AGENTS.md): Never access `.env.local` directly. Always invoke Expo with dotenv disabled:
-> ```bash
-> npm run start:safe
-> npm run web:safe
-> ```
+---
 
-To launch the web interface:
+## 5. Development & Execution
+
+### Safe Expo CLI Execution
+> [!IMPORTANT]
+> In accordance with [`AGENTS.md`](AGENTS.md), always run Expo commands with `EXPO_NO_DOTENV=1` to prevent automatic `.env.local` loading:
+
 ```bash
+# Start Expo development server safely
+npm run start:safe
+
+# Start Web development server
 npm run web:safe
 ```
-Open `http://localhost:8081` in your browser. Click **ENTER INSPIRATION BANK (TEST)** to test without entering credentials.
+
+### Building & Deploying the Web App
+```bash
+# Export static web bundle safely
+npm run export:web:safe
+
+# Deploy to Firebase Hosting (rut)
+npx -y firebase-tools@latest deploy --only hosting:rut
+```
+
+### Building & Testing the Chrome Extension
+```bash
+cd chrome-extension
+
+# Build production unpacked extension
+npm run build
+
+# Or package as a zip archive for distribution
+npm run zip
+```
+
+**Loading the Extension in Google Chrome:**
+1. Open Chrome and navigate to `chrome://extensions/`.
+2. Toggle on **Developer mode** in the upper-right corner.
+3. Click **Load unpacked** and select the `chrome-extension/dist` folder.
+4. Pin the **rut** icon to your Chrome toolbar.
+5. Log in and navigate to any Instagram Saved Collection (`instagram.com/{username}/saved/`) to start syncing Reels.
 
 ---
 
-## 6. How to Test Core Features
+## 6. Testing & Quality Assurance
 
-1. **Test Dummy Login**:
-   - On the landing page or login screen, click `⚡ ENTER WITH DUMMY LOGIN (TEST)`.
-   - You enter the Inspiration Bank immediately with no credentials required.
-
-2. **Test Quick Link Dump**:
-   - In the Bank tab, look at the **Quick Dump** bar.
-   - Paste a Pinterest link (e.g. `https://www.pinterest.com/pin/123456789/`) or Instagram link (e.g. `https://instagram.com/reel/example/`).
-   - Notice the platform badge automatically appears (e.g. `DETECTED: PINTEREST`).
-   - Click `DUMP`. The item is saved directly into your bank.
-
-3. **Test Sorting**:
-   - Dump a few links with different platforms and titles.
-   - Click the sort pills (`NEWEST`, `OLDEST`, `PLATFORM`, `TITLE A-Z`, `TITLE Z-A`, `TAGS`).
-   - The inspiration list re-orders in real time.
-
-4. **Test Idea Studio & Reference Attachment**:
-   - Navigate to the **IDEAS** tab and click `+ WRITE IDEA`.
-   - Enter a title (e.g. *"Scandinavian Ceramic Studio"*), concept brief, and notes.
-   - Save and open the idea.
-   - Click **⚡ FIND INSPIRATIONS FROM DUMP**.
-   - `rut` scans your dumped items, scores relevance, and displays matching references with reasons and confidence ratings.
-   - Click `+ ATTACH AS REFERENCE` to link them to the idea, or use `+ BROWSE DUMP` to pick any item manually.
-
----
-
-## 7. Quality & Validation
-
-Run all unit tests and TypeScript validations:
+Run all test suites and TypeScript verifications:
 
 ```bash
-# Run unit tests (URL parsing, schemas, idea matcher, dump service)
+# Run unit tests across services, matching engine, and URL utilities
 npm test
 
-# Type-check TypeScript codebase
+# Run TypeScript type check on the main app
 npx tsc --noEmit
+
+# Run TypeScript type check on the Chrome Extension
+cd chrome-extension && npx tsc --noEmit && cd ..
 ```
 
 ---
 
-## 8. License
+## 7. License
 
 MIT License. See [LICENSE](LICENSE) for details.
