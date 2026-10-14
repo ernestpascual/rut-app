@@ -558,33 +558,6 @@ export default function ChatWorkspaceScreen() {
                 </View>
               ) : null}
 
-              {/* Web Sources & Links */}
-              {item.webSources && item.webSources.length > 0 ? (
-                <View style={styles.webSourcesContainer}>
-                  <Text style={styles.sourcesHeader}>LIVE WEB GROUNDING & PRECEDENTS:</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {item.webSources.map((ws: { title?: string; uri?: string }, wIdx: number) => (
-                      <Pressable
-                        key={`ws-${wIdx}`}
-                        style={styles.webSourcePill}
-                        onPress={() => {
-                          if (ws.uri) {
-                            if (Platform.OS === 'web') {
-                              window.open(ws.uri, '_blank');
-                            } else {
-                              WebBrowser.openBrowserAsync(ws.uri);
-                            }
-                          }
-                        }}
-                      >
-                        <Text style={styles.webSourcePillText} numberOfLines={1}>
-                          🌐 {ws.title || ws.uri} ↗
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
 
               {/* Actions on Message */}
               <View style={styles.messageActions}>
