@@ -24,6 +24,7 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
     }
     try {
         const requestedModel = request.data?.model || undefined;
+        const webAccess = Boolean(request.data?.webAccess);
         const aiProvider = (0, factory_1.getAIProvider)(requestedModel);
         // 1. Fetch chat session doc to get pinned items
         const chatDoc = await config_1.db.collection('users').doc(uid).collection('chats').doc(chatId).get();
@@ -95,6 +96,7 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
             chatHistory,
             pinnedInspirations,
             retrievedInspirations,
+            webAccess,
         });
         // 6. Record usage event in integer micros
         await (0, ledger_1.recordUsageEvent)({
@@ -114,6 +116,8 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
             inputTokens: chatResult.inputTokens,
             outputTokens: chatResult.outputTokens,
             estimatedCostMicros: chatResult.estimatedCostMicros,
+            webAccess,
+            webSources: chatResult.webSources || [],
         };
     }
     catch (err) {

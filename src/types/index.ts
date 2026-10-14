@@ -61,6 +61,8 @@ export interface ChatMessage {
   outputTokens: number | null;
   estimatedCostMicros: number | null;
   status: 'pending' | 'complete' | 'failed';
+  webAccess?: boolean;
+  webSources?: Array<{ title?: string; uri?: string }>;
   createdAt: number;
 }
 
@@ -72,6 +74,7 @@ export interface ChatSession {
   summary: string | null;
   projectId?: string | null;
   projectTitle?: string | null;
+  webAccessEnabled?: boolean;
   archived: boolean;
   createdAt: number;
   updatedAt: number;

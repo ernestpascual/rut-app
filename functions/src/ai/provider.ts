@@ -18,6 +18,7 @@ export interface ChatRequest {
   chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   retrievedInspirations: InspirationContextItem[];
   pinnedInspirations: InspirationContextItem[];
+  webAccess?: boolean;
 }
 
 export interface ChatResult {
@@ -27,6 +28,7 @@ export interface ChatResult {
   inputTokens: number;
   outputTokens: number;
   estimatedCostMicros: number;
+  webSources?: Array<{ title?: string; uri?: string }>;
 }
 
 export interface InspirationInput {

@@ -32,6 +32,7 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { SourceCard } from '../../../src/components/ui/SourceCard';
+import * as WebBrowser from 'expo-web-browser';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../../src/types';
 import {
@@ -46,6 +47,8 @@ import {
   DEFAULT_AI_MODEL,
   getUserPreferredModel,
   setUserPreferredModel,
+  getWebAccessPreference,
+  setWebAccessPreference,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
 
@@ -63,13 +66,23 @@ export default function ChatWorkspaceScreen() {
   const [sending, setSending] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
   const [showModelModal, setShowModelModal] = useState(false);
+  const [webAccessEnabled, setWebAccessEnabled] = useState(false);
 
-  // Load default model set from user preferences
+  // Load default model and web access preference
   useEffect(() => {
     getUserPreferredModel(user?.uid).then((pref) => {
       if (pref) setSelectedModel(pref);
     });
+    getWebAccessPreference().then((pref) => {
+      setWebAccessEnabled(pref);
+    });
   }, [user?.uid]);
+
+  const handleToggleWebAccess = async () => {
+    const next = !webAccessEnabled;
+    setWebAccessEnabled(next);
+    await setWebAccessPreference(next);
+  };
 
   // Pinning modal state
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -219,6 +232,7 @@ export default function ChatWorkspaceScreen() {
         pinnedInspirations: pinnedItems,
         allInspirations: bankItems,
         model: selectedModel,
+        webAccess: webAccessEnabled,
       });
 
       // Update state immediately
@@ -379,6 +393,22 @@ export default function ChatWorkspaceScreen() {
               onPress={handleDeleteChat}
               style={{ marginRight: spacing.xs }}
             />
+            <Pressable
+              onPress={handleToggleWebAccess}
+              style={[
+                styles.webToggleBtn,
+                webAccessEnabled ? styles.webToggleBtnActive : styles.webToggleBtnInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.webToggleText,
+                  webAccessEnabled ? styles.webToggleTextActive : styles.webToggleTextInactive,
+                ]}
+              >
+                {webAccessEnabled ? '🌐 WEB: ON' : '🌐 WEB: OFF'}
+              </Text>
+            </Pressable>
             <Button
               title="📥 PULL DUMP"
               variant="secondary"
@@ -400,6 +430,15 @@ export default function ChatWorkspaceScreen() {
           </View>
         }
       />
+
+      {/* Live Web Grounding Banner */}
+      {webAccessEnabled ? (
+        <View style={styles.webAccessActiveBanner}>
+          <Text style={styles.webAccessActiveText}>
+            🌐 LIVE INTERNET GROUNDING ACTIVE — Synthesizing real-time design movements & web precedents
+          </Text>
+        </View>
+      ) : null}
 
       {/* Linked Idea Banner if connected to an Idea */}
       {session?.projectId ? (
@@ -453,6 +492,17 @@ export default function ChatWorkspaceScreen() {
               </Text>
               <View style={styles.promptChipsContainer}>
                 <Pressable
+                  style={[styles.promptChip, webAccessEnabled && styles.promptChipActive]}
+                  onPress={() => {
+                    if (!webAccessEnabled) setWebAccessEnabled(true);
+                    handleSendMessage('Scan the live web for contemporary design precedents, spatial installations, and brand movements relevant to this concept');
+                  }}
+                >
+                  <Text style={[styles.promptChipText, webAccessEnabled && styles.promptChipTextActive]}>
+                    🌐 Live Web Trends & Precedents
+                  </Text>
+                </Pressable>
+                <Pressable
                   style={styles.promptChip}
                   onPress={() => handleSendMessage('Check my dump and pull all relevant inspirations for this thought train')}
                 >
@@ -493,14 +543,19 @@ export default function ChatWorkspaceScreen() {
               ]}
             >
               <View style={styles.bubbleHeader}>
-                <Text
-                  style={[
-                    styles.roleLabel,
-                    item.role === 'user' ? styles.userRoleLabel : styles.assistantRoleLabel,
-                  ]}
-                >
-                  {item.role === 'user' ? 'YOU' : `RUT ASSISTANT (${item.model || selectedModel})`}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Text
+                    style={[
+                      styles.roleLabel,
+                      item.role === 'user' ? styles.userRoleLabel : styles.assistantRoleLabel,
+                    ]}
+                  >
+                    {item.role === 'user' ? 'YOU' : `RUT BRAINSTORM (${item.model || selectedModel})`}
+                  </Text>
+                  {item.webAccess ? (
+                    <Badge label="🌐 LIVE WEB" variant="grade" style={{ marginLeft: 6 }} />
+                  ) : null}
+                </View>
                 {item.estimatedCostMicros ? (
                   <Text style={styles.costBadge}>
                     ${(item.estimatedCostMicros / 1000000).toFixed(4)}
@@ -541,6 +596,34 @@ export default function ChatWorkspaceScreen() {
                 </View>
               ) : null}
 
+              {/* Web Sources & Links */}
+              {item.webSources && item.webSources.length > 0 ? (
+                <View style={styles.webSourcesContainer}>
+                  <Text style={styles.sourcesHeader}>LIVE WEB GROUNDING & PRECEDENTS:</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {item.webSources.map((ws: { title?: string; uri?: string }, wIdx: number) => (
+                      <Pressable
+                        key={`ws-${wIdx}`}
+                        style={styles.webSourcePill}
+                        onPress={() => {
+                          if (ws.uri) {
+                            if (Platform.OS === 'web') {
+                              window.open(ws.uri, '_blank');
+                            } else {
+                              WebBrowser.openBrowserAsync(ws.uri);
+                            }
+                          }
+                        }}
+                      >
+                        <Text style={styles.webSourcePillText} numberOfLines={1}>
+                          🌐 {ws.title || ws.uri} ↗
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
               {/* Actions on Message */}
               <View style={styles.messageActions}>
                 {item.role === 'assistant' && item.status !== 'failed' ? (
@@ -571,7 +654,11 @@ export default function ChatWorkspaceScreen() {
         {sending ? (
           <View style={styles.generatingIndicator}>
             <ActivityIndicator size="small" color={colors.ink} />
-            <Text style={styles.generatingText}>DEVELOPING TRAIN OF THOUGHT...</Text>
+            <Text style={styles.generatingText}>
+              {webAccessEnabled
+                ? 'RESEARCHING LIVE WEB & DEVELOPING THOUGHT TRAIN...'
+                : 'DEVELOPING TRAIN OF THOUGHT...'}
+            </Text>
           </View>
         ) : null}
 
@@ -582,6 +669,20 @@ export default function ChatWorkspaceScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.brainstormSparksContent}
           >
+            <Pressable
+              style={[
+                styles.brainstormSparkPill,
+                webAccessEnabled && styles.brainstormSparkPillWeb,
+              ]}
+              onPress={() => {
+                if (!webAccessEnabled) setWebAccessEnabled(true);
+                handleSendMessage('Search the web for cutting-edge contemporary design trends, spatial installations, and brand movements relevant to this concept');
+              }}
+            >
+              <Text style={[styles.brainstormSparkText, webAccessEnabled && styles.brainstormSparkTextWeb]}>
+                🌐 Live Web Trends
+              </Text>
+            </Pressable>
             <Pressable
               style={styles.brainstormSparkPill}
               onPress={() => handleSendMessage('Give me 3 wild, counter-intuitive conceptual angles for this idea')}
@@ -1175,5 +1276,81 @@ const getStyles = (colors: ThemeColors) =>
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: spacing.xs,
+  },
+  webToggleBtn: {
+    height: 34,
+    paddingHorizontal: 10,
+    marginRight: spacing.xs,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webToggleBtnActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  webToggleBtnInactive: {
+    backgroundColor: colors.canvas,
+    borderColor: colors.hairline,
+  },
+  webToggleText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  webToggleTextActive: {
+    color: colors.onInk,
+  },
+  webToggleTextInactive: {
+    color: colors.inkSoft,
+  },
+  webAccessActiveBanner: {
+    backgroundColor: colors.surfaceGrade,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink,
+    paddingHorizontal: spacing.base,
+    paddingVertical: 6,
+  },
+  webAccessActiveText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  webSourcesContainer: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineGrade,
+  },
+  webSourcePill: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  webSourcePillText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.ink,
+    fontWeight: '600',
+  },
+  promptChipActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  promptChipTextActive: {
+    color: colors.onInk,
+  },
+  brainstormSparkPillWeb: {
+    backgroundColor: colors.surfaceGrade,
+    borderColor: colors.ink,
+  },
+  brainstormSparkTextWeb: {
+    color: colors.ink,
+    fontWeight: '700',
   },
 });

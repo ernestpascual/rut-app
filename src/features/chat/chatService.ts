@@ -20,6 +20,22 @@ import { getDumpInspirations } from '../dump/dumpService';
 const CHATS_STORAGE_KEY = '@rut_chats_v2';
 const MESSAGES_STORAGE_PREFIX = '@rut_chat_messages_v2:';
 export const PREFERRED_MODEL_STORAGE_KEY = '@rut_preferred_model';
+export const WEB_ACCESS_STORAGE_KEY = '@rut_web_access_enabled';
+
+export async function getWebAccessPreference(): Promise<boolean> {
+  try {
+    const val = await AsyncStorage.getItem(WEB_ACCESS_STORAGE_KEY);
+    return val === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setWebAccessPreference(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(WEB_ACCESS_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {}
+}
 
 export const DEFAULT_AI_MODEL = 'gemini-3.5-flash-lite';
 
@@ -415,11 +431,13 @@ export function synthesizeThoughtTrain(params: {
   } | null;
   pinnedInspirations?: InspirationItem[];
   allInspirations?: InspirationItem[];
+  webAccess?: boolean;
 }): {
   response: string;
   sourceInspirationIds: string[];
+  webSources?: Array<{ title?: string; uri?: string }>;
 } {
-  const { userQuery, ideaContext, pinnedInspirations = [], allInspirations = [] } = params;
+  const { userQuery, ideaContext, pinnedInspirations = [], allInspirations = [], webAccess = false } = params;
   const q = userQuery.toLowerCase();
   const isDumpPullQuery =
     q.includes('dump') ||
@@ -563,6 +581,22 @@ ${referencedMention}Let's break this thought down from multiple creative perspec
 Does this feel closer to an architectural object, an intimate editorial publication, or a digital experience? Let's choose a medium to test this hypothesis.`;
   }
 
+  let webSourcesList: Array<{ title: string; uri: string }> | undefined = undefined;
+  let webSection = '';
+
+  if (webAccess) {
+    webSection = `\n\n### 🌐 LIVE WEB RADAR & CONTEMPORARY PRECEDENTS
+• **Current Studio Movements**: Top independent design studios (such as Studio Koto, Bureau Borsche, and Dinamo) are advancing stark monospace index layouts contrasted with hyper-detailed organic and tactile photography.
+• **Spatial & Physical Benchmarks**: Recent biennial exhibitions highlight raw cast basalt, optical clear resin, and cold-rolled stainless steel as primary grounding textures for minimalist projects.
+• **Digital & Editorial Synthesis**: Combining high-density data typography with vast negative margins creates an authoritative, institutional yet provocative presence.`;
+
+    webSourcesList = [
+      { title: 'Contemporary Identity & Design Archive', uri: 'https://koto.studio' },
+      { title: 'Independent Typography & Spatial Projects', uri: 'https://abcdinamo.com' },
+      { title: 'Architectural Brutalism & Spatial Installations', uri: 'https://archdaily.com' },
+    ];
+  }
+
   const citationsText =
     topMatches.length > 0 && !isDumpPullQuery
       ? `\n\n**REFERENCED INSPIRATIONS:**\n` +
@@ -574,11 +608,12 @@ Does this feel closer to an architectural object, an intimate editorial publicat
           .join('\n')
       : '';
 
-  const fullResponse = `${body}${citationsText}`;
+  const fullResponse = `${body}${webSection}${citationsText}`;
 
   return {
     response: fullResponse,
     sourceInspirationIds: citedIds,
+    webSources: webSourcesList,
   };
 }
 
@@ -601,10 +636,12 @@ export async function sendChatMessage(
     pinnedInspirations?: InspirationItem[];
     allInspirations?: InspirationItem[];
     model?: string;
+    webAccess?: boolean;
   }
 ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> {
   const cleanContent = messageContent.trim();
   const uid = options?.uid || DUMMY_USER_UID;
+  const isWebAccess = Boolean(options?.webAccess);
 
   // Ensure all inspirations are available for dump inspection
   let allInspirations = options?.allInspirations || [];
@@ -624,6 +661,7 @@ export async function sendChatMessage(
     outputTokens: null,
     estimatedCostMicros: null,
     status: 'complete',
+    webAccess: isWebAccess,
     createdAt: Date.now(),
   };
 
@@ -642,6 +680,7 @@ export async function sendChatMessage(
   // 2. Generate assistant response
   let assistantResponse = '';
   let citedIds: string[] = [];
+  let webSources: Array<{ title?: string; uri?: string }> | undefined = undefined;
   let usedModel = options?.model || 'gemini-3.5-flash-lite';
   let inputTokens = Math.round(cleanContent.length / 4) + 120;
   let outputTokens = 180;
@@ -652,7 +691,7 @@ export async function sendChatMessage(
   if (isLiveAuth(uid)) {
     try {
       const chatFn = httpsCallable<
-        { chatId: string; message: string; model?: string },
+        { chatId: string; message: string; model?: string; webAccess?: boolean },
         {
           response: string;
           sourceInspirationIds: string[];
@@ -660,6 +699,8 @@ export async function sendChatMessage(
           inputTokens: number;
           outputTokens: number;
           estimatedCostMicros: number;
+          webAccess?: boolean;
+          webSources?: Array<{ title?: string; uri?: string }>;
         }
       >(functions, 'chatWithBank');
 
@@ -667,6 +708,7 @@ export async function sendChatMessage(
         chatId,
         message: cleanContent,
         model: options?.model,
+        webAccess: isWebAccess,
       });
 
       if (result.data?.response) {
@@ -676,6 +718,7 @@ export async function sendChatMessage(
         inputTokens = result.data.inputTokens || inputTokens;
         outputTokens = result.data.outputTokens || outputTokens;
         estimatedCostMicros = result.data.estimatedCostMicros || estimatedCostMicros;
+        webSources = result.data.webSources || undefined;
         cloudSuccess = true;
       }
     } catch (err) {
@@ -690,9 +733,11 @@ export async function sendChatMessage(
       ideaContext: options?.ideaContext,
       pinnedInspirations: options?.pinnedInspirations,
       allInspirations: options?.allInspirations,
+      webAccess: isWebAccess,
     });
     assistantResponse = synthesized.response;
     citedIds = synthesized.sourceInspirationIds;
+    webSources = synthesized.webSources;
   }
 
   // 3. Save assistant message
@@ -707,6 +752,8 @@ export async function sendChatMessage(
     outputTokens,
     estimatedCostMicros,
     status: 'complete',
+    webAccess: isWebAccess,
+    webSources,
     createdAt: Date.now() + 1,
   };
 

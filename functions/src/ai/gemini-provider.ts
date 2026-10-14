@@ -98,7 +98,12 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
   }
 
   async generateChatResponse(input: ChatRequest): Promise<ChatResult> {
-    const model = this.genAI.getGenerativeModel({ model: this.flashModel });
+    const modelOptions: any = { model: this.flashModel };
+    if (input.webAccess) {
+      modelOptions.tools = [{ googleSearch: {} }];
+    }
+
+    const model = this.genAI.getGenerativeModel(modelOptions);
 
     const contextItems = [...input.pinnedInspirations, ...input.retrievedInspirations];
     const contextFormatted = contextItems
@@ -107,7 +112,12 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
       )
       .join('\n');
 
-    const fullPrompt = `${CHAT_SYSTEM_PROMPT}
+    const webAccessDirective = input.webAccess
+      ? `\nLIVE INTERNET ACCESS: ACTIVATED.
+You have active Google Search grounding. Perform live searches to bring in real-world cultural precedents, design movements, contemporary studio work, architectural benchmarks, and recent articles. Integrate these real-world references dynamically into your brainstorming.`
+      : '';
+
+    const fullPrompt = `${CHAT_SYSTEM_PROMPT}${webAccessDirective}
 
 AVAILABLE USER INSPIRATIONS (SOURCES):
 ${contextFormatted || 'None found.'}
@@ -129,6 +139,21 @@ Please formulate an insightful response exploring this train of thought and expl
       }
     }
 
+    // Extract web search grounding sources if present
+    const webSources: Array<{ title?: string; uri?: string }> = [];
+    const candidate = result.response.candidates?.[0];
+    const groundingMetadata = (candidate as any)?.groundingMetadata;
+    if (groundingMetadata?.groundingChunks) {
+      for (const chunk of groundingMetadata.groundingChunks) {
+        if (chunk.web?.uri) {
+          webSources.push({
+            title: chunk.web.title || chunk.web.uri,
+            uri: chunk.web.uri,
+          });
+        }
+      }
+    }
+
     const inputTokens = result.response.usageMetadata?.promptTokenCount || Math.round(fullPrompt.length / 4);
     const outputTokens = result.response.usageMetadata?.candidatesTokenCount || Math.round(responseText.length / 4);
     const cost = calculateCostMicros(this.flashModel, inputTokens, outputTokens);
@@ -140,6 +165,7 @@ Please formulate an insightful response exploring this train of thought and expl
       inputTokens,
       outputTokens,
       estimatedCostMicros: cost,
+      webSources: webSources.length > 0 ? webSources : undefined,
     };
   }
 

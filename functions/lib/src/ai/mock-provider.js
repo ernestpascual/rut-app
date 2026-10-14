@@ -72,6 +72,14 @@ class MockAIProvider {
         const citedIds = contextItems.slice(0, 3).map((item) => item.id);
         const titles = contextItems.slice(0, 3).map((item) => `"${item.title}"`);
         let response = `### BRAINSTORMING: ${input.message.toUpperCase()}\n\n`;
+        const webSources = [];
+        if (input.webAccess) {
+            response += `🌐 **LIVE WEB RESEARCH & CONTEMPORARY PRECEDENTS ACTIVE**\n` +
+                `Scanning contemporary design archives, studio lookbooks, and spatial installations:\n\n` +
+                `• **Contemporary Studio Precedent**: Studios like Koto, Studio Dumbar, and Bureau Borsche are currently driving high-tension editorial brutalism—pairing stripped monospace indexes with sculptural organic photography.\n` +
+                `• **Tactile Material Trend**: Contemporary spatial design is moving toward raw aggregate concrete paired with optical glass and brushed stainless steel.\n\n`;
+            webSources.push({ title: 'Contemporary Editorial & Identity Index', uri: 'https://koto.studio' }, { title: 'Kinetic Typography & Spatial Branding', uri: 'https://studiodumbar.com' });
+        }
         if (titles.length > 0) {
             response += `Cross-pollinating your saved bank references in ${titles.join(' and ')}:\n\n` +
                 `• **Structural Contrast**: Juxtapose the primary form with unexpected raw finishes.\n` +
@@ -96,6 +104,7 @@ class MockAIProvider {
             inputTokens,
             outputTokens,
             estimatedCostMicros: cost,
+            webSources: webSources.length > 0 ? webSources : undefined,
         };
     }
     /**

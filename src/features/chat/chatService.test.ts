@@ -11,6 +11,8 @@ import {
   DEFAULT_AI_MODEL,
   getUserPreferredModel,
   setUserPreferredModel,
+  getWebAccessPreference,
+  setWebAccessPreference,
 } from './chatService';
 import { Project, InspirationItem } from '../../types';
 
@@ -269,6 +271,45 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     );
 
     expect(assistantMessage.model).toBe('gemini-3.8-flash');
+  });
+
+  test('toggles and persists web access preference', async () => {
+    await setWebAccessPreference(false);
+    expect(await getWebAccessPreference()).toBe(false);
+
+    await setWebAccessPreference(true);
+    expect(await getWebAccessPreference()).toBe(true);
+
+    await setWebAccessPreference(false);
+    expect(await getWebAccessPreference()).toBe(false);
+  });
+
+  test('synthesizes thought train with live web radar and sources when webAccess is enabled', async () => {
+    const result = synthesizeThoughtTrain({
+      userQuery: 'What are contemporary studios doing for kinetic typography identity?',
+      webAccess: true,
+    });
+
+    expect(result.response).toContain('LIVE WEB RADAR & CONTEMPORARY PRECEDENTS');
+    expect(result.webSources).toBeDefined();
+    expect(result.webSources!.length).toBeGreaterThan(0);
+    expect(result.webSources![0].uri).toContain('http');
+  });
+
+  test('sendChatMessage propagates webAccess and stores webSources on assistant message', async () => {
+    const session = await createChatSession('Web Grounded Brainstorm');
+    const { userMessage, assistantMessage } = await sendChatMessage(
+      session.id,
+      'Explore live design movements',
+      {
+        webAccess: true,
+      }
+    );
+
+    expect(userMessage.webAccess).toBe(true);
+    expect(assistantMessage.webAccess).toBe(true);
+    expect(assistantMessage.webSources).toBeDefined();
+    expect(assistantMessage.content).toContain('LIVE WEB RADAR');
   });
 });
 

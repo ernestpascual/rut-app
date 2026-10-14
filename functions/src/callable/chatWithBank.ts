@@ -28,6 +28,7 @@ export const chatWithBank = onCall(async (request) => {
 
   try {
     const requestedModel = request.data?.model || undefined;
+    const webAccess = Boolean(request.data?.webAccess);
     const aiProvider = getAIProvider(requestedModel);
 
     // 1. Fetch chat session doc to get pinned items
@@ -107,6 +108,7 @@ export const chatWithBank = onCall(async (request) => {
       chatHistory,
       pinnedInspirations,
       retrievedInspirations,
+      webAccess,
     });
 
     // 6. Record usage event in integer micros
@@ -128,6 +130,8 @@ export const chatWithBank = onCall(async (request) => {
       inputTokens: chatResult.inputTokens,
       outputTokens: chatResult.outputTokens,
       estimatedCostMicros: chatResult.estimatedCostMicros,
+      webAccess,
+      webSources: chatResult.webSources || [],
     };
   } catch (err: any) {
     console.error(`[Chat With Bank] Error for user ${uid}:`, err);
