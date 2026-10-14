@@ -1170,23 +1170,21 @@ export default function ProjectDetailScreen() {
             {/* TAB 2: REFERENCES */}
             {activeTab === 'references' && (
               <View style={styles.tabContent}>
-                {/* TOOLBAR */}
-                <View style={styles.tabHeaderToolbar}>
-                  <View style={{ flexDirection: 'row', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
-                    <Button
-                      title={loadingSuggestions ? 'SCANNING...' : 'SCAN DUMP'}
-                      variant="secondary"
-                      onPress={handleGetInspirationsFromDump}
-                      loading={loadingSuggestions}
-                      style={{ height: 28, paddingHorizontal: 8 }}
-                    />
-                    <Button
-                      title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
-                      variant="secondary"
-                      onPress={() => setShowManualPicker(!showManualPicker)}
-                      style={{ height: 28, paddingHorizontal: 8 }}
-                    />
-                  </View>
+                {/* REFERENCES TOOLBAR: 2 EQUAL 1/2 WIDTH BUTTONS */}
+                <View style={styles.referencesToolbar}>
+                  <Button
+                    title={loadingSuggestions ? 'SCANNING...' : 'SCAN DUMP'}
+                    variant="secondary"
+                    onPress={handleGetInspirationsFromDump}
+                    loading={loadingSuggestions}
+                    style={styles.referencesHalfBtn}
+                  />
+                  <Button
+                    title={showManualPicker ? 'HIDE PICKER' : '+ BROWSE DUMP'}
+                    variant="secondary"
+                    onPress={() => setShowManualPicker(!showManualPicker)}
+                    style={styles.referencesHalfBtn}
+                  />
                 </View>
 
                 {/* MANUAL DUMP PICKER */}
@@ -2609,6 +2607,17 @@ const getStyles = (colors: ThemeColors) =>
   },
   tabContent: {
     marginBottom: spacing.base,
+  },
+  referencesToolbar: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    width: '100%',
+    marginBottom: spacing.sm,
+  },
+  referencesHalfBtn: {
+    flex: 1,
+    height: 38,
+    paddingHorizontal: 8,
   },
   tabHeaderToolbar: {
     flexDirection: 'row',
