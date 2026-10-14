@@ -972,29 +972,6 @@ export default function ProjectDetailScreen() {
                 </View>
               </View>
 
-              {/* THESIS STATEMENT CARD ON TOP OF TRAIN OF THOUGHT */}
-              <Card style={styles.thesisCard}>
-                <View style={styles.thesisHeaderRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <Badge label="💡 THESIS STATEMENT" variant="inverse" style={{ marginRight: spacing.xs }} />
-                    <Text style={styles.thesisSubtitle}>Distilled thought synthesis</Text>
-                  </View>
-                  <Pressable
-                    onPress={handleOpenFullChat}
-                    hitSlop={8}
-                    style={styles.openChatLinkBtn}
-                  >
-                    <Text style={styles.openChatLinkText}>OPEN FULL CHAT ↗</Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.thesisStatementText}>
-                  {project.thesisStatement ||
-                    ideaChat?.thesisStatement ||
-                    project.brief ||
-                    'Interact with this thought through chat to synthesize an evolving 1-2 sentence thesis statement.'}
-                </Text>
-              </Card>
-
               <Card style={styles.thoughtCard}>
                 <View style={styles.thoughtBannerRow}>
                   <Text style={styles.thoughtBannerText}>
@@ -1551,46 +1528,6 @@ const getStyles = (colors: ThemeColors) =>
     borderWidth: 1,
     borderColor: colors.ink,
     padding: spacing.base,
-  },
-  thesisCard: {
-    backgroundColor: colors.surfaceGrade,
-    borderWidth: 1,
-    borderColor: colors.ink,
-    padding: spacing.base,
-    marginBottom: spacing.base,
-  },
-  thesisHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
-  },
-  thesisSubtitle: {
-    ...typography.captionCap,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.inkSoft,
-    letterSpacing: 0.8,
-  },
-  thesisStatementText: {
-    ...typography.captionSm,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  openChatLinkBtn: {
-    borderWidth: 1,
-    borderColor: colors.ink,
-    backgroundColor: colors.canvas,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  openChatLinkText: {
-    ...typography.captionCap,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.ink,
   },
   thoughtBannerRow: {
     flexDirection: 'row',

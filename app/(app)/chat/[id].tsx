@@ -100,11 +100,10 @@ export default function ChatWorkspaceScreen() {
   const [createProjectContent, setCreateProjectContent] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
 
-  // Hamburger menu, Delete confirmation modal, and Collapsible thesis states
+  // Hamburger menu and Delete confirmation modal states
   const [menuModalOpen, setMenuModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
-  const [thesisExpanded, setThesisExpanded] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -432,38 +431,6 @@ export default function ChatWorkspaceScreen() {
           <Text style={styles.linkedIdeaLink}>↗ VIEW IDEA</Text>
         </Pressable>
       ) : null}
-
-      {/* Collapsible Thesis Statement Banner on top */}
-      <View style={styles.thesisBar}>
-        <Pressable
-          style={styles.thesisHeaderRow}
-          onPress={() => setThesisExpanded(!thesisExpanded)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Toggle thesis statement"
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: spacing.xs }}>
-            <Badge label="💡 THESIS" variant="inverse" style={{ marginRight: spacing.xs }} />
-            <Text style={styles.thesisSubtitle} numberOfLines={1}>
-              {thesisExpanded
-                ? '1-2 sentence thought synthesis'
-                : (session?.thesisStatement || 'Tap to expand 1-2 sentence synthesis')}
-            </Text>
-          </View>
-          <Text style={styles.thesisToggleText}>
-            {thesisExpanded ? '▴ HIDE' : '▾ EXPAND'}
-          </Text>
-        </Pressable>
-
-        {thesisExpanded ? (
-          <Text style={styles.thesisStatementText}>
-            {session?.thesisStatement ||
-              (session?.projectTitle
-                ? `Exploring ${session.projectTitle}: interact through the chat to distill and synthesize the core thesis statement.`
-                : 'Interact through the chat to distill and maintain a 1-2 sentence thesis statement.')}
-          </Text>
-        ) : null}
-      </View>
 
       {/* Pinned inspirations banner if any */}
       {pinnedItems.length > 0 ? (
@@ -1421,38 +1388,6 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 10,
     color: colors.inkSoft,
     marginTop: 2,
-  },
-  thesisBar: {
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surfaceGrade,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.ink,
-  },
-  thesisHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  thesisSubtitle: {
-    ...typography.captionCap,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.inkSoft,
-    letterSpacing: 0.8,
-  },
-  thesisStatementText: {
-    ...typography.captionSm,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  thesisToggleText: {
-    ...typography.captionCap,
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.ink,
   },
   hamburgerBtn: {
     paddingHorizontal: spacing.sm,
