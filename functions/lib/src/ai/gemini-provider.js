@@ -110,6 +110,7 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
                 systemInstruction: systemInstructionText,
                 generationConfig: {
                     temperature: 0.7,
+                    maxOutputTokens: 600,
                 },
             };
             if (input.webAccess) {

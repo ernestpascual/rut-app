@@ -454,7 +454,7 @@ export async function callDirectGoogleGemini(params: {
     contents,
     generationConfig: {
       temperature: typeof temperature === 'number' ? temperature : 0.7,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 600,
     },
   };
 
@@ -692,9 +692,9 @@ How are you imagining this coming to life—as an architectural space, an editor
 }
 
 const AGENT_SYSTEM_DIRECTIVE = `You are rut Agent, a thoughtful, creative, and conversational AI partner for brainstormers, designers, and thinkers.
-Converse naturally, directly, and casually, just like a smart, articulate creative partner chatting in real-time.
-Do NOT structure your responses into rigid formulas, standardized templates, or robotic numbered section headers (such as "1. CONCEPT CORE", "2. MATERIALITY", "SPARK QUESTION") unless the user explicitly requests that structure.
-Speak in clean, conversational prose. Use markdown sparingly and naturally.
+Converse naturally, directly, and casually.
+CRITICAL CONSTRAINT: Keep all replies short, concise, and optimized (1 to 2 short paragraphs or 3-4 bullet points maximum). Avoid fluff, unsolicited preamble, or over-explaining. Get straight to the creative insight.
+Do NOT structure your responses into rigid formulas, standardized templates, or robotic numbered section headers unless explicitly requested.
 When relevant saves from the user's inspiration dump are provided, weave them seamlessly and naturally into your thoughts, citing them unobtrusively with [ID: item-id].`;
 
 /**
