@@ -19,7 +19,7 @@ import { rounded, typography, spacing, ThemeColors } from '../../src/design/toke
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn, signInAsDummy, stagedShare, authError, clearAuthError } = useAuth();
+  const { signIn, stagedShare, authError, clearAuthError } = useAuth();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => getStyles(colors), [colors]);
   const [email, setEmail] = useState('');
@@ -39,24 +39,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
-      if (stagedShare) {
-        router.replace('/share-target');
-      } else {
-        router.replace('/(app)/(tabs)/bank');
-      }
-    } catch (e) {
-      // Handled in context
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDummySignIn = async () => {
-    clearAuthError();
-    setValidationError(null);
-    setLoading(true);
-    try {
-      await signInAsDummy();
       if (stagedShare) {
         router.replace('/share-target');
       } else {
@@ -137,14 +119,6 @@ export default function LoginScreen() {
             onPress={handleSignIn}
             loading={loading}
             style={{ marginTop: spacing.base }}
-          />
-
-          <Button
-            title="⚡ ENTER WITH DEMO ACCOUNT (TEST)"
-            variant="secondary"
-            onPress={handleDummySignIn}
-            disabled={loading}
-            style={{ marginTop: spacing.xs }}
           />
 
           <View style={styles.switchRow}>
