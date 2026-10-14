@@ -76,49 +76,16 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
     }
     async generateChatResponse(input) {
         const contextItems = [...input.pinnedInspirations, ...input.retrievedInspirations];
-        const contextFormatted = contextItems
-            .map((item, idx) => {
-            const lines = [
-                `[DUMP KNOWLEDGE ENTRY #${idx + 1}]`,
-                `• ID: ${item.id}`,
-                `• Title: "${item.title}"`,
-            ];
-            if (item.domain || item.author) {
-                lines.push(`• Source / Author: ${item.author ? `@${item.author} on ` : ''}${item.domain || 'Web'}`);
-            }
-            if (item.userNote) {
-                lines.push(`• User's Personal Note: "${item.userNote}"`);
-            }
-            if (item.caption) {
-                lines.push(`• Saved Caption / Post Text: "${item.caption}"`);
-            }
-            if (item.summary) {
-                lines.push(`• AI Summary & Context: ${item.summary}`);
-            }
-            if (item.tags && item.tags.length > 0) {
-                lines.push(`• Tags: #${item.tags.join(' #')}`);
-            }
-            if (item.concepts && item.concepts.length > 0) {
-                lines.push(`• Concepts: ${item.concepts.join(', ')}`);
-            }
-            if (item.url) {
-                lines.push(`• Link: ${item.url}`);
-            }
-            return lines.join('\n');
-        })
-            .join('\n\n');
-        const webAccessDirective = input.webAccess
-            ? `\nLIVE INTERNET SEARCH GROUNDING: ACTIVATED.
-Perform real-time searches when helpful to uncover live precedents, contemporary studio benchmarks, and current design news.`
+        const contextFormatted = contextItems.length > 0
+            ? `\n\nRelevant inspiration items from user's dump (cite naturally with [ID: id] if referencing):\n` +
+                contextItems
+                    .map((item) => `- [ID: ${item.id}] "${item.title}": ${item.summary || item.userNote || item.caption || ''}`)
+                    .join('\n')
             : '';
-        const systemInstructionText = `${prompts_1.CHAT_SYSTEM_PROMPT}${webAccessDirective}
-
-======================================================
-ATTACHED INSPIRATION DUMP KNOWLEDGE BASE:
-======================================================
-${contextFormatted || 'No relevant saves currently in attached context.'}
-======================================================
-`;
+        const webAccessDirective = input.webAccess
+            ? `\nLive internet search grounding is active. Perform real-time searches when helpful to reference current precedents.`
+            : '';
+        const systemInstructionText = `${prompts_1.CHAT_SYSTEM_PROMPT}${webAccessDirective}${contextFormatted}`;
         // Multi-turn conversation history
         const contents = [];
         if (input.chatHistory && input.chatHistory.length > 0) {

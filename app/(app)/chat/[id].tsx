@@ -32,6 +32,7 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { SourceCard } from '../../../src/components/ui/SourceCard';
+import { MarkdownRenderer } from '../../../src/components/ui/MarkdownRenderer';
 import * as WebBrowser from 'expo-web-browser';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../../src/types';
@@ -431,23 +432,6 @@ export default function ChatWorkspaceScreen() {
         }
       />
 
-      {/* Knowledge Base Grounding Bar */}
-      <View style={styles.kbStatusBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-          <Text style={styles.kbStatusIcon}>📚</Text>
-          <Text style={styles.kbStatusTitle}>KNOWLEDGE BASE: DUMP</Text>
-          <Badge
-            label={`${bankItems.length} SAVES`}
-            variant="inverse"
-            style={{ marginLeft: 6, marginRight: 6 }}
-          />
-          <Badge label="ON-DEMAND RAG" variant="grade" />
-        </View>
-        <Text style={styles.kbStatusSubtitle} numberOfLines={1}>
-          Chat freely with Gemini — rut Agent draws from your Dump saves when relevant or requested.
-        </Text>
-      </View>
-
       {/* Live Web Grounding Banner */}
       {webAccessEnabled ? (
         <View style={styles.webAccessActiveBanner}>
@@ -503,9 +487,9 @@ export default function ChatWorkspaceScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>RUT CONVERSATIONAL AGENT</Text>
+              <Text style={styles.emptyTitle}>START A TRAIN OF THOUGHT</Text>
               <Text style={styles.emptySubtitle}>
-                Chat freely with Gemini, search live web movements, or draw on-demand from your Dump archive.
+                Pose a creative query, explore design hypotheses, or synthesize with your dump.
               </Text>
               <View style={styles.promptChipsContainer}>
                 <Pressable
@@ -514,19 +498,19 @@ export default function ChatWorkspaceScreen() {
                     handleSendMessage('Brainstorm 3 bold, unexpected concept angles for an experimental design project')
                   }
                 >
-                  <Text style={styles.promptChipText}>💬 Brainstorm From Scratch</Text>
+                  <Text style={styles.promptChipText}>💡 Concept Variations</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.promptChip, { borderColor: colors.ink, backgroundColor: colors.surfaceGrade }]}
-                  onPress={() =>
-                    handleSendMessage(
-                      'Search my dump knowledge base: What are the main recurring aesthetic themes, concepts, and materials across my saved inspirations?'
-                    )
-                  }
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Suggest tactile materiality, textures, and an editorial color palette')}
                 >
-                  <Text style={[styles.promptChipText, { fontWeight: '700' }]}>
-                    📚 Ask Dump Knowledge Base
-                  </Text>
+                  <Text style={styles.promptChipText}>🎨 Material & Palette</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() => handleSendMessage('Critique and pressure-test this design concept to find the killer tension')}
+                >
+                  <Text style={styles.promptChipText}>✍️ Polish Brief</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.promptChip, webAccessEnabled && styles.promptChipActive]}
@@ -541,15 +525,9 @@ export default function ChatWorkspaceScreen() {
                 </Pressable>
                 <Pressable
                   style={styles.promptChip}
-                  onPress={() => handleSendMessage('Suggest tactile materiality, textures, and an editorial color palette')}
+                  onPress={() => handleSendMessage('Check my dump and pull all relevant inspirations for this thought train')}
                 >
-                  <Text style={styles.promptChipText}>🎨 Material & Palette</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Critique and pressure-test this design concept to find the killer tension')}
-                >
-                  <Text style={styles.promptChipText}>🔍 Critique & Polish</Text>
+                  <Text style={styles.promptChipText}>📥 Check & Pull From Dump</Text>
                 </Pressable>
               </View>
             </View>
@@ -582,14 +560,10 @@ export default function ChatWorkspaceScreen() {
                 ) : null}
               </View>
 
-              <Text
-                style={[
-                  styles.messageText,
-                  item.role === 'user' ? styles.userText : styles.assistantText,
-                ]}
-              >
-                {item.content}
-              </Text>
+              <MarkdownRenderer
+                content={item.content}
+                isUser={item.role === 'user'}
+              />
 
               {/* Clickable Source Cards for Assistant citations */}
               {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (

@@ -157,8 +157,11 @@ export const chatWithBank = onCall(async (request) => {
     });
 
     scoredList.sort((a, b) => b.score - a.score);
-    // Take top 8 knowledge base items (or top 5 most recent if query is general)
-    const retrievedInspirations = scoredList.slice(0, 8).map((sc) => sc.item);
+    const isDumpQuery = /dump|bank|save|inspiration|reference/i.test(userMessage);
+    const scoredPositive = scoredList.filter((sc) => sc.score > 0);
+    const retrievedInspirations = isDumpQuery
+      ? (scoredPositive.length > 0 ? scoredPositive.slice(0, 4) : scoredList.slice(0, 3)).map((sc) => sc.item)
+      : scoredPositive.slice(0, 3).map((sc) => sc.item);
 
     // 4. Fetch recent chat history window (last 6 messages)
     const historySnap = await db
