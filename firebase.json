@@ -25,6 +25,7 @@
     }
   ],
   "hosting": {
+    "target": "rut",
     "public": "dist",
     "ignore": [
       "firebase.json",

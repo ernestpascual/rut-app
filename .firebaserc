@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "izepak"
-  }
+  },
+  "targets": {
+    "izepak": {
+      "hosting": {
+        "rut": [
+          "rut"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
