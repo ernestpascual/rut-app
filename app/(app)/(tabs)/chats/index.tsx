@@ -37,6 +37,68 @@ export default function ChatsListScreen() {
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === chats.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(chats.map((c) => c.id));
+    }
+  };
+
+  const handleDeleteSelectedChats = async () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+
+    const performDelete = async () => {
+      setDeleting(true);
+      try {
+        for (const cid of selectedIds) {
+          await deleteChatSession(cid, user?.uid);
+        }
+        setChats((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
+        setToastMessage(`✓ ${count} ${count === 1 ? 'train of thought' : 'trains of thought'} permanently deleted.`);
+        setSelectedIds([]);
+        setSelectMode(false);
+      } catch (err) {
+        Alert.alert('Error', 'Failed to delete selected chats.');
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm(
+        `Delete Selected Chats?\n\nPermanently delete ${count} ${count === 1 ? 'train of thought' : 'trains of thought'}? This cannot be undone.`
+      );
+      if (confirmed) {
+        await performDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Delete Selected Chats',
+      `Permanently delete ${count} ${count === 1 ? 'train of thought' : 'trains of thought'}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: performDelete,
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (params.deleted === '1') {
@@ -133,13 +195,58 @@ export default function ChatsListScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <TopNav
         title="rut"
-        subtitle="Trains of Thought"
+        subtitle={selectMode ? `${selectedIds.length} OF ${chats.length} SELECTED` : 'Trains of Thought'}
+        leftAction={
+          selectMode ? (
+            <Button
+              title="CANCEL"
+              variant="text"
+              onPress={() => {
+                setSelectMode(false);
+                setSelectedIds([]);
+              }}
+              style={{ height: 36, paddingHorizontal: 8 }}
+            />
+          ) : undefined
+        }
         rightAction={
-          <Button
-            title="+ NEW CHAT"
-            onPress={() => router.push('/(app)/chat/new')}
-            style={{ height: 36, paddingHorizontal: 16 }}
-          />
+          selectMode ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Button
+                title={selectedIds.length === chats.length ? 'DESELECT' : 'SELECT ALL'}
+                variant="secondary"
+                onPress={handleToggleSelectAll}
+                style={{ height: 36, paddingHorizontal: 10 }}
+              />
+              <Button
+                title={deleting ? 'DELETING...' : `DELETE (${selectedIds.length})`}
+                onPress={handleDeleteSelectedChats}
+                disabled={selectedIds.length === 0 || deleting}
+                style={{
+                  height: 36,
+                  paddingHorizontal: 12,
+                  backgroundColor: colors.statusErrorText || '#E03131',
+                  borderWidth: 0,
+                }}
+              />
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              {chats.length > 0 && (
+                <Button
+                  title="SELECT"
+                  variant="secondary"
+                  onPress={() => setSelectMode(true)}
+                  style={{ height: 36, paddingHorizontal: 12 }}
+                />
+              )}
+              <Button
+                title="+ NEW CHAT"
+                onPress={() => router.push('/(app)/chat/new')}
+                style={{ height: 36, paddingHorizontal: 16 }}
+              />
+            </View>
+          )
         }
       />
 
@@ -183,54 +290,78 @@ export default function ChatsListScreen() {
           data={chats}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <Card
-              onPress={() => router.push(`/(app)/chat/${item.id}`)}
-              style={styles.chatCard}
-            >
-              <View style={styles.chatHeader}>
-                <View style={{ flex: 1, marginRight: spacing.xs }}>
-                  <Text style={styles.chatTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.projectId ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+          renderItem={({ item }) => {
+            const isSelected = selectedIds.includes(item.id);
+            return (
+              <Card
+                onPress={() => {
+                  if (selectMode) {
+                    toggleSelect(item.id);
+                  } else {
+                    router.push(`/(app)/chat/${item.id}`);
+                  }
+                }}
+                style={[styles.chatCard, selectMode && isSelected && styles.chatCardSelected]}
+              >
+                <View style={styles.chatHeader}>
+                  <View style={{ flex: 1, marginRight: spacing.xs }}>
+                    <Text style={styles.chatTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    {item.projectId ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                        <Badge
+                          label={`IDEA: ${item.projectTitle || 'LINKED'}`}
+                          variant="inverse"
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                    {item.pinnedInspirationIds && item.pinnedInspirationIds.length > 0 ? (
                       <Badge
-                        label={`IDEA: ${item.projectTitle || 'LINKED'}`}
-                        variant="inverse"
+                        label={`${item.pinnedInspirationIds.length} PINNED`}
+                        variant="outline"
                       />
-                    </View>
-                  ) : null}
+                    ) : null}
+
+                    {selectMode && (
+                      <View
+                        style={[
+                          styles.selectCheckbox,
+                          isSelected && styles.selectCheckboxActive,
+                        ]}
+                      >
+                        {isSelected && <Text style={styles.selectCheckboxCheck}>✓</Text>}
+                      </View>
+                    )}
+                  </View>
                 </View>
 
-                {item.pinnedInspirationIds && item.pinnedInspirationIds.length > 0 ? (
-                  <Badge
-                    label={`${item.pinnedInspirationIds.length} PINNED`}
-                    variant="outline"
-                  />
-                ) : null}
-              </View>
+                {item.summary ? (
+                  <Text style={styles.summaryText} numberOfLines={2}>
+                    {item.summary}
+                  </Text>
+                ) : (
+                  <Text style={styles.emptySummaryText}>No recent messages</Text>
+                )}
 
-              {item.summary ? (
-                <Text style={styles.summaryText} numberOfLines={2}>
-                  {item.summary}
-                </Text>
-              ) : (
-                <Text style={styles.emptySummaryText}>No recent messages</Text>
-              )}
-
-              <View style={styles.cardFooter}>
-                <Text style={styles.dateText}>
-                  {new Date(item.updatedAt).toLocaleDateString()}
-                </Text>
-                <Button
-                  title="DELETE"
-                  variant="text"
-                  onPress={() => handleDeleteChat(item.id, item.title)}
-                />
-              </View>
-            </Card>
-          )}
+                <View style={styles.cardFooter}>
+                  <Text style={styles.dateText}>
+                    {new Date(item.updatedAt).toLocaleDateString()}
+                  </Text>
+                  {!selectMode && (
+                    <Button
+                      title="DELETE"
+                      variant="text"
+                      onPress={() => handleDeleteChat(item.id, item.title)}
+                    />
+                  )}
+                </View>
+              </Card>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -249,6 +380,10 @@ const getStyles = (colors: ThemeColors) =>
   },
   chatCard: {
     marginBottom: spacing.sm,
+  },
+  chatCardSelected: {
+    borderColor: colors.ink,
+    backgroundColor: colors.surfaceGrade,
   },
   chatHeader: {
     flexDirection: 'row',
@@ -285,6 +420,26 @@ const getStyles = (colors: ThemeColors) =>
     ...typography.captionSm,
     color: colors.inkSoft,
     fontSize: 10,
+  },
+  selectCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 0,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
+  selectCheckboxActive: {
+    backgroundColor: colors.ink,
+  },
+  selectCheckboxCheck: {
+    color: colors.onInk,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   centerBox: {
     flex: 1,

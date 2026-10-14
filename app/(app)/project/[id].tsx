@@ -101,6 +101,11 @@ export default function ProjectDetailScreen() {
   // Manual picker toggle
   const [showManualPicker, setShowManualPicker] = useState(false);
 
+  // Multi-selection state for attached references
+  const [selectRefsMode, setSelectRefsMode] = useState(false);
+  const [selectedRefIds, setSelectedRefIds] = useState<string[]>([]);
+  const [deletingRefs, setDeletingRefs] = useState(false);
+
   // Train of Thought Chat state
   const [ideaChat, setIdeaChat] = useState<ChatSession | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -443,6 +448,73 @@ export default function ProjectDetailScreen() {
     } catch (err: any) {
       Alert.alert('Error', 'Failed to detach reference.');
     }
+  };
+
+  const toggleSelectRef = (inspirationId: string) => {
+    setSelectedRefIds((prev) =>
+      prev.includes(inspirationId)
+        ? prev.filter((i) => i !== inspirationId)
+        : [...prev, inspirationId]
+    );
+  };
+
+  const handleToggleSelectAllRef = () => {
+    if (selectedRefIds.length === links.length) {
+      setSelectedRefIds([]);
+    } else {
+      setSelectedRefIds(links.map((l) => l.inspirationId));
+    }
+  };
+
+  const handleDeleteSelectedReferences = async () => {
+    if (!id || selectedRefIds.length === 0) return;
+    const count = selectedRefIds.length;
+
+    const performDelete = async () => {
+      setDeletingRefs(true);
+      try {
+        for (const refId of selectedRefIds) {
+          await detachInspirationFromProject(id, refId);
+          if (user) {
+            try {
+              await deleteDoc(
+                doc(db, 'users', user.uid, 'projects', id, 'inspirationLinks', refId)
+              );
+            } catch {}
+          }
+        }
+        setLinks((prev) => prev.filter((l) => !selectedRefIds.includes(l.inspirationId)));
+        setSelectedRefIds([]);
+        setSelectRefsMode(false);
+      } catch (err) {
+        Alert.alert('Error', 'Failed to remove references.');
+      } finally {
+        setDeletingRefs(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm(
+        `Delete Selected References?\n\nAre you sure you want to remove ${count} ${count === 1 ? 'reference' : 'references'} from this idea?`
+      );
+      if (confirmed) {
+        await performDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Delete Selected References',
+      `Are you sure you want to remove ${count} ${count === 1 ? 'reference' : 'references'} from this idea?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: performDelete,
+        },
+      ]
+    );
   };
 
   // Delete project
@@ -1300,6 +1372,53 @@ export default function ProjectDetailScreen() {
                   </View>
                 )}
 
+                {/* MULTI-SELECT BAR FOR REFERENCES */}
+                {selectRefsMode ? (
+                  <View style={styles.refSelectionBar}>
+                    <Text style={styles.refSelectionCount}>
+                      {selectedRefIds.length} OF {links.length} SELECTED
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                      <Button
+                        title={selectedRefIds.length === links.length ? 'DESELECT' : 'SELECT ALL'}
+                        variant="secondary"
+                        onPress={handleToggleSelectAllRef}
+                        style={{ height: 32, paddingHorizontal: 10 }}
+                      />
+                      <Button
+                        title={deletingRefs ? 'DELETING...' : `DELETE (${selectedRefIds.length})`}
+                        onPress={handleDeleteSelectedReferences}
+                        disabled={selectedRefIds.length === 0 || deletingRefs}
+                        style={{
+                          height: 32,
+                          paddingHorizontal: 12,
+                          backgroundColor: colors.statusErrorText || '#E03131',
+                          borderWidth: 0,
+                        }}
+                      />
+                      <Button
+                        title="CANCEL"
+                        variant="text"
+                        onPress={() => {
+                          setSelectRefsMode(false);
+                          setSelectedRefIds([]);
+                        }}
+                        style={{ height: 32, paddingHorizontal: 8 }}
+                      />
+                    </View>
+                  </View>
+                ) : links.length > 0 ? (
+                  <View style={styles.refSelectBarRow}>
+                    <View />
+                    <Button
+                      title="SELECT"
+                      variant="secondary"
+                      onPress={() => setSelectRefsMode(true)}
+                      style={{ height: 30, paddingHorizontal: 12, marginBottom: spacing.xs }}
+                    />
+                  </View>
+                ) : null}
+
                 {/* ATTACHED REFERENCES LIST */}
                 {links.length === 0 ? (
                   <Card style={styles.emptyLinksCard}>
@@ -1311,8 +1430,13 @@ export default function ProjectDetailScreen() {
                 ) : (
                   links.map((link) => {
                     const item = bankMap[link.inspirationId];
+                    const isSelected = selectedRefIds.includes(link.inspirationId);
                     return (
-                      <Card key={link.id} style={styles.linkCard}>
+                      <Card
+                        key={link.id}
+                        onPress={selectRefsMode ? () => toggleSelectRef(link.inspirationId) : undefined}
+                        style={[styles.linkCard, selectRefsMode && isSelected && styles.linkCardSelected]}
+                      >
                         <View style={styles.linkCardHeader}>
                           <View style={{ flex: 1, marginRight: spacing.xs }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
@@ -1353,13 +1477,25 @@ export default function ProjectDetailScreen() {
                             ) : null}
                           </View>
 
-                          {item?.remotePreviewImageUrl ? (
-                            <Image
-                              source={{ uri: item.remotePreviewImageUrl }}
-                              style={styles.attachedThumb}
-                              resizeMode="cover"
-                            />
-                          ) : null}
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs }}>
+                            {item?.remotePreviewImageUrl ? (
+                              <Image
+                                source={{ uri: item.remotePreviewImageUrl }}
+                                style={styles.attachedThumb}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+                            {selectRefsMode && (
+                              <View
+                                style={[
+                                  styles.selectCheckbox,
+                                  isSelected && styles.selectCheckboxActive,
+                                ]}
+                              >
+                                {isSelected && <Text style={styles.selectCheckboxCheck}>✓</Text>}
+                              </View>
+                            )}
+                          </View>
                         </View>
 
                         {item?.url ? (
@@ -1370,22 +1506,24 @@ export default function ProjectDetailScreen() {
                           </Pressable>
                         ) : null}
 
-                        <View style={styles.linkActions}>
-                          {item ? (
+                        {!selectRefsMode && (
+                          <View style={styles.linkActions}>
+                            {item ? (
+                              <Button
+                                title="VIEW IN BANK →"
+                                variant="text"
+                                onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
+                                style={{ marginRight: spacing.base, height: 28, paddingHorizontal: 4 }}
+                              />
+                            ) : null}
                             <Button
-                              title="VIEW IN BANK →"
+                              title="✕ DETACH"
                               variant="text"
-                              onPress={() => router.push(`/(app)/inspiration/${item.id}`)}
-                              style={{ marginRight: spacing.base, height: 28, paddingHorizontal: 4 }}
+                              onPress={() => handleDetachReference(link.inspirationId)}
+                              style={{ height: 28, paddingHorizontal: 4 }}
                             />
-                          ) : null}
-                          <Button
-                            title="✕ DETACH"
-                            variant="text"
-                            onPress={() => handleDetachReference(link.inspirationId)}
-                            style={{ height: 28, paddingHorizontal: 4 }}
-                          />
-                        </View>
+                          </View>
+                        )}
                       </Card>
                     );
                   })
@@ -2154,6 +2292,54 @@ const getStyles = (colors: ThemeColors) =>
     borderWidth: 1,
     borderColor: colors.hairline,
     padding: spacing.base,
+  },
+  linkCardSelected: {
+    borderColor: colors.ink,
+    backgroundColor: colors.surfaceGrade,
+  },
+  refSelectionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairlineGrade,
+    marginBottom: spacing.sm,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  refSelectionCount: {
+    ...typography.captionCap,
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  refSelectBarRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  selectCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 0,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
+  selectCheckboxActive: {
+    backgroundColor: colors.ink,
+  },
+  selectCheckboxCheck: {
+    color: colors.onInk,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   linkCardHeader: {
     flexDirection: 'row',

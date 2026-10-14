@@ -40,6 +40,54 @@ export default function ProjectsListScreen() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === projects.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(projects.map((p) => p.id));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    Alert.alert(
+      'Delete Selected Ideas',
+      `Permanently delete ${count} ${count === 1 ? 'idea' : 'ideas'}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              for (const pid of selectedIds) {
+                await deleteProjectLocal(pid, user?.uid);
+              }
+              setProjects((prev) => prev.filter((p) => !selectedIds.includes(p.id)));
+              setSelectedIds([]);
+              setSelectMode(false);
+            } catch (err: any) {
+              Alert.alert('Error', 'Failed to delete some ideas.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -114,13 +162,58 @@ export default function ProjectsListScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <TopNav
         title="rut"
-        subtitle="Ideas & Projects"
+        subtitle={selectMode ? `${selectedIds.length} OF ${projects.length} SELECTED` : 'Ideas & Projects'}
+        leftAction={
+          selectMode ? (
+            <Button
+              title="CANCEL"
+              variant="text"
+              onPress={() => {
+                setSelectMode(false);
+                setSelectedIds([]);
+              }}
+              style={{ height: 36, paddingHorizontal: 8 }}
+            />
+          ) : undefined
+        }
         rightAction={
-          <Button
-            title="+ WRITE IDEA"
-            onPress={() => router.push('/(app)/project/new')}
-            style={{ height: 36, paddingHorizontal: 16 }}
-          />
+          selectMode ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Button
+                title={selectedIds.length === projects.length ? 'DESELECT' : 'SELECT ALL'}
+                variant="secondary"
+                onPress={handleToggleSelectAll}
+                style={{ height: 36, paddingHorizontal: 10 }}
+              />
+              <Button
+                title={deleting ? 'DELETING...' : `DELETE (${selectedIds.length})`}
+                onPress={handleDeleteSelected}
+                disabled={selectedIds.length === 0 || deleting}
+                style={{
+                  height: 36,
+                  paddingHorizontal: 12,
+                  backgroundColor: colors.statusErrorText || '#E03131',
+                  borderWidth: 0,
+                }}
+              />
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              {projects.length > 0 && (
+                <Button
+                  title="SELECT"
+                  variant="secondary"
+                  onPress={() => setSelectMode(true)}
+                  style={{ height: 36, paddingHorizontal: 12 }}
+                />
+              )}
+              <Button
+                title="+ WRITE IDEA"
+                onPress={() => router.push('/(app)/project/new')}
+                style={{ height: 36, paddingHorizontal: 16 }}
+              />
+            </View>
+          )
         }
       />
 
@@ -145,95 +238,137 @@ export default function ProjectsListScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator
         >
-          {projects.map((item) => (
-            <Card
-              key={item.id}
-              onPress={() => router.push(`/(app)/project/${item.id}`)}
-              style={styles.projectCard}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.projectTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-              </View>
-
-              {item.brief ? (
-                <Text style={styles.briefText} numberOfLines={3}>
-                  {item.brief}
-                </Text>
-              ) : null}
-
-              {item.tags && item.tags.length > 0 ? (
-                <View style={styles.tagRow}>
-                  {Array.from(new Set(item.tags)).map((t, idx) => (
-                    <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
-                  ))}
-                </View>
-              ) : null}
-
-              <View style={styles.cardFooterRow}>
-                {item.thoughtCount ? (
-                  <Text style={styles.cardFooterSub}>
-                    {item.thoughtCount} THOUGHTS LOGGED
+          {projects.map((item) => {
+            const isSelected = selectedIds.includes(item.id);
+            return (
+              <Card
+                key={item.id}
+                onPress={() => {
+                  if (selectMode) {
+                    toggleSelect(item.id);
+                  } else {
+                    router.push(`/(app)/project/${item.id}`);
+                  }
+                }}
+                style={[styles.projectCard, selectMode && isSelected && styles.projectCardSelected]}
+              >
+                <View style={styles.cardHeader}>
+                  <Text style={styles.projectTitle} numberOfLines={1}>
+                    {item.title}
                   </Text>
-                ) : (
-                  <View />
-                )}
-                <Button
-                  title="DELETE"
-                  variant="text"
-                  onPress={() => handleDeleteProject(item.id, item.title)}
-                />
-              </View>
-            </Card>
-          ))}
+                  {selectMode && (
+                    <View
+                      style={[
+                        styles.selectCheckbox,
+                        isSelected && styles.selectCheckboxActive,
+                      ]}
+                    >
+                      {isSelected && <Text style={styles.selectCheckboxCheck}>✓</Text>}
+                    </View>
+                  )}
+                </View>
+
+                {item.brief ? (
+                  <Text style={styles.briefText} numberOfLines={3}>
+                    {item.brief}
+                  </Text>
+                ) : null}
+
+                {item.tags && item.tags.length > 0 ? (
+                  <View style={styles.tagRow}>
+                    {Array.from(new Set(item.tags)).map((t, idx) => (
+                      <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.cardFooterRow}>
+                  {item.thoughtCount ? (
+                    <Text style={styles.cardFooterSub}>
+                      {item.thoughtCount} THOUGHTS LOGGED
+                    </Text>
+                  ) : (
+                    <View />
+                  )}
+                  {!selectMode && (
+                    <Button
+                      title="DELETE"
+                      variant="text"
+                      onPress={() => handleDeleteProject(item.id, item.title)}
+                    />
+                  )}
+                </View>
+              </Card>
+            );
+          })}
         </ScrollView>
       ) : (
         <FlatList
           data={projects}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <Card
-              onPress={() => router.push(`/(app)/project/${item.id}`)}
-              style={styles.projectCard}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.projectTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-              </View>
-
-              {item.brief ? (
-                <Text style={styles.briefText} numberOfLines={2}>
-                  {item.brief}
-                </Text>
-              ) : null}
-
-              {item.tags && item.tags.length > 0 ? (
-                <View style={styles.tagRow}>
-                  {Array.from(new Set(item.tags)).map((t, idx) => (
-                    <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
-                  ))}
-                </View>
-              ) : null}
-
-              <View style={styles.cardFooterRow}>
-                {item.thoughtCount ? (
-                  <Text style={styles.cardFooterSub}>
-                    {item.thoughtCount} THOUGHTS LOGGED
+          renderItem={({ item }) => {
+            const isSelected = selectedIds.includes(item.id);
+            return (
+              <Card
+                onPress={() => {
+                  if (selectMode) {
+                    toggleSelect(item.id);
+                  } else {
+                    router.push(`/(app)/project/${item.id}`);
+                  }
+                }}
+                style={[styles.projectCard, selectMode && isSelected && styles.projectCardSelected]}
+              >
+                <View style={styles.cardHeader}>
+                  <Text style={styles.projectTitle} numberOfLines={1}>
+                    {item.title}
                   </Text>
-                ) : (
-                  <View />
-                )}
-                <Button
-                  title="DELETE"
-                  variant="text"
-                  onPress={() => handleDeleteProject(item.id, item.title)}
-                />
-              </View>
-            </Card>
-          )}
+                  {selectMode && (
+                    <View
+                      style={[
+                        styles.selectCheckbox,
+                        isSelected && styles.selectCheckboxActive,
+                      ]}
+                    >
+                      {isSelected && <Text style={styles.selectCheckboxCheck}>✓</Text>}
+                    </View>
+                  )}
+                </View>
+
+                {item.brief ? (
+                  <Text style={styles.briefText} numberOfLines={2}>
+                    {item.brief}
+                  </Text>
+                ) : null}
+
+                {item.tags && item.tags.length > 0 ? (
+                  <View style={styles.tagRow}>
+                    {Array.from(new Set(item.tags)).map((t, idx) => (
+                      <Badge key={`proj-tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.cardFooterRow}>
+                  {item.thoughtCount ? (
+                    <Text style={styles.cardFooterSub}>
+                      {item.thoughtCount} THOUGHTS LOGGED
+                    </Text>
+                  ) : (
+                    <View />
+                  )}
+                  {!selectMode && (
+                    <Button
+                      title="DELETE"
+                      variant="text"
+                      onPress={() => handleDeleteProject(item.id, item.title)}
+                    />
+                  )}
+                </View>
+              </Card>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -317,5 +452,29 @@ const getStyles = (colors: ThemeColors, isDesktop: boolean) =>
     color: colors.inkSoft,
     textAlign: 'center',
     maxWidth: 320,
+  },
+  selectCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 0,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
+  selectCheckboxActive: {
+    backgroundColor: colors.ink,
+  },
+  selectCheckboxCheck: {
+    color: colors.onInk,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  projectCardSelected: {
+    borderColor: colors.ink,
+    backgroundColor: colors.surfaceGrade,
   },
 });
