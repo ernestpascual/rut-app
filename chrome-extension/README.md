@@ -44,3 +44,25 @@ This compiles TypeScript, packages the Manifest V3 bundle, and outputs productio
 3. Navigate to any Instagram Saved Collection (e.g. `https://www.instagram.com/{your_username}/saved/`).
 4. Click **SYNC REELS TO INSIGHT BANK**.
 5. Once complete, open your rut web app (`https://rut.web.app/bank`) to explore your newly synced inspirations.
+
+---
+
+## Sharing with Testers (.zip)
+
+To package a standalone `.zip` file for teammates or beta testers:
+
+1. Run:
+   ```bash
+   cd chrome-extension
+   npm run zip
+   ```
+   This builds the extension and outputs `chrome-extension/rut-extension.zip`.
+
+2. Send `rut-extension.zip` to your testers.
+
+3. **Instructions for Testers:**
+   - Download and unzip `rut-extension.zip` into a folder on their computer.
+   - Open Google Chrome and go to `chrome://extensions`.
+   - Enable **Developer mode** (top-right toggle).
+   - Click **Load unpacked** and select the unzipped folder.
+
