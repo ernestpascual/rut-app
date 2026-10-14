@@ -75,11 +75,6 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
         };
     }
     async generateChatResponse(input) {
-        const modelOptions = { model: this.flashModel };
-        if (input.webAccess) {
-            modelOptions.tools = [{ googleSearch: {} }];
-        }
-        const model = this.genAI.getGenerativeModel(modelOptions);
         const contextItems = [...input.pinnedInspirations, ...input.retrievedInspirations];
         const contextFormatted = contextItems
             .map((item, idx) => {
@@ -113,23 +108,71 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
         })
             .join('\n\n');
         const webAccessDirective = input.webAccess
-            ? `\nLIVE INTERNET ACCESS: ACTIVATED.
-You have active Google Search grounding. Perform live searches to bring in real-world cultural precedents, design movements, contemporary studio work, architectural benchmarks, and recent articles. Integrate these real-world references dynamically into your brainstorming.`
+            ? `\nLIVE INTERNET SEARCH GROUNDING: ACTIVATED.
+Perform real-time searches when helpful to uncover live precedents, contemporary studio benchmarks, and current design news.`
             : '';
-        const fullPrompt = `${prompts_1.CHAT_SYSTEM_PROMPT}${webAccessDirective}
+        const systemInstructionText = `${prompts_1.CHAT_SYSTEM_PROMPT}${webAccessDirective}
 
 ======================================================
-RETRIEVED KNOWLEDGE BASE CONTEXT (FROM USER'S DUMP):
+ATTACHED INSPIRATION DUMP KNOWLEDGE BASE:
 ======================================================
-${contextFormatted || 'No relevant saves retrieved.'}
+${contextFormatted || 'No relevant saves currently in attached context.'}
 ======================================================
-
-USER QUERY:
-${input.message}
-
-Formulate an insightful response exploring this train of thought grounded in the user's dump knowledge base. Explicitly cite which [ID: ...] sources you drew from.
 `;
-        const result = await model.generateContent(fullPrompt);
+        // Multi-turn conversation history
+        const contents = [];
+        if (input.chatHistory && input.chatHistory.length > 0) {
+            for (const msg of input.chatHistory) {
+                if (msg.content && (msg.role === 'user' || msg.role === 'assistant')) {
+                    contents.push({
+                        role: msg.role === 'user' ? 'user' : 'model',
+                        parts: [{ text: msg.content }],
+                    });
+                }
+            }
+        }
+        // Add current user message
+        contents.push({
+            role: 'user',
+            parts: [{ text: input.message }],
+        });
+        // Helper to generate with target or fallback model
+        const tryGenerate = async (modelName) => {
+            const modelOptions = {
+                model: modelName,
+                systemInstruction: systemInstructionText,
+                generationConfig: {
+                    temperature: 0.7,
+                },
+            };
+            if (input.webAccess) {
+                modelOptions.tools = [{ googleSearch: {} }];
+            }
+            const model = this.genAI.getGenerativeModel(modelOptions);
+            return await model.generateContent({ contents });
+        };
+        let result;
+        let actualModel = this.flashModel;
+        try {
+            result = await tryGenerate(this.flashModel);
+        }
+        catch (err) {
+            console.warn(`[GeminiAIProvider] Error generating with model "${this.flashModel}":`, err?.message || err);
+            // Fallback to gemini-2.0-flash if specified model is unsupported
+            if (this.flashModel !== 'gemini-2.0-flash') {
+                try {
+                    actualModel = 'gemini-2.0-flash';
+                    result = await tryGenerate('gemini-2.0-flash');
+                }
+                catch (fbErr) {
+                    console.warn('[GeminiAIProvider] Fallback to gemini-2.0-flash failed:', fbErr?.message || fbErr);
+                    throw fbErr;
+                }
+            }
+            else {
+                throw err;
+            }
+        }
         const responseText = result.response.text();
         // Extract valid source IDs referenced
         const citedIds = [];
@@ -152,13 +195,13 @@ Formulate an insightful response exploring this train of thought grounded in the
                 }
             }
         }
-        const inputTokens = result.response.usageMetadata?.promptTokenCount || Math.round(fullPrompt.length / 4);
+        const inputTokens = result.response.usageMetadata?.promptTokenCount || Math.round(systemInstructionText.length / 4);
         const outputTokens = result.response.usageMetadata?.candidatesTokenCount || Math.round(responseText.length / 4);
         const cost = (0, pricing_1.calculateCostMicros)(this.flashModel, inputTokens, outputTokens);
         return {
             response: responseText,
             sourceInspirationIds: citedIds,
-            model: this.flashModel,
+            model: actualModel,
             inputTokens,
             outputTokens,
             estimatedCostMicros: cost,

@@ -431,7 +431,7 @@ export default function ChatWorkspaceScreen() {
         }
       />
 
-      {/* Knowledge Base (RAG) Grounding Bar */}
+      {/* Knowledge Base Grounding Bar */}
       <View style={styles.kbStatusBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
           <Text style={styles.kbStatusIcon}>📚</Text>
@@ -441,10 +441,10 @@ export default function ChatWorkspaceScreen() {
             variant="inverse"
             style={{ marginLeft: 6, marginRight: 6 }}
           />
-          <Badge label="RAG ACTIVE" variant="grade" />
+          <Badge label="ON-DEMAND RAG" variant="grade" />
         </View>
         <Text style={styles.kbStatusSubtitle} numberOfLines={1}>
-          Grounded in your saved inspirations, personal notes, captions, and tags.
+          Chat freely with Gemini — rut Agent draws from your Dump saves when relevant or requested.
         </Text>
       </View>
 
@@ -503,11 +503,19 @@ export default function ChatWorkspaceScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>START THIS TRAIN OF THOUGHT</Text>
+              <Text style={styles.emptyTitle}>RUT CONVERSATIONAL AGENT</Text>
               <Text style={styles.emptySubtitle}>
-                Pose a design query, ask for conceptual angles, or synthesize with your bank inspirations.
+                Chat freely with Gemini, search live web movements, or draw on-demand from your Dump archive.
               </Text>
               <View style={styles.promptChipsContainer}>
+                <Pressable
+                  style={styles.promptChip}
+                  onPress={() =>
+                    handleSendMessage('Brainstorm 3 bold, unexpected concept angles for an experimental design project')
+                  }
+                >
+                  <Text style={styles.promptChipText}>💬 Brainstorm From Scratch</Text>
+                </Pressable>
                 <Pressable
                   style={[styles.promptChip, { borderColor: colors.ink, backgroundColor: colors.surfaceGrade }]}
                   onPress={() =>
@@ -517,49 +525,31 @@ export default function ChatWorkspaceScreen() {
                   }
                 >
                   <Text style={[styles.promptChipText, { fontWeight: '700' }]}>
-                    📚 Ask Dump Knowledge Base (RAG)
+                    📚 Ask Dump Knowledge Base
                   </Text>
                 </Pressable>
                 <Pressable
                   style={[styles.promptChip, webAccessEnabled && styles.promptChipActive]}
                   onPress={() => {
                     if (!webAccessEnabled) setWebAccessEnabled(true);
-                    handleSendMessage('Scan the live web for contemporary design precedents, spatial installations, and brand movements relevant to this concept');
+                    handleSendMessage('Scan the live web for contemporary design precedents, spatial installations, and brand movements in 2026');
                   }}
                 >
                   <Text style={[styles.promptChipText, webAccessEnabled && styles.promptChipTextActive]}>
-                    🌐 Live Web Trends & Precedents
+                    🌐 Live Web Trends
                   </Text>
                 </Pressable>
                 <Pressable
                   style={styles.promptChip}
-                  onPress={() => handleSendMessage('Check my dump and pull all relevant inspirations for this thought train')}
-                >
-                  <Text style={styles.promptChipText}>📥 Check & Pull From Dump</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Explore conceptual variations and bold angles')}
-                >
-                  <Text style={styles.promptChipText}>💡 Concept Variations</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Suggest materiality, textures, and color palette')}
+                  onPress={() => handleSendMessage('Suggest tactile materiality, textures, and an editorial color palette')}
                 >
                   <Text style={styles.promptChipText}>🎨 Material & Palette</Text>
                 </Pressable>
                 <Pressable
                   style={styles.promptChip}
-                  onPress={() => handleSendMessage('Synthesize this concept with attached inspirations')}
+                  onPress={() => handleSendMessage('Critique and pressure-test this design concept to find the killer tension')}
                 >
-                  <Text style={styles.promptChipText}>🔗 Synthesize References</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.promptChip}
-                  onPress={() => handleSendMessage('Critique and sharpen the editorial brief')}
-                >
-                  <Text style={styles.promptChipText}>✍️ Polish Brief</Text>
+                  <Text style={styles.promptChipText}>🔍 Critique & Polish</Text>
                 </Pressable>
               </View>
             </View>
@@ -579,7 +569,7 @@ export default function ChatWorkspaceScreen() {
                       item.role === 'user' ? styles.userRoleLabel : styles.assistantRoleLabel,
                     ]}
                   >
-                    {item.role === 'user' ? 'YOU' : `RUT BRAINSTORM (${item.model || selectedModel})`}
+                    {item.role === 'user' ? 'YOU' : `RUT AGENT (${item.model || selectedModel})`}
                   </Text>
                   {item.webAccess ? (
                     <Badge label="🌐 LIVE WEB" variant="grade" style={{ marginLeft: 6 }} />
@@ -758,12 +748,12 @@ export default function ChatWorkspaceScreen() {
           <Input
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Brainstorm with AI, challenge ideas, check dump..."
+            placeholder="Chat freely with Gemini, search web, or ask about dump..."
             containerStyle={{ flex: 1, marginVertical: 0 }}
             onSubmitEditing={() => handleSendMessage()}
           />
           <Button
-            title="THINK →"
+            title="SEND →"
             onPress={() => handleSendMessage()}
             disabled={!inputText.trim() || sending}
             style={{ marginLeft: spacing.xs, height: 46, paddingHorizontal: 14 }}
