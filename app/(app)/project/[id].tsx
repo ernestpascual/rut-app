@@ -862,20 +862,12 @@ export default function ProjectDetailScreen() {
         }}
         backTitle="IDEAS"
         rightAction={
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Button
-              title="⤓ EXPORT"
-              variant="secondary"
-              onPress={() => setShowExportModal(true)}
-              style={{ height: 28, paddingHorizontal: 8, marginRight: 6 }}
-            />
-            <Button
-              title={editing ? '✕ CANCEL' : '✎ EDIT IDEA'}
-              variant="text"
-              onPress={() => setEditing(!editing)}
-              style={{ height: 28, paddingHorizontal: 6 }}
-            />
-          </View>
+          <Button
+            title="EXPORT ▾"
+            variant="secondary"
+            onPress={() => setShowExportModal(true)}
+            style={{ height: 28, paddingHorizontal: 8 }}
+          />
         }
       />
 
@@ -961,12 +953,20 @@ export default function ProjectDetailScreen() {
               ))}
             </View>
 
-            <Button
-              title={saving ? 'SAVING...' : 'SAVE IDEA'}
-              onPress={handleSaveEdits}
-              loading={saving}
-              style={{ marginTop: spacing.base }}
-            />
+            <View style={{ flexDirection: 'row', gap: spacing.xs, marginTop: spacing.base }}>
+              <Button
+                title="CANCEL"
+                variant="secondary"
+                onPress={() => setEditing(false)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title={saving ? 'SAVING...' : 'SAVE IDEA'}
+                onPress={handleSaveEdits}
+                loading={saving}
+                style={{ flex: 2 }}
+              />
+            </View>
           </Card>
         ) : (
           <View>
@@ -974,7 +974,13 @@ export default function ProjectDetailScreen() {
             <View style={styles.headerArea}>
               <View style={styles.titleRow}>
                 <Text style={styles.projectTitle}>{project.title}</Text>
-                <Badge label={project.status.toUpperCase()} variant="inverse" />
+                <Button
+                  title="EDIT IDEA"
+                  variant="secondary"
+                  onPress={() => setEditing(true)}
+                  style={styles.headerEditBtn}
+                  textStyle={styles.headerEditBtnText}
+                />
               </View>
             </View>
 
@@ -984,10 +990,10 @@ export default function ProjectDetailScreen() {
                 style={[styles.studioTab, activeTab === 'overview' && styles.studioTabActive]}
                 onPress={() => setActiveTab('overview')}
                 accessibilityRole="tab"
-                accessibilityLabel="Concept & Specs tab"
+                accessibilityLabel="Concept tab"
               >
                 <Text style={[styles.studioTabLabel, activeTab === 'overview' && styles.studioTabLabelActive]}>
-                  01 CONCEPT &amp; SPECS
+                  CONCEPT
                 </Text>
               </Pressable>
 
@@ -998,7 +1004,7 @@ export default function ProjectDetailScreen() {
                 accessibilityLabel="References tab"
               >
                 <Text style={[styles.studioTabLabel, activeTab === 'references' && styles.studioTabLabelActive]}>
-                  02 REFERENCES {links.length > 0 ? `(${links.length})` : ''}
+                  REFERENCES
                 </Text>
               </Pressable>
 
@@ -1006,10 +1012,10 @@ export default function ProjectDetailScreen() {
                 style={[styles.studioTab, activeTab === 'thoughts' && styles.studioTabActive]}
                 onPress={() => setActiveTab('thoughts')}
                 accessibilityRole="tab"
-                accessibilityLabel="Train of Thought tab"
+                accessibilityLabel="Thoughts tab"
               >
                 <Text style={[styles.studioTabLabel, activeTab === 'thoughts' && styles.studioTabLabelActive]}>
-                  03 THOUGHTS {chatMessages.length > 0 ? `(${chatMessages.length})` : ''}
+                  THOUGHTS
                 </Text>
               </Pressable>
             </View>
@@ -1359,44 +1365,51 @@ export default function ProjectDetailScreen() {
             {/* TAB 3: THOUGHTS */}
             {activeTab === 'thoughts' && (
               <View style={styles.tabContent}>
-                {/* TOOLBAR */}
-                <View style={styles.tabHeaderToolbar}>
+                {/* TOOLBAR: MODEL SELECTOR, LINK CHAT, OPEN CHAT */}
+                <View style={styles.thoughtsToolbarContainer}>
                   <Pressable
-                    style={styles.modelPillButton}
+                    style={styles.thoughtsEqualBtn}
                     onPress={() => setShowModelModal(true)}
                     accessibilityRole="button"
-                    accessibilityLabel="Change AI model"
+                    accessibilityLabel="Select AI Model"
                   >
-                    <Text style={styles.modelPillText}>
-                      ⚡ {selectedModel.replace('gemini-', '').toUpperCase()} ▾
+                    <Text style={styles.thoughtsEqualBtnText} numberOfLines={1}>
+                      {selectedModel.replace('gemini-', '').toUpperCase()} ▾
                     </Text>
                   </Pressable>
 
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Button
-                      title="+ LINK CHAT"
-                      variant="secondary"
-                      onPress={handleOpenLinkChatModal}
-                      style={{ height: 28, paddingHorizontal: 8 }}
-                    />
-                    <Button
-                      title="💬 FULL CHAT ↗"
-                      variant="primary"
-                      onPress={handleOpenFullChat}
-                      style={{ height: 28, paddingHorizontal: 8 }}
-                    />
-                  </View>
+                  <Pressable
+                    style={styles.thoughtsEqualBtn}
+                    onPress={handleOpenLinkChatModal}
+                    accessibilityRole="button"
+                    accessibilityLabel="Link Chat"
+                  >
+                    <Text style={styles.thoughtsEqualBtnText} numberOfLines={1}>
+                      LINK CHAT
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.thoughtsEqualBtn, styles.thoughtsEqualBtnPrimary]}
+                    onPress={handleOpenFullChat}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Chat"
+                  >
+                    <Text style={[styles.thoughtsEqualBtnText, styles.thoughtsEqualBtnTextPrimary]} numberOfLines={1}>
+                      OPEN CHAT
+                    </Text>
+                  </Pressable>
                 </View>
 
                 <Card style={styles.thoughtCard}>
-                    <View style={styles.thoughtBannerRow}>
-                      <Text style={styles.thoughtBannerText}>
-                        Interactive thought flow linked to &ldquo;{ideaChat?.title || project.title}&rdquo;. Tap any thought to open full-screen view.
-                      </Text>
-                      <Pressable onPress={handleOpenFullChat} hitSlop={8}>
-                        <Text style={styles.thoughtBannerAction}>EXPAND ↗</Text>
-                      </Pressable>
-                    </View>
+                  <View style={styles.thoughtBannerRow}>
+                    <Text style={styles.thoughtBannerText}>
+                      Interactive thought flow linked to &ldquo;{ideaChat?.title || project.title}&rdquo;.
+                    </Text>
+                    <Pressable onPress={handleOpenFullChat} hitSlop={8}>
+                      <Text style={styles.thoughtBannerAction}>OPEN CHAT →</Text>
+                    </Pressable>
+                  </View>
 
                     {/* SCROLLABLE CHAT MESSAGES STREAM */}
                     <View style={styles.chatStreamContainer}>
@@ -1553,7 +1566,7 @@ export default function ProjectDetailScreen() {
                                       accessibilityRole="button"
                                       accessibilityLabel="Open in full chat"
                                     >
-                                      <Text style={styles.thoughtActionBtnText}>↗ FULL CHAT</Text>
+                                      <Text style={styles.thoughtActionBtnText}>OPEN CHAT →</Text>
                                     </Pressable>
                                   </View>
                                 </View>
@@ -1568,13 +1581,13 @@ export default function ProjectDetailScreen() {
                         >
                           <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
                           <Text style={styles.emptyThoughtText}>
-                            Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat interface.
+                            Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open chat.
                           </Text>
                           <Button
-                            title="💬 OPEN FULL CHAT INTERFACE ↗"
+                            title="OPEN CHAT"
                             variant="primary"
                             onPress={handleOpenFullChat}
-                            style={{ marginTop: spacing.sm, alignSelf: 'center', height: 32, paddingHorizontal: 12 }}
+                            style={{ marginTop: spacing.sm, alignSelf: 'center', height: 36, paddingHorizontal: 16 }}
                           />
                         </Pressable>
                       )}
@@ -1588,91 +1601,6 @@ export default function ProjectDetailScreen() {
                         </Text>
                       </View>
                     ) : null}
-
-                    {/* QUICK PROMPT CHIPS CAROUSEL */}
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.quickPromptScroll}
-                      contentContainerStyle={styles.quickPromptScrollContent}
-                    >
-                      <Pressable
-                        style={styles.quickChip}
-                        onPress={() => handleSendThought(`Explore conceptual variations and bold angles for ${project.title}`)}
-                      >
-                        <Text style={styles.quickChipText}>💡 Concept Variations</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.quickChip}
-                        onPress={() => handleSendThought(`Suggest materiality, textures, and color palette for ${project.title}`)}
-                      >
-                        <Text style={styles.quickChipText}>🎨 Material &amp; Palette</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.quickChip}
-                        onPress={() => handleSendThought(`Synthesize this idea with all attached inspirations`)}
-                      >
-                        <Text style={styles.quickChipText}>🔗 Synthesize References</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.quickChip}
-                        onPress={() => handleSendThought(`Critique and sharpen the editorial brief for ${project.title}`)}
-                      >
-                        <Text style={styles.quickChipText}>✍️ Polish Brief</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.quickChip}
-                        onPress={() => handleSendThought(`What spatial or physical installation would best manifest ${project.title}?`)}
-                      >
-                        <Text style={styles.quickChipText}>📐 Spatial &amp; Form</Text>
-                      </Pressable>
-                    </ScrollView>
-
-                    {/* INLINE CHAT INPUT DOCK */}
-                    <View style={styles.chatInputDock}>
-                      <View style={styles.chatInputTopRow}>
-                        <Pressable
-                          style={styles.chatInputModelBadge}
-                          onPress={() => setShowModelModal(true)}
-                        >
-                          <Text style={styles.chatInputModelText}>
-                            ⚡ {selectedModel} ▾
-                          </Text>
-                        </Pressable>
-                        <Text style={styles.chatInputHelpText}>
-                          Tap model to switch • Persists across sessions
-                        </Text>
-                      </View>
-                      <View style={styles.thoughtInputRow}>
-                        <Input
-                          value={chatInputText}
-                          onChangeText={setChatInputText}
-                          placeholder="Type a thought, critique, or inquiry..."
-                          multiline
-                          numberOfLines={1}
-                          style={{
-                            height: calculateDynamicInputHeight(chatInputText),
-                            maxHeight: 124,
-                            paddingTop: 10,
-                            paddingBottom: 10,
-                            textAlignVertical: 'top',
-                          }}
-                          containerStyle={{ flex: 1, marginVertical: 0 }}
-                          onKeyPress={(e: any) => {
-                            if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                              e.preventDefault?.();
-                              handleSendThought();
-                            }
-                          }}
-                        />
-                        <Button
-                          title={sendingThought ? '...' : 'THINK →'}
-                          onPress={() => handleSendThought()}
-                          disabled={!chatInputText.trim() || sendingThought}
-                          style={{ marginLeft: spacing.xs, height: 42, paddingHorizontal: 16 }}
-                        />
-                      </View>
-                    </View>
                   </Card>
                 </View>
               )}
@@ -2518,6 +2446,56 @@ const getStyles = (colors: ThemeColors) =>
     color: colors.ink,
     flex: 1,
     marginRight: spacing.sm,
+  },
+  headerEditBtn: {
+    height: 30,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.canvas,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerEditBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.8,
+  },
+  thoughtsToolbarContainer: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: spacing.xs,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairlineSoft,
+    marginBottom: spacing.sm,
+  },
+  thoughtsEqualBtn: {
+    flex: 1,
+    height: 36,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  thoughtsEqualBtnPrimary: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  thoughtsEqualBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  thoughtsEqualBtnTextPrimary: {
+    color: colors.canvas,
   },
   studioTabBar: {
     flexDirection: 'row',
