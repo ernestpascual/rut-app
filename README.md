@@ -1,6 +1,6 @@
 # rut: Universal Inspiration Bank & Idea Studio
 
-`rut` is a cross-platform (iOS, Android, Web, and Chrome Extension) private creative workspace and inspiration bank. Dump links, snippets, thoughts, and shared social posts from Instagram, Pinterest, TikTok, X, Threads, YouTube, and the web. Organize your dump, draft creative ideas, auto-match saved inspirations as references, and brainstorm in an interactive AI Train of Thought with live internet grounding and evolving thesis synthesis.
+`rut` is a cross-platform (iOS, Android, Web, and Chrome Extension) private creative workspace and inspiration bank. Dump links, snippets, thoughts, and shared social posts from Instagram, Pinterest, TikTok, X, Threads, YouTube, and the web. Organize your dump, draft creative ideas, auto-match saved inspirations as references, and brainstorm in an interactive AI Train of Thought with live internet search grounding.
 
 Live Web App: **[rut.web.app](https://rut.web.app)**
 
@@ -9,31 +9,32 @@ Live Web App: **[rut.web.app](https://rut.web.app)**
 ## 1. Product Overview
 
 `rut` solves creative fragmentation:
-1. **Share From Phone ➔ Dump**: Share from your phone (iOS, Android, or PWA share target) or browser to instantly capture inspiration. Everything starts in the **Dump** folder.
+
+1. **Share From Phone ➔ Dump**: Share from your phone (iOS, Android, or PWA share target) or browser to instantly capture inspiration. Everything starts in the **Dump** inbox.
 2. **Instagram Collection Importer (Chrome Extension)**: Connect your Chrome Extension to your Instagram Saved Collections. The extension auto-scrolls the virtualized DOM and syncs Reels, captions, and thumbnails directly to your Insight Bank.
-3. **Sort, Filter & Semantic Search**: Filter by platform (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`, etc.) or sort by date, platform, title, or tag density.
-4. **Idea Studio & Concept Matcher**: Write your creative concept, brief, and specifications. Run **Find Inspirations From Dump** to automatically score and attach relevant references from your bank.
-5. **Interactive AI Train of Thought**: Brainstorm directly on any idea or chat. Query with RAG over your personal dump, toggle live internet grounding (`🌐 WEB: ON/OFF`), switch Gemini models, and maintain an evolving **1–2 sentence Thesis Statement** dynamically updated on top.
+3. **Fast Filter & Search**: Instant client-side search across titles, notes, domains, and auto-generated tags, with multi-platform filtering (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`, etc.).
+4. **Idea Studio & Reference Matcher**: Write your creative concept, brief, and specifications. Run **Find Inspirations From Dump** to automatically score and attach relevant references from your bank.
+5. **Interactive AI Train of Thought**: Brainstorm directly on any idea or standalone chat. Query your personal dump, toggle live internet search grounding (`🌐 Live Web Search`), switch Gemini models on the fly, and navigate with a clean, uncluttered interface.
 
 ---
 
-## 2. Key Features & Technologies
+## 2. Active Features & Capabilities
 
-### 💡 Interactive AI Train of Thought & Brainstorming
-- **RAG Over Your Personal Dump**: The AI inference engine anchors your saved inspirations into reasoning context, citing specific references inline with direct links.
-- **Live Internet Access Toggle**: One-tap toggle (`🌐 WEB: ON / OFF`) to perform real-time search synthesis, extracting design precedents and contemporary movements alongside personal references.
-- **Evolving 1–2 Sentence Thesis Statement**:
-  - Maintained persistently at the top of every Idea page and Chat workspace.
-  - After each chat turn, the assistant distills your conversation into a sharp 1–2 sentence thesis statement that stays synchronized across views.
-  - Tapping any thought bubble in an Idea instantly expands it into the full chat workspace.
-- **Multi-Model Switcher**: Switch on the fly between Google Gemini models (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, etc.) with user preferences saved across sessions.
-- **Formatted Markdown & Source Citations**: Powered by a custom cross-platform [`MarkdownRenderer`](src/components/ui/MarkdownRenderer.tsx) supporting headings, bullet lists, bold emphasis, inline code, and clickable source pills.
+### 💬 Interactive AI Train of Thought & Brainstorming
+- **Decluttered Chat Canvas**: A clean, distraction-free creative workspace with a prominent back button (`← CHATS`) and streamlined input bar.
+- **Hamburger Options Menu (`☰`)**:
+  - **AI Model Switcher**: Switch on the fly between Google Gemini models (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`) with preferences saved across sessions.
+  - **Pull & Check From Dump**: Browse saved inspirations, pin them into reasoning context, or ask the AI directly about any item.
+  - **Live Web Search Toggle**: One-tap toggle (`🌐 Live Web Search: ON/OFF`) to ground answers in real-time Google search results and contemporary precedents.
+  - **Delete Train of Thought**: Safe deletion with an in-app confirmation modal.
+- **RAG Over Your Personal Dump**: The AI inference engine anchors your saved inspirations into reasoning context, citing specific references inline with clickable source cards.
+- **Formatted Markdown & Sources**: Cross-platform Markdown rendering supporting headers, bullet lists, bold emphasis, code blocks, and source pill links.
 
 ### 🧩 Instagram Saved Collection Chrome Extension (`/chrome-extension`)
 - **Manifest V3 & CSP Compliant**: Built with Vite and `@crxjs/vite-plugin`, leveraging `firebase/auth/web-extension` to prevent Content Security Policy violations.
 - **Virtualized DOM Scraper**: Handles Instagram's DOM recycling by harvesting Reel shortcodes, canonical links, captions, and CDN thumbnails on every scroll tick with randomized jitter (1200ms–1600ms) to avoid rate limits.
 - **Deterministic Batch Sync**: Deduplicates and batches writes in chunks of 400 directly to `users/{uid}/inspirations/ig_reel_{shortcode}`.
-- **Auto-Enrichment Trigger**: Writes with `processingStatus: 'pending'` to automatically trigger background Cloud Functions for AI auto-tagging, summarization, and vector embeddings.
+- **Background AI Auto-Enrichment**: Writes with `processingStatus: 'pending'` to automatically trigger background Cloud Functions for AI auto-tagging, summarization, and vector embeddings.
 - **One-Command Distribution**: `npm run zip` packages `rut-extension.zip` for instant sharing with teammates and beta testers.
 
 ### 📥 Universal Phone Share ➔ Dump Folder
@@ -45,10 +46,17 @@ Live Web App: **[rut.web.app](https://rut.web.app)**
 - **Structured Idea Workspace**: Formulate titles, briefs, notes, specifications, and tags.
 - **Dump Reference Matcher**: Scans saved inspirations with concept clustering and token affinity, providing transparent match reasoning (*e.g., "94% MATCH — Matches brutalist, typography, poster in dump tags"*).
 - **One-Tap Linking**: Attach individual matches, attach all, or manually browse and connect inspirations.
+- **Integrated Thought Flow**: View thought trains attached directly to your ideas, with one-tap expansion into the full chat workspace.
 
 ### 🎨 Editorial Monochrome Design System
 - **High-Contrast Fashion Layout**: Strict adherence to [`DESIGN.md`](DESIGN.md) — 0px sharp corners, pure `#000000` / `#ffffff` contrasts, clean hairlines, and modern typographic hierarchies.
 - **Light & Dark Themes**: Instant toggle with persistence in `AsyncStorage`.
+
+### 🛡️ Cost Safety & Guardrails
+- **Integer Micros Accounting**: Costs tracked in integer micros (`1 USD = 1,000,000 micros`) on the backend.
+- **Daily Budget Cap**: Enforces a strict $2.00 / 500 requests per user per day safety cap.
+- **Emergency Kill-Switch**: Central boolean in Firestore halts all AI operations instantly.
+- Detailed documentation: [`COST_ANALYSIS.md`](COST_ANALYSIS.md) and [`COST_SAFETY_GUARDRAILS.md`](COST_SAFETY_GUARDRAILS.md).
 
 ---
 
@@ -61,7 +69,7 @@ rut/
 │   ├── (app)/
 │   │   ├── (tabs)/             # Tab navigation: Bank (Dump), Ideas, Chats, Settings
 │   │   ├── project/[id].tsx    # Idea Studio & Train of Thought workspace
-│   │   ├── chat/[id].tsx       # Full Chat interface with live web & model picker
+│   │   ├── chat/[id].tsx       # Full Chat interface with hamburger menu & live web
 │   │   └── inspiration/[id].tsx# Inspiration detail & edit view
 │   └── share-target.tsx        # Mobile OS & PWA incoming share receiver
 ├── chrome-extension/           # Standalone Manifest V3 Chrome Extension
@@ -74,14 +82,15 @@ rut/
 ├── functions/                  # Firebase Cloud Functions (Node.js 20, TypeScript)
 │   └── src/
 │       ├── ai/                 # Gemini API integration & vector embeddings
-│       ├── callable/           # captureMetadata, semanticSearch, chatWithBank
+│       ├── callable/           # captureMetadata, chatWithBank, suggestProjectLinks
+│       ├── cost/               # Integer micros ledger, guardrails, pricing tables
 │       └── triggers/           # onInspirationWritten (auto AI enrichment)
 └── src/
     ├── components/ui/          # Design system components & MarkdownRenderer
     ├── design/                 # Tokens (typography, monochrome palette, spacing)
     ├── features/
     │   ├── auth/               # AuthContext, dummy login fallback, session sync
-    │   ├── chat/               # Chat service, thesis generator, model manager
+    │   ├── chat/               # Chat service, model manager, web search grounding
     │   ├── dump/               # Dump CRUD, sorting algorithms, enrichment
     │   └── ideas/              # Concept cluster matcher engine
     ├── lib/firebase/           # Firebase client initialization
@@ -91,8 +100,8 @@ rut/
 - **Frontend**: React Native 0.86, Expo SDK 52+, Expo Router v4, React 19.
 - **Chrome Extension**: Vite 6, `@crxjs/vite-plugin`, React 19, TypeScript.
 - **Backend**: Firebase Cloud Functions v2 (TypeScript), Cloud Firestore.
-- **AI & Reasoning**: Google Gemini API, custom thesis distillation, client-side concept matcher.
-- **Hosting**: Firebase Hosting (`https://rut.web.app`).
+- **AI & Reasoning**: Google Gemini API (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, `text-embedding-004`).
+- **Hosting**: Firebase Hosting ([rut.web.app](https://rut.web.app)).
 
 ---
 
@@ -117,6 +126,13 @@ cd functions && npm install && cd ..
 # 4. Install Chrome Extension dependencies (optional)
 cd chrome-extension && npm install && cd ..
 ```
+
+### Environment Setup
+Copy the sample environment configuration:
+```bash
+cp .env.example .env.local
+```
+Add your Firebase and Gemini credentials to `.env.local` (this file is `.gitignore`d and never committed).
 
 ---
 
