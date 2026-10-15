@@ -102,4 +102,25 @@ describe('ideaMatcher', () => {
     const foundAttached = results.find((r) => r.inspirationId === 'test-pin-ceramics');
     expect(foundAttached).toBeUndefined();
   });
+
+  test('limits matched dump items to the top 5 most relevant items', () => {
+    // Generate 8 candidate fixtures matching ceramics
+    const manyFixtures: InspirationItem[] = Array.from({ length: 8 }, (_, i) => ({
+      ...TEST_DUMP_FIXTURES[0],
+      id: `ceramic-item-${i}`,
+      title: `Ceramic Stoneware Study ${i}`,
+    }));
+
+    const results = matchIdeaWithDump(
+      {
+        title: 'Ceramics & Stoneware Collection',
+        brief: 'Tactile pottery vessels and stoneware glazes',
+      },
+      manyFixtures,
+      new Set(),
+      5
+    );
+
+    expect(results.length).toBe(5);
+  });
 });

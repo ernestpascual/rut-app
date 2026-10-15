@@ -77,7 +77,7 @@ exports.suggestProjectLinks = (0, https_1.onCall)(async (request) => {
             status: 'success',
         });
         return {
-            suggestions: result.suggestions,
+            suggestions: (result.suggestions || []).slice(0, 5),
         };
     }
     catch (err) {

@@ -9,7 +9,7 @@ import {
   signOut,
   User,
 } from 'firebase/auth/web-extension';
-import { getFirestore, writeBatch, doc } from 'firebase/firestore';
+import { getFirestore, writeBatch, doc, setDoc } from 'firebase/firestore';
 import { firebaseConfig } from '../config/firebase';
 import { InspirationItem, ScrapedReelMetadata, UserSnapshot } from '../types/insight';
 
@@ -151,9 +151,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                   ? firstLine.slice(0, 100)
                   : `Instagram Reel (${item.shortcode})`;
 
-              const collectionTag = item.collection.slug
+              const collectionSlugTag = item.collection.slug
                 ? item.collection.slug.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase()
-                : 'instagram';
+                : '';
+              const collectionNameTag = item.collection.name
+                ? item.collection.name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()
+                : '';
+              const customTagsList = (message.customTags || []).map((t: string) =>
+                t.trim().toLowerCase().replace(/^#/, '')
+              );
+              const extraOriginTag = message.collectionOrigin
+                ? message.collectionOrigin.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '-')
+                : '';
+
+              const tags = Array.from(
+                new Set([
+                  'instagram',
+                  'reel',
+                  collectionSlugTag,
+                  collectionNameTag,
+                  collectionNameTag ? `collection-${collectionNameTag}` : '',
+                  extraOriginTag,
+                  extraOriginTag ? `collection-${extraOriginTag}` : '',
+                  ...customTagsList,
+                ].filter(Boolean))
+              );
 
               const inspirationData: InspirationItem = {
                 id: docId,
@@ -176,7 +198,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                 editorialContext: item.viewCountText
                   ? `Views: ${item.viewCountText} • Collection: ${item.collection.name}`
                   : `Collection: ${item.collection.name}`,
-                tags: Array.from(new Set(['instagram', 'reel', collectionTag].filter(Boolean))),
+                tags,
                 aiTags: ['instagram', 'reel'],
                 concepts: [item.collection.name].filter(Boolean),
                 aiSummary: rawCaption || null,
@@ -201,6 +223,89 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         } catch (err: any) {
           console.error('[rut-extension] Batch sync failed:', err);
           return { success: false, error: err.message || 'Sync to Firestore failed.' };
+        }
+      }
+
+      case 'DUMP_URL_ITEM': {
+        try {
+          const user = await getAuthenticatedUser();
+          if (!user) {
+            throw new Error('You must be signed in to dump items to Insight Bank.');
+          }
+
+          const { platform, url, title, tags, collectionOrigin, userNote } = message.payload;
+          if (!url || !url.trim()) {
+            throw new Error('A valid URL is required.');
+          }
+
+          const cleanUrl = url.trim();
+          const targetUid = user.uid;
+          const now = Date.now();
+
+          // Build clean tags including platform and collection origin tag
+          const cleanTags = (tags || []).map((t: string) =>
+            t.trim().toLowerCase().replace(/^#/, '')
+          );
+
+          const originTag = collectionOrigin
+            ? collectionOrigin.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '-')
+            : '';
+
+          const mergedTags = Array.from(
+            new Set([
+              platform,
+              originTag,
+              originTag ? `collection-${originTag}` : '',
+              ...cleanTags,
+            ].filter(Boolean))
+          );
+
+          const derivedTitle =
+            (title || '').trim() ||
+            (platform === 'pinterest' ? 'Pinterest Inspiration' : 'Instagram Inspiration');
+
+          const domain = platform === 'pinterest' ? 'pinterest.com' : 'instagram.com';
+          const randomId = Math.random().toString(36).substring(2, 8);
+          const docId = `ext_${platform}_${Date.now()}_${randomId}`;
+          const docRef = doc(db, 'users', targetUid, 'inspirations', docId);
+
+          const inspirationData: InspirationItem = {
+            id: docId,
+            ownerUid: targetUid,
+            kind: 'link',
+            folder: 'dump',
+            title: derivedTitle,
+            url: cleanUrl,
+            normalizedUrl: cleanUrl,
+            sharedText: null,
+            userNote: userNote?.trim() || null,
+            sourcePlatform: platform,
+            sourceDomain: domain,
+            sourceApp: platform.toUpperCase(),
+            siteName: platform === 'pinterest' ? 'Pinterest' : 'Instagram',
+            author: collectionOrigin?.trim() || (platform === 'pinterest' ? 'Pinterest' : 'Instagram'),
+            caption: userNote?.trim() || null,
+            previewDescription: collectionOrigin ? `Saved from collection: ${collectionOrigin}` : null,
+            remotePreviewImageUrl: null,
+            editorialContext: collectionOrigin ? `Collection Origin: ${collectionOrigin}` : null,
+            tags: mergedTags,
+            aiTags: [platform],
+            concepts: collectionOrigin ? [collectionOrigin] : [],
+            aiSummary: null,
+            processingStatus: 'pending',
+            processingErrorCode: null,
+            duplicateOf: null,
+            archived: false,
+            createdAt: now,
+            updatedAt: now,
+            capturedAt: now,
+          };
+
+          await setDoc(docRef, inspirationData);
+          return { success: true, id: docId, title: derivedTitle };
+        } catch (err: any) {
+          console.error('[rut-extension] Dump URL item failed:', err);
+          return { success: false, error: err.message || 'Failed to dump item to Insight Bank.' };
         }
       }
 

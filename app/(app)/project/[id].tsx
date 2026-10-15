@@ -13,6 +13,7 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -100,6 +101,7 @@ export default function ProjectDetailScreen() {
 
   // Manual picker toggle
   const [showManualPicker, setShowManualPicker] = useState(false);
+  const [pickerSearchQuery, setPickerSearchQuery] = useState('');
 
   // Multi-selection state for attached references
   const [selectRefsMode, setSelectRefsMode] = useState(false);
@@ -343,7 +345,7 @@ export default function ProjectDetailScreen() {
           >(functions, 'suggestProjectLinks');
           const res = await suggestFn({ projectId: id! });
           if (res.data?.suggestions && res.data.suggestions.length > 0) {
-            const mapped: IdeaMatchResult[] = res.data.suggestions.map((s) => ({
+            const mapped: IdeaMatchResult[] = res.data.suggestions.slice(0, 5).map((s) => ({
               inspirationId: s.inspirationId,
               inspiration: bankMap[s.inspirationId] || {
                 id: s.inspirationId,
@@ -372,10 +374,11 @@ export default function ProjectDetailScreen() {
           tags: project.tags,
         },
         allDumpItems,
-        attachedSet
+        attachedSet,
+        5
       );
 
-      setMatchedResults(localMatches);
+      setMatchedResults(localMatches.slice(0, 5));
       setHasSearched(true);
     } finally {
       setLoadingSuggestions(false);
@@ -918,8 +921,35 @@ export default function ProjectDetailScreen() {
   }
 
   const unattachedDumpItems = allDumpItems.filter(
-    (item) => !links.some((l) => l.inspirationId === item.id)
+    (item) => !item.archived && !links.some((l) => l.inspirationId === item.id)
   );
+
+  const filteredDumpItems = useMemo(() => {
+    const q = pickerSearchQuery.trim().toLowerCase();
+    if (!q) return unattachedDumpItems;
+    return unattachedDumpItems.filter((item) => {
+      const matchTitle = (item.title || '').toLowerCase().includes(q);
+      const matchPlatform = (item.sourcePlatform || '').toLowerCase().includes(q);
+      const matchTags = (item.tags || []).some((t) => t.toLowerCase().includes(q));
+      const matchAiTags = (item.aiTags || []).some((t) => t.toLowerCase().includes(q));
+      const matchConcepts = (item.concepts || []).some((c) => c.toLowerCase().includes(q));
+      const matchNote = (item.userNote || '').toLowerCase().includes(q);
+      const matchSummary = (item.aiSummary || '').toLowerCase().includes(q);
+      const matchContext = (item.editorialContext || '').toLowerCase().includes(q);
+      const matchUrl = (item.url || '').toLowerCase().includes(q);
+      return (
+        matchTitle ||
+        matchPlatform ||
+        matchTags ||
+        matchAiTags ||
+        matchConcepts ||
+        matchNote ||
+        matchSummary ||
+        matchContext ||
+        matchUrl
+      );
+    });
+  }, [unattachedDumpItems, pickerSearchQuery]);
 
   // FULL HEIGHT EDIT SCREEN FOR EXTENSIVE NOTES & SPECIFICATIONS
   if (editing) {
@@ -1262,26 +1292,142 @@ export default function ProjectDetailScreen() {
                 {/* MANUAL DUMP PICKER */}
                 {showManualPicker ? (
                   <Card style={styles.pickerCard}>
-                    <Text style={styles.pickerTitle}>SELECT ANY INSPIRATION FROM YOUR DUMP</Text>
+                    <View style={styles.pickerHeaderRow}>
+                      <Text style={styles.pickerTitle}>
+                        BROWSE INSPIRATION DUMP ({filteredDumpItems.length} OF {unattachedDumpItems.length})
+                      </Text>
+                      {unattachedDumpItems.length > 0 && (
+                        <View style={styles.pickerSearchRow}>
+                          <TextInput
+                            style={styles.pickerSearchInput}
+                            placeholder="Search dump by title, tag, platform, or note..."
+                            placeholderTextColor={colors.inkSoft}
+                            value={pickerSearchQuery}
+                            onChangeText={setPickerSearchQuery}
+                          />
+                          {pickerSearchQuery.length > 0 && (
+                            <Pressable
+                              onPress={() => setPickerSearchQuery('')}
+                              style={styles.pickerSearchClearBtn}
+                              hitSlop={8}
+                            >
+                              <Text style={styles.pickerSearchClearText}>✕</Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      )}
+                    </View>
+
                     {unattachedDumpItems.length === 0 ? (
                       <Text style={styles.emptyLinksText}>All dump items are already attached!</Text>
+                    ) : filteredDumpItems.length === 0 ? (
+                      <View style={styles.pickerEmptySearchBox}>
+                        <Text style={styles.pickerEmptySearchText}>
+                          No dump items matching &ldquo;{pickerSearchQuery}&rdquo;
+                        </Text>
+                        <Button
+                          title="CLEAR SEARCH"
+                          variant="text"
+                          onPress={() => setPickerSearchQuery('')}
+                          style={{ height: 28, marginTop: spacing.xs }}
+                        />
+                      </View>
                     ) : (
-                      unattachedDumpItems.map((item) => (
-                        <View key={item.id} style={styles.pickerRow}>
-                          <View style={{ flex: 1, marginRight: spacing.xs }}>
-                            <Text style={styles.pickerItemTitle} numberOfLines={1}>
-                              {item.title}
-                            </Text>
-                            <Text style={styles.pickerItemSub}>
-                              {item.sourcePlatform ? item.sourcePlatform.toUpperCase() : item.kind}
-                            </Text>
+                      filteredDumpItems.map((item) => (
+                        <View key={item.id} style={styles.pickerItemCard}>
+                          <View style={styles.pickerItemMainRow}>
+                            {/* Thumbnail Image */}
+                            {item.remotePreviewImageUrl ? (
+                              <Image
+                                source={{ uri: item.remotePreviewImageUrl }}
+                                style={styles.pickerThumb}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={styles.pickerThumbPlaceholder}>
+                                <Text style={styles.pickerThumbPlaceholderText}>
+                                  {(item.sourcePlatform || 'DUMP').slice(0, 3).toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+
+                            {/* Metadata Column */}
+                            <View style={styles.pickerItemMetaCol}>
+                              <View style={styles.pickerBadgeRow}>
+                                {item.sourcePlatform ? (
+                                  <Badge
+                                    label={item.sourcePlatform.toUpperCase()}
+                                    variant="inverse"
+                                    style={{ marginRight: 6 }}
+                                  />
+                                ) : null}
+                                {item.folder ? (
+                                  <Badge
+                                    label={item.folder.toUpperCase()}
+                                    variant="grade"
+                                    style={{ marginRight: 6 }}
+                                  />
+                                ) : null}
+                                {item.createdAt ? (
+                                  <Text style={styles.pickerDateText}>
+                                    {new Date(item.createdAt).toLocaleDateString()}
+                                  </Text>
+                                ) : null}
+                              </View>
+
+                              <Text style={styles.pickerItemTitle} numberOfLines={2}>
+                                {item.title}
+                              </Text>
+
+                              {/* Snippet / Context */}
+                              {item.editorialContext ? (
+                                <Text style={styles.pickerItemSnippet} numberOfLines={2}>
+                                  {item.editorialContext}
+                                </Text>
+                              ) : item.aiSummary ? (
+                                <Text style={styles.pickerItemSnippet} numberOfLines={2}>
+                                  {item.aiSummary}
+                                </Text>
+                              ) : item.userNote ? (
+                                <Text style={styles.pickerItemSnippet} numberOfLines={2}>
+                                  {item.userNote}
+                                </Text>
+                              ) : null}
+
+                              {/* Tags */}
+                              {item.tags && item.tags.length > 0 ? (
+                                <View style={styles.pickerTagRow}>
+                                  {Array.from(new Set(item.tags)).slice(0, 5).map((t, idx) => (
+                                    <Badge
+                                      key={`picker-tag-${item.id}-${t}-${idx}`}
+                                      label={`#${t}`}
+                                      variant="grade"
+                                      style={{ marginRight: 4, marginTop: 4 }}
+                                    />
+                                  ))}
+                                </View>
+                              ) : null}
+
+                              {/* URL Link */}
+                              {item.url ? (
+                                <Pressable onPress={() => Linking.openURL(item.url!)} style={{ marginTop: 4 }}>
+                                  <Text style={styles.pickerUrlText} numberOfLines={1}>
+                                    ↗ {item.url}
+                                  </Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
                           </View>
-                          <Button
-                            title="+ ATTACH"
-                            variant="secondary"
-                            onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
-                            style={{ height: 28, paddingHorizontal: 8 }}
-                          />
+
+                          {/* Attach Action Button */}
+                          <View style={styles.pickerActionRow}>
+                            <Button
+                              title="+ ATTACH AS REFERENCE"
+                              variant="secondary"
+                              onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
+                              style={{ height: 30, paddingHorizontal: 12 }}
+                            />
+                          </View>
                         </View>
                       ))
                     )}
@@ -2247,28 +2393,128 @@ const getStyles = (colors: ThemeColors) =>
     marginBottom: spacing.base,
     padding: spacing.base,
   },
+  pickerHeaderRow: {
+    marginBottom: spacing.sm,
+  },
   pickerTitle: {
     ...typography.captionCap,
     fontWeight: '700',
     color: colors.ink,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  pickerRow: {
+  pickerSearchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairline,
+    position: 'relative',
+    marginTop: spacing.xs,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    height: 38,
+    borderWidth: 1,
+    borderColor: colors.hairlineGrade,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: spacing.sm,
+    color: colors.ink,
+    fontSize: 13,
+  },
+  pickerSearchClearBtn: {
+    position: 'absolute',
+    right: 8,
+    padding: 6,
+  },
+  pickerSearchClearText: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pickerEmptySearchBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerEmptySearchText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    textAlign: 'center',
+  },
+  pickerItemCard: {
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.hairlineGrade,
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  pickerItemMainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  pickerThumb: {
+    width: 64,
+    height: 64,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairlineGrade,
+    marginRight: spacing.sm,
+  },
+  pickerThumbPlaceholder: {
+    width: 64,
+    height: 64,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairlineGrade,
+    marginRight: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerThumbPlaceholderText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    color: colors.inkSoft,
+  },
+  pickerItemMetaCol: {
+    flex: 1,
+  },
+  pickerBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  pickerDateText: {
+    ...typography.captionSm,
+    fontSize: 10,
+    color: colors.inkSoft,
   },
   pickerItemTitle: {
     ...typography.bodyMd,
     color: colors.ink,
-    fontWeight: '500',
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 4,
   },
-  pickerItemSub: {
+  pickerItemSnippet: {
     ...typography.captionSm,
     color: colors.inkSoft,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  pickerTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 2,
+  },
+  pickerUrlText: {
+    ...typography.captionSm,
+    color: colors.inkSoft,
+    textDecorationLine: 'underline',
+  },
+  pickerActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineGrade,
   },
   emptyLinksCard: {
     borderWidth: 1,

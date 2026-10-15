@@ -100,4 +100,20 @@ export type ExtensionMessage =
   | { type: 'STOP_SCRAPING' }
   | { type: 'SCRAPE_PROGRESS'; count: number; collectionName: string }
   | { type: 'SCRAPE_COMPLETE'; items: ScrapedReelMetadata[] }
-  | { type: 'SYNC_ITEMS'; items: ScrapedReelMetadata[] };
+  | {
+      type: 'SYNC_ITEMS';
+      items: ScrapedReelMetadata[];
+      customTags?: string[];
+      collectionOrigin?: string;
+    }
+  | {
+      type: 'DUMP_URL_ITEM';
+      payload: {
+        platform: 'instagram' | 'pinterest';
+        url: string;
+        title?: string;
+        tags: string[];
+        collectionOrigin?: string;
+        userNote?: string;
+      };
+    };

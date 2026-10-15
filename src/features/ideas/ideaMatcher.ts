@@ -57,7 +57,8 @@ function tokenize(text: string): string[] {
 export function matchIdeaWithDump(
   idea: IdeaMatchInput,
   dumpItems: InspirationItem[],
-  attachedIds: Set<string> = new Set()
+  attachedIds: Set<string> = new Set(),
+  limit: number = 5
 ): IdeaMatchResult[] {
   const ideaTokens = new Set<string>([
     ...tokenize(idea.title),
@@ -81,8 +82,12 @@ export function matchIdeaWithDump(
   const results: IdeaMatchResult[] = [];
 
   for (const item of dumpItems) {
+    // Only match active items from the dump folder
+    if (item.archived) continue;
+    if (item.folder && item.folder !== 'dump') continue;
+
     if (attachedIds.has(item.id)) {
-      // Already attached as reference, skip or score separately
+      // Already attached as reference, skip
       continue;
     }
 
@@ -174,5 +179,5 @@ export function matchIdeaWithDump(
   // Sort descending by confidence score
   results.sort((a, b) => b.confidence - a.confidence);
 
-  return results;
+  return results.slice(0, limit);
 }

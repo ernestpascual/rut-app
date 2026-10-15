@@ -17,6 +17,24 @@ export function Popup() {
   const [collection, setCollection] = useState<CollectionInfo | null>(null);
   const [checkingTab, setCheckingTab] = useState(true);
 
+  // Mode: 'quick_dump' | 'collection_sync'
+  const [activeMode, setActiveMode] = useState<'quick_dump' | 'collection_sync'>('quick_dump');
+
+  // Quick Dump State
+  const [platform, setPlatform] = useState<'instagram' | 'pinterest'>('instagram');
+  const [dumpUrl, setDumpUrl] = useState('');
+  const [dumpTitle, setDumpTitle] = useState('');
+  const [collectionOrigin, setCollectionOrigin] = useState('');
+  const [dumpTags, setDumpTags] = useState('');
+  const [dumpNote, setDumpNote] = useState('');
+  const [dumping, setDumping] = useState(false);
+  const [dumpSuccessItem, setDumpSuccessItem] = useState<{ title: string; id: string } | null>(null);
+  const [dumpError, setDumpError] = useState<string | null>(null);
+
+  // Collection Sync Custom Tags State
+  const [collectionCustomTags, setCollectionCustomTags] = useState('');
+  const [collectionOriginTag, setCollectionOriginTag] = useState('');
+
   // Scraping & Sync State
   const [isScraping, setIsScraping] = useState(false);
   const [scrapedCount, setScrapedCount] = useState(0);
@@ -38,12 +56,25 @@ export function Popup() {
     });
   }, []);
 
-  // 2. Inspect Active Tab & Detect Collection
+  // 2. Inspect Active Tab & Detect Context
   const inspectActiveTab = () => {
     setCheckingTab(true);
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const current = tabs[0];
       setActiveTab(current || null);
+
+      if (current?.url) {
+        // Auto-select platform and pre-populate URL
+        if (current.url.includes('pinterest.com')) {
+          setPlatform('pinterest');
+          setDumpUrl(current.url);
+          if (current.title) setDumpTitle(current.title.replace(/\s*\|.*Pinterest/i, '').trim());
+        } else if (current.url.includes('instagram.com')) {
+          setPlatform('instagram');
+          setDumpUrl(current.url);
+          if (current.title) setDumpTitle(current.title.replace(/\s*•\s*Instagram.*$/i, '').trim());
+        }
+      }
 
       if (current?.id && current.url?.includes('instagram.com')) {
         chrome.tabs.sendMessage(current.id, { type: 'CHECK_COLLECTION_STATUS' }, (res) => {
@@ -51,9 +82,14 @@ export function Popup() {
             setCollection({ detected: false });
           } else {
             setCollection(res);
+            if (res.title) {
+              setCollectionOriginTag(res.title);
+              setCollectionOrigin(res.title);
+            }
             if (res.isScraping) {
               setIsScraping(true);
               setScrapedCount(res.harvestedCount || 0);
+              setActiveMode('collection_sync');
             }
           }
           setCheckingTab(false);
@@ -86,7 +122,7 @@ export function Popup() {
 
     chrome.runtime.onMessage.addListener(messageListener);
     return () => chrome.runtime.onMessage.removeListener(messageListener);
-  }, []);
+  }, [collectionCustomTags, collectionOriginTag, collection]);
 
   // Auth Handlers
   const handleGoogleLogin = () => {
@@ -122,7 +158,48 @@ export function Popup() {
       setUser(null);
       setCollection(null);
       setSyncedCount(null);
+      setDumpSuccessItem(null);
     });
+  };
+
+  // Quick Dump Handler
+  const handleDumpItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dumpUrl.trim()) {
+      setDumpError('Please enter a URL to dump.');
+      return;
+    }
+
+    setDumping(true);
+    setDumpError(null);
+    setDumpSuccessItem(null);
+
+    const parsedTags = dumpTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    chrome.runtime.sendMessage(
+      {
+        type: 'DUMP_URL_ITEM',
+        payload: {
+          platform,
+          url: dumpUrl.trim(),
+          title: dumpTitle.trim() || undefined,
+          tags: parsedTags,
+          collectionOrigin: collectionOrigin.trim() || undefined,
+          userNote: dumpNote.trim() || undefined,
+        },
+      },
+      (res) => {
+        setDumping(false);
+        if (res?.success) {
+          setDumpSuccessItem({ title: res.title || 'Inspiration Link', id: res.id });
+        } else {
+          setDumpError(res?.error || 'Failed to dump item to Insight Bank.');
+        }
+      }
+    );
   };
 
   // Scraping & Sync Handlers
@@ -150,14 +227,27 @@ export function Popup() {
 
   const handleSyncToFirestore = (items: ScrapedReelMetadata[]) => {
     setIsSyncing(true);
-    chrome.runtime.sendMessage({ type: 'SYNC_ITEMS', items }, (res) => {
-      setIsSyncing(false);
-      if (res?.success) {
-        setSyncedCount(res.count);
-      } else {
-        setSyncError(res?.error || 'Failed to sync to Insight Bank.');
+    const parsedCustomTags = collectionCustomTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    chrome.runtime.sendMessage(
+      {
+        type: 'SYNC_ITEMS',
+        items,
+        customTags: parsedCustomTags,
+        collectionOrigin: collectionOriginTag.trim() || collection?.title || undefined,
+      },
+      (res) => {
+        setIsSyncing(false);
+        if (res?.success) {
+          setSyncedCount(res.count);
+        } else {
+          setSyncError(res?.error || 'Failed to sync to Insight Bank.');
+        }
       }
-    });
+    );
   };
 
   // ----------------------------------------------------
@@ -168,7 +258,7 @@ export function Popup() {
       <div style={styles.container}>
         <div style={styles.header}>
           <span style={styles.logo}>RUT</span>
-          <span style={styles.badge}>SYNC</span>
+          <span style={styles.badge}>EXTENSION</span>
         </div>
         <div style={styles.centerBox}>
           <p style={styles.subtitle}>Connecting to rut...</p>
@@ -191,9 +281,9 @@ export function Popup() {
         </div>
 
         <div style={styles.banner}>
-          <p style={styles.bannerTitle}>SYNC INSTAGRAM TO INSIGHT BANK</p>
+          <p style={styles.bannerTitle}>DUMP INSPIRATION TO RUT BANK</p>
           <p style={styles.bannerDesc}>
-            Log into your rut account to scrape & sync Reels directly into your Inspiration Dump.
+            Log into your rut account to dump Instagram & Pinterest links or sync entire collections with tags & origin preserved.
           </p>
         </div>
 
@@ -237,7 +327,7 @@ export function Popup() {
   }
 
   // ----------------------------------------------------
-  // STATE 4: Syncing / Completed
+  // STATE 2: Syncing / Completed Collection Sync
   // ----------------------------------------------------
   if (isScraping || isSyncing || syncedCount !== null) {
     return (
@@ -252,8 +342,8 @@ export function Popup() {
 
         <div style={styles.card}>
           <div style={styles.cardMetaRow}>
-            <span style={styles.cardTag}>COLLECTION</span>
-            <span style={styles.cardTitle}>{collection?.title || 'Saved Reels'}</span>
+            <span style={styles.cardTag}>COLLECTION ORIGIN</span>
+            <span style={styles.cardTitle}>{collectionOriginTag || collection?.title || 'Saved Reels'}</span>
           </div>
 
           {isScraping && (
@@ -266,7 +356,7 @@ export function Popup() {
                 <span style={styles.countNumber}>{scrapedCount}</span>
                 <span style={styles.countLabel}>REELS DISCOVERED</span>
               </div>
-              <p style={styles.subtext}>Extracting captions, thumbnails, and shortcodes with rate-limit protection.</p>
+              <p style={styles.subtext}>Extracting captions, thumbnails, and origin tags with rate-limit protection.</p>
               <button onClick={handleStopScrapeEarly} style={{ ...styles.btnSecondary, marginTop: '14px' }}>
                 STOP & SYNC EARLY ({scrapedCount})
               </button>
@@ -279,7 +369,7 @@ export function Popup() {
                 <span style={styles.pulseDot} />
                 <span style={styles.progressText}>Writing batch to Firestore...</span>
               </div>
-              <p style={styles.subtext}>Committing {scrapedCount} Reels in chunks of 400 to Insight Bank.</p>
+              <p style={styles.subtext}>Committing {scrapedCount} Reels with origin tags to your Insight Bank.</p>
             </div>
           )}
 
@@ -289,7 +379,7 @@ export function Popup() {
                 ✓ SUCCESSFULLY SYNCED {syncedCount} REELS
               </div>
               <p style={styles.subtext}>
-                Items are in your Insight Bank! Cloud Functions will automatically index embeddings & AI summaries.
+                Origin collection tag and custom tags have been applied to all items in your Inspiration Dump!
               </p>
               <button
                 onClick={() => chrome.tabs.create({ url: `${RUT_WEB_APP_URL}/bank` })}
@@ -316,85 +406,275 @@ export function Popup() {
   }
 
   // ----------------------------------------------------
-  // STATE 3: Authenticated — Collection Detected
-  // ----------------------------------------------------
-  if (collection?.detected) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <div>
-            <span style={styles.logo}>RUT</span>
-            <span style={styles.badge}>READY</span>
-          </div>
-          <button onClick={handleSignOut} style={styles.linkBtn}>LOGOUT</button>
-        </div>
-
-        <div style={styles.userBar}>
-          <span style={styles.userDot} />
-          <span style={styles.userEmail}>{user.email || user.uid}</span>
-        </div>
-
-        <div style={styles.card}>
-          <div style={styles.collectionBadgeRow}>
-            <span style={styles.highlightBadge}>INSTAGRAM DETECTED</span>
-          </div>
-          <h2 style={styles.collectionHeading}>{collection.title}</h2>
-          <p style={styles.collectionPath}>/{collection.slug}/</p>
-
-          <p style={styles.subtext}>
-            Ready to scrape all virtualized Reels, captions, and links from this collection into your rut Insight Bank.
-          </p>
-
-          <button onClick={handleStartScrape} style={{ ...styles.btnPrimary, marginTop: '16px' }}>
-            ⚡ SYNC REELS TO INSIGHT BANK
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ----------------------------------------------------
-  // STATE 2: Authenticated — Wrong Page
+  // STATE 3: Authenticated — Main Dashboard
   // ----------------------------------------------------
   return (
     <div style={styles.container}>
+      {/* Top Header */}
       <div style={styles.header}>
         <div>
           <span style={styles.logo}>RUT</span>
-          <span style={styles.badge}>CONNECTED</span>
+          <span style={styles.badge}>INSPIRATION</span>
         </div>
         <button onClick={handleSignOut} style={styles.linkBtn}>LOGOUT</button>
       </div>
 
+      {/* User Status Bar */}
       <div style={styles.userBar}>
         <span style={styles.userDot} />
         <span style={styles.userEmail}>{user.email || user.uid}</span>
       </div>
 
-      <div style={styles.card}>
-        <div style={styles.collectionBadgeRow}>
-          <span style={styles.neutralBadge}>STANDBY</span>
-        </div>
-        <h3 style={styles.cardTitleNotice}>NAVIGATE TO A SAVED COLLECTION</h3>
-        <p style={styles.subtext}>
-          Open any Instagram Saved Collection or Saved Posts page on Instagram Web to start syncing.
-        </p>
-
+      {/* Mode Switcher Tabs */}
+      <div style={styles.modeTabsRow}>
         <button
-          onClick={() => chrome.tabs.create({ url: 'https://www.instagram.com/saved/' })}
-          style={{ ...styles.btnPrimary, marginTop: '14px' }}
+          onClick={() => setActiveMode('quick_dump')}
+          style={{
+            ...styles.modeTab,
+            ...(activeMode === 'quick_dump' ? styles.modeTabActive : {}),
+          }}
         >
-          OPEN INSTAGRAM SAVED ↗
+          ⚡ DUMP LINK
         </button>
-
         <button
-          onClick={inspectActiveTab}
-          disabled={checkingTab}
-          style={{ ...styles.btnSecondary, marginTop: '8px' }}
+          onClick={() => setActiveMode('collection_sync')}
+          style={{
+            ...styles.modeTab,
+            ...(activeMode === 'collection_sync' ? styles.modeTabActive : {}),
+          }}
         >
-          {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
+          📁 SYNC COLLECTION
         </button>
       </div>
+
+      {/* MODE 1: QUICK DUMP / ADD URL */}
+      {activeMode === 'quick_dump' && (
+        <div style={styles.card}>
+          {dumpSuccessItem ? (
+            <div style={{ marginTop: '6px' }}>
+              <div style={styles.successBanner}>
+                ✓ DUMPED TO RUT BANK
+              </div>
+              <p style={styles.successItemTitle}>&ldquo;{dumpSuccessItem.title}&rdquo;</p>
+              <p style={styles.subtext}>
+                Added with platform, collection origin, and custom tags. Available immediately in your Inspiration Dump!
+              </p>
+              <button
+                onClick={() => chrome.tabs.create({ url: `${RUT_WEB_APP_URL}/bank` })}
+                style={{ ...styles.btnPrimary, marginTop: '14px' }}
+              >
+                VIEW IN RUT BANK ↗
+              </button>
+              <button
+                onClick={() => {
+                  setDumpSuccessItem(null);
+                  setDumpTitle('');
+                  setDumpNote('');
+                }}
+                style={{ ...styles.btnSecondary, marginTop: '8px' }}
+              >
+                + DUMP ANOTHER LINK
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleDumpItem} style={styles.form}>
+              {/* Platform Selector */}
+              <div>
+                <label style={styles.inputLabel}>CHOOSE PLATFORM</label>
+                <div style={styles.platformSelectorRow}>
+                  <button
+                    type="button"
+                    onClick={() => setPlatform('instagram')}
+                    style={{
+                      ...styles.platformBtn,
+                      ...(platform === 'instagram' ? styles.platformBtnActive : {}),
+                    }}
+                  >
+                    📸 INSTAGRAM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlatform('pinterest')}
+                    style={{
+                      ...styles.platformBtn,
+                      ...(platform === 'pinterest' ? styles.platformBtnActive : {}),
+                    }}
+                  >
+                    📌 PINTEREST
+                  </button>
+                </div>
+              </div>
+
+              {/* URL Input */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={styles.inputLabel}>LINK URL *</label>
+                  {activeTab?.url && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDumpUrl(activeTab.url || '');
+                        if (activeTab.title) setDumpTitle(activeTab.title);
+                      }}
+                      style={styles.microBtn}
+                    >
+                      USE CURRENT TAB
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder={
+                    platform === 'pinterest'
+                      ? 'https://pinterest.com/pin/...'
+                      : 'https://instagram.com/reel/... or /p/...'
+                  }
+                  value={dumpUrl}
+                  onChange={(e) => setDumpUrl(e.target.value)}
+                  required
+                  style={styles.input}
+                />
+              </div>
+
+              {/* Title (Optional) */}
+              <div>
+                <label style={styles.inputLabel}>TITLE (OPTIONAL)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Tactile Stoneware Ceramic Vessel"
+                  value={dumpTitle}
+                  onChange={(e) => setDumpTitle(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+
+              {/* Collection Name Origin (Saved as Tag) */}
+              <div>
+                <label style={styles.inputLabel}>COLLECTION ORIGIN (SAVED AS TAG)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Minimal Ceramics, Saved Architecture"
+                  value={collectionOrigin}
+                  onChange={(e) => setCollectionOrigin(e.target.value)}
+                  style={styles.input}
+                />
+                <span style={styles.fieldHint}>
+                  Adds #{collectionOrigin.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'origin'} tag to this item
+                </span>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label style={styles.inputLabel}>TAGS (COMMA SEPARATED)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ceramics, stoneware, minimal, tactile"
+                  value={dumpTags}
+                  onChange={(e) => setDumpTags(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+
+              {/* Personal Notes (Optional) */}
+              <div>
+                <label style={styles.inputLabel}>NOTES / CONTEXT (OPTIONAL)</label>
+                <input
+                  type="text"
+                  placeholder="Why did you dump this? Dimensions, texture..."
+                  value={dumpNote}
+                  onChange={(e) => setDumpNote(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+
+              {dumpError && <div style={styles.errorBox}>{dumpError}</div>}
+
+              <button
+                type="submit"
+                disabled={dumping || !dumpUrl.trim()}
+                style={{ ...styles.btnPrimary, marginTop: '4px' }}
+              >
+                {dumping ? 'DUMPING TO RUT...' : `⚡ DUMP ${platform.toUpperCase()} TO RUT`}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* MODE 2: INSTAGRAM COLLECTION SYNC */}
+      {activeMode === 'collection_sync' && (
+        <div style={styles.card}>
+          {collection?.detected ? (
+            <div>
+              <div style={styles.collectionBadgeRow}>
+                <span style={styles.highlightBadge}>INSTAGRAM COLLECTION DETECTED</span>
+              </div>
+              <h2 style={styles.collectionHeading}>{collection.title}</h2>
+              <p style={styles.collectionPath}>/{collection.slug}/</p>
+
+              {/* Collection Origin Tag Input */}
+              <div style={{ marginTop: '12px' }}>
+                <label style={styles.inputLabel}>COLLECTION ORIGIN TAG</label>
+                <input
+                  type="text"
+                  value={collectionOriginTag}
+                  onChange={(e) => setCollectionOriginTag(e.target.value)}
+                  placeholder="e.g. Saved Architecture"
+                  style={styles.input}
+                />
+                <span style={styles.fieldHint}>
+                  Each item will be tagged with #{collectionOriginTag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'collection'}
+                </span>
+              </div>
+
+              {/* Extra Tags for Collection */}
+              <div style={{ marginTop: '10px' }}>
+                <label style={styles.inputLabel}>ADDITIONAL TAGS (COMMA SEPARATED)</label>
+                <input
+                  type="text"
+                  value={collectionCustomTags}
+                  onChange={(e) => setCollectionCustomTags(e.target.value)}
+                  placeholder="e.g. brutalist, concrete, grid"
+                  style={styles.input}
+                />
+              </div>
+
+              <p style={{ ...styles.subtext, marginTop: '12px' }}>
+                Auto-scrolls the collection DOM to scrape virtualized Reels, extracting captions, thumbnails, and tagging each item with the origin.
+              </p>
+
+              <button onClick={handleStartScrape} style={{ ...styles.btnPrimary, marginTop: '14px' }}>
+                ⚡ SYNC COLLECTION WITH TAGS
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={styles.collectionBadgeRow}>
+                <span style={styles.neutralBadge}>STANDBY</span>
+              </div>
+              <h3 style={styles.cardTitleNotice}>NAVIGATE TO A SAVED COLLECTION</h3>
+              <p style={styles.subtext}>
+                Open any Instagram Saved Collection or Saved Posts page on Instagram Web to start auto-syncing entire boards.
+              </p>
+
+              <button
+                onClick={() => chrome.tabs.create({ url: 'https://www.instagram.com/saved/' })}
+                style={{ ...styles.btnPrimary, marginTop: '14px' }}
+              >
+                OPEN INSTAGRAM SAVED ↗
+              </button>
+
+              <button
+                onClick={inspectActiveTab}
+                disabled={checkingTab}
+                style={{ ...styles.btnSecondary, marginTop: '8px' }}
+              >
+                {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -408,17 +688,19 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#0c0c0c',
     color: '#ffffff',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace',
-    minHeight: '420px',
+    minHeight: '440px',
+    width: '360px',
     display: 'flex',
     flexDirection: 'column',
+    boxSizing: 'border-box',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: '12px',
+    paddingBottom: '10px',
     borderBottom: '1px solid #222222',
-    marginBottom: '14px',
+    marginBottom: '10px',
   },
   logo: {
     fontWeight: 900,
@@ -434,7 +716,80 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#ffffff',
     color: '#000000',
     padding: '2px 5px',
-    borderRadius: '2px',
+    borderRadius: '0px',
+  },
+  modeTabsRow: {
+    display: 'flex',
+    gap: '6px',
+    marginBottom: '10px',
+  },
+  modeTab: {
+    flex: 1,
+    padding: '8px 10px',
+    backgroundColor: '#181818',
+    color: '#888888',
+    border: '1px solid #282828',
+    fontWeight: 700,
+    fontSize: '10px',
+    letterSpacing: '0.5px',
+    cursor: 'pointer',
+    borderRadius: '0px',
+    textAlign: 'center',
+  },
+  modeTabActive: {
+    backgroundColor: '#ffffff',
+    color: '#000000',
+    borderColor: '#ffffff',
+    fontWeight: 800,
+  },
+  platformSelectorRow: {
+    display: 'flex',
+    gap: '6px',
+    marginTop: '4px',
+  },
+  platformBtn: {
+    flex: 1,
+    padding: '8px',
+    backgroundColor: '#161616',
+    color: '#888888',
+    border: '1px solid #282828',
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.5px',
+    cursor: 'pointer',
+    borderRadius: '0px',
+    textAlign: 'center',
+  },
+  platformBtnActive: {
+    backgroundColor: '#ffffff',
+    color: '#000000',
+    borderColor: '#ffffff',
+    fontWeight: 800,
+  },
+  inputLabel: {
+    display: 'block',
+    fontSize: '9px',
+    fontWeight: 800,
+    color: '#888888',
+    letterSpacing: '0.6px',
+    marginBottom: '3px',
+  },
+  fieldHint: {
+    display: 'block',
+    fontSize: '9px',
+    color: '#666666',
+    marginTop: '2px',
+    fontFamily: 'monospace',
+  },
+  microBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#aaaaaa',
+    fontSize: '9px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: 0,
+    textDecoration: 'underline',
   },
   banner: {
     backgroundColor: '#161616',
@@ -457,10 +812,10 @@ const styles: Record<string, React.CSSProperties> = {
   userBar: {
     display: 'flex',
     alignItems: 'center',
-    padding: '6px 10px',
+    padding: '5px 8px',
     backgroundColor: '#141414',
     border: '1px solid #242424',
-    marginBottom: '12px',
+    marginBottom: '10px',
   },
   userDot: {
     width: '6px',
@@ -470,7 +825,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginRight: '8px',
   },
   userEmail: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontFamily: 'monospace',
     color: '#cccccc',
     overflow: 'hidden',
@@ -480,11 +835,11 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     backgroundColor: '#141414',
     border: '1px solid #282828',
-    padding: '16px',
+    padding: '14px',
     flex: 1,
   },
   collectionBadgeRow: {
-    marginBottom: '8px',
+    marginBottom: '6px',
   },
   highlightBadge: {
     fontSize: '9px',
@@ -503,7 +858,7 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.5px',
   },
   collectionHeading: {
-    fontSize: '16px',
+    fontSize: '15px',
     fontWeight: 800,
     color: '#ffffff',
     margin: '4px 0 2px 0',
@@ -512,7 +867,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
     color: '#777777',
     fontFamily: 'monospace',
-    marginBottom: '10px',
+    marginBottom: '6px',
   },
   cardTitleNotice: {
     fontSize: '13px',
@@ -525,9 +880,15 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: '16px',
     color: '#888888',
   },
+  successItemTitle: {
+    fontSize: '13px',
+    fontWeight: 800,
+    color: '#ffffff',
+    margin: '4px 0 6px 0',
+  },
   btnPrimary: {
     width: '100%',
-    padding: '11px 14px',
+    padding: '10px 14px',
     backgroundColor: '#ffffff',
     color: '#000000',
     border: 'none',
@@ -535,10 +896,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
     letterSpacing: '0.6px',
     cursor: 'pointer',
+    borderRadius: '0px',
   },
   btnSecondary: {
     width: '100%',
-    padding: '10px 14px',
+    padding: '9px 14px',
     backgroundColor: 'transparent',
     color: '#ffffff',
     border: '1px solid #333333',
@@ -546,6 +908,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '10px',
     letterSpacing: '0.5px',
     cursor: 'pointer',
+    borderRadius: '0px',
   },
   linkBtn: {
     background: 'none',
@@ -571,15 +934,18 @@ const styles: Record<string, React.CSSProperties> = {
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
   input: {
-    padding: '10px 12px',
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '8px 10px',
     backgroundColor: '#161616',
     border: '1px solid #282828',
     color: '#ffffff',
-    fontSize: '12px',
+    fontSize: '11px',
     outline: 'none',
+    borderRadius: '0px',
   },
   errorBox: {
     padding: '8px 10px',
@@ -587,17 +953,17 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #731e1e',
     color: '#ff8888',
     fontSize: '11px',
-    marginBottom: '10px',
+    marginBottom: '8px',
   },
   successBanner: {
-    padding: '10px',
+    padding: '8px 10px',
     backgroundColor: '#0d2818',
     border: '1px solid #1b5e20',
     color: '#4caf50',
     fontSize: '11px',
     fontWeight: 800,
     letterSpacing: '0.5px',
-    marginBottom: '8px',
+    marginBottom: '6px',
   },
   progressRow: {
     display: 'flex',

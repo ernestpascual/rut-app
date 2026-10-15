@@ -1,6 +1,6 @@
 // Firebase configuration matching the rut main web app
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'mock-api-key-for-local-testing',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDNy_OxbeNWALGHUgc_kjmbkmO2aWb_YXo',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'izepak.firebaseapp.com',
   databaseURL: 'https://izepak-default-rtdb.firebaseio.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'izepak',
