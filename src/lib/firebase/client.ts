@@ -22,7 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Safe client-side environment configuration with fallback placeholders
 // Client-side Firebase configuration for izepak
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'mock-api-key-for-local-testing',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDNy_OxbeNWALGHUgc_kjmbkmO2aWb_YXo',
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'izepak.firebaseapp.com',
   databaseURL: 'https://izepak-default-rtdb.firebaseio.com',
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'izepak',
