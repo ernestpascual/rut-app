@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor User as Creator
+    participant UI as Chat / Thought Canvas (Web & Mobile)
+    participant Callable as chatWithBank Callable
+    participant FS as Cloud Firestore
+    participant RAG as Retrieval & Reranker Engine
+    participant Gemini as Gemini 3.5 / 3.6 Flash
+    participant GSearch as Google Search Tool
+    
+    User->>UI: Enter query (e.g. "Synthesize my typography references")
+    UI->>Callable: Invoke chatWithBank(sessionId, query, pins, webAccess)
+    Callable->>FS: Check User Budget & Global Kill Switch
+    alt Budget Valid
+        Callable->>FS: Query active pins & candidate inspirations
+        Callable->>FS: Query real-time total bank count (count().get())
+        Callable->>RAG: Generate query vector & compute cosine similarity
+        RAG-->>Callable: Return top 5 relevant inspirations with snippets
+        alt webAccess == true
+            Callable->>Gemini: Prompt with RAG Context + tools: [{ googleSearch: {} }]
+            Gemini->>GSearch: Real-time query execution
+            GSearch-->>Gemini: Return fresh web grounding metadata & chunks
+        else webAccess == false
+            Callable->>Gemini: Prompt with Bank Context & Strict Citation Rules
+        end
+        Gemini-->>Callable: Return synthesized response with [ID: xxx] citations
+        Callable->>FS: Store user & assistant messages in chats/{id}/messages
+        Callable->>FS: Log token consumption & micro-cost in usageEvents
+        Callable-->>UI: Return response text + citation metadata + web sources
+        UI-->>User: Render markdown with interactive clickable SourceCards
+    end

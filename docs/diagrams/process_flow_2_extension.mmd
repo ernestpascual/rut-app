@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor User as Creator on Desktop Chrome
+    participant ExtPopup as Chrome Extension Popup
+    participant Worker as MV3 Background Worker
+    participant Content as Virtual DOM Scraper (Content Script)
+    participant FS as Cloud Firestore
+    participant Fn as Cloud Functions
+    
+    alt Single Dump Link (Active Tab Auto-Save)
+        User->>ExtPopup: Click Extension Icon on any website
+        ExtPopup->>Worker: Query Active Tab (URL & Title)
+        Worker-->>ExtPopup: Pre-populate URL & Title
+        User->>ExtPopup: Click "DUMP"
+        ExtPopup->>FS: Check Duplicate URL / Shortcode
+        alt Duplicate Found
+            ExtPopup-->>User: Display "Already Dumped" banner
+        else Unique URL
+            ExtPopup->>FS: Write doc to users/{uid}/inspirations
+            ExtPopup-->>User: Instant Confirmation Checkmark (<150ms)
+            FS->>Fn: Fire onInspirationWritten (AI Ingestion & Embeddings)
+        end
+    else Collections Sync (Instagram / Pinterest / Facebook)
+        User->>ExtPopup: Open "SYNC COLLECTION" Tab & Choose Platform
+        User->>ExtPopup: Navigate to Saved Collection & Click "START SYNC"
+        ExtPopup->>Content: Inject scraper into active social media tab
+        loop Virtualized Scroll & Harvest
+            Content->>Content: Auto-scroll viewport & extract reel/post URLs & thumbs
+            Content->>Content: Deduplicate against locally seen IDs
+        end
+        Content-->>ExtPopup: Return extracted batch (e.g. 50 items)
+        ExtPopup->>FS: Batch write inspirations in chunks of 20 with origin metadata
+        FS->>Fn: Asynchronously trigger onInspirationWritten for each item
+        ExtPopup-->>User: Display "Batch Synced Successfully" with link to Web App
+    end

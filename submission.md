@@ -69,6 +69,11 @@
 
 #### 4.1 System Use-Case Diagram (Covering Web, Mobile & Chrome Extension)
 
+![System Use-Case Diagram](docs/diagrams/use_case_diagram.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
+
 ```mermaid
 flowchart TD
     User([Creator / Strategist])
@@ -135,9 +140,16 @@ flowchart TD
     UC10 -.-> UC6
 ```
 
+</details>
+
 ---
 
 #### 4.2 Process Flow 1: Universal Capture Pipeline (Mobile & Web App)
+
+![Process Flow 1: Universal Capture](docs/diagrams/process_flow_1_capture.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
 
 ```mermaid
 sequenceDiagram
@@ -170,9 +182,16 @@ sequenceDiagram
     end
 ```
 
+</details>
+
 ---
 
 #### 4.3 Process Flow 2: Chrome Browser Extension Workflows (Single Dump & Collections Sync)
+
+![Process Flow 2: Chrome Extension Workflows](docs/diagrams/process_flow_2_extension.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
 
 ```mermaid
 sequenceDiagram
@@ -212,9 +231,16 @@ sequenceDiagram
     end
 ```
 
+</details>
+
 ---
 
 #### 4.4 Process Flow 3: "Train of Thought" (Interactive RAG Brainstorming)
+
+![Process Flow 3: Train of Thought RAG](docs/diagrams/process_flow_3_train_of_thought.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
 
 ```mermaid
 sequenceDiagram
@@ -250,9 +276,16 @@ sequenceDiagram
     end
 ```
 
+</details>
+
 ---
 
 #### 4.5 Process Flow 4: Idea Studio Concept Brief Matching
+
+![Process Flow 4: Idea Studio Concept Brief Matching](docs/diagrams/process_flow_4_idea_studio.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
 
 ```mermaid
 sequenceDiagram
@@ -274,9 +307,16 @@ sequenceDiagram
     Studio-->>User: Item pinned to project board
 ```
 
+</details>
+
 ---
 
 ### 5. Architecture Diagram of the Proposed Solution
+
+![Architecture Diagram](docs/diagrams/architecture_diagram.png)
+
+<details>
+<summary>▶ Click to expand Mermaid code / Copy to Mermaid Live Editor</summary>
 
 ```mermaid
 flowchart TB
@@ -340,6 +380,8 @@ flowchart TB
     Callables --> ServerDocs
     Callables --> UserDocs
 ```
+
+</details>
 
 ---
 

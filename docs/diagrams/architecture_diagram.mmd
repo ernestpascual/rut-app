@@ -1,0 +1,60 @@
+flowchart TB
+    subgraph ClientSurfaces ["Client Surfaces & Presentation Layer"]
+        direction TB
+        MobileApp["1. Mobile Application (iOS & Android)<br/>• React Native 0.86 / Expo SDK 52<br/>• Native iOS Share Extension (App Group IPC)<br/>• Android SEND Intent Filter"]
+        WebApp["2. Web Application (PWA)<br/>• React 19 / Expo Router v4<br/>• W3C Web Share Target API<br/>• Edge CDN via rut.web.app"]
+        BrowserExt["3. Chrome Browser Extension (v1.0.3)<br/>• Manifest V3 / Vite 6<br/>• Active Tab 1-Click Dumper<br/>• IG / Pinterest / FB Collections Auto-Scraper"]
+        DesignSys["Editorial Design System<br/>• 0px Radius Vocabulary<br/>• Pure B&W Monochrome (#000000 / #ffffff)<br/>• Flat Elevation (0px Box Shadows)"]
+        MobileApp --- DesignSys
+        WebApp --- DesignSys
+        BrowserExt --- DesignSys
+    end
+
+    subgraph SecurityGateway ["Security, Auth & Gateway Layer"]
+        FirebaseAuth["Firebase Authentication<br/>(JWT Tokens, Cross-Platform Sessions, Extension Web Auth)"]
+        SecRules["Firestore Security Rules<br/>• Strict Multi-Tenancy (request.auth.uid == userId)<br/>• Zero Client Read/Write to Internal AI Indexes"]
+        SecretMgr["Google Secret Manager<br/>(Encrypted GEMINI_API_KEY)"]
+    end
+
+    subgraph ServerlessCompute ["Serverless Compute Layer (Firebase 2nd Gen on Google Cloud Run)"]
+        direction TB
+        SSRF["SSRF-Protected Scraper<br/>• Canonical URL Normalizer<br/>• OpenGraph / HTML Parser<br/>• 256KB Max Response Buffer"]
+        
+        TriggerFn["Event Trigger: onInspirationWritten<br/>• Autonomous Background Enrichment<br/>• 768-dim Vector Embedding Generation<br/>• Automated Summary & Tagging"]
+        
+        Callables["HTTPS Callable APIs<br/>• semanticSearch (Hybrid Vector + Stem Ranking)<br/>• chatWithBank (Multi-Turn RAG + Google Search)<br/>• suggestProjectLinks (Structured Brief Evaluation)<br/>• deleteAccountData (GDPR Purge)"]
+        
+        CostLedger["Integer-Micros Ledger & Guardrails<br/>• Real-time Micro-Dollar Cost Accounting<br/>• User Daily Budget Cap ($2.00 / 500 req)<br/>• Global Emergency Kill Switch"]
+    end
+
+    subgraph GoogleAISuite ["Google AI / Gemini Suite"]
+        GeminiFlash["Gemini Flash Models<br/>• gemini-3.5-flash-lite (Default Ingestion & Linking)<br/>• gemini-3.6-flash (Creative Brainstorming)<br/>• gemini-3.8-flash (Complex Synthesis)"]
+        TextEmbed["text-embedding-004<br/>• 768-dimensional dense vector embeddings"]
+        GoogleSearch["Google Search Grounding<br/>• Real-time web precedent validation"]
+    end
+
+    subgraph DataStoreLayer ["Cloud Firestore Multi-Tenant NoSQL"]
+        direction TB
+        UserDocs["User Collections (Client-Accessible)<br/>• users/{uid}/inspirations<br/>• users/{uid}/thoughts & messages<br/>• users/{uid}/projects & links<br/>• users/{uid}/trash"]
+        ServerDocs["Server-Only Restricted Collections<br/>• _aiInspirationIndex (Dense Vector Store)<br/>• _aiUsageLedger (Micro-Cost Audit Log)<br/>• _systemConfig/global (Operational Kill Switch)"]
+    end
+
+    ClientSurfaces -->|HTTPS / WSS| FirebaseAuth
+    ClientSurfaces -->|Direct Authenticated Read/Write| SecRules
+    SecRules --> UserDocs
+    ClientSurfaces -->|Authenticated Callables| Callables
+    
+    UserDocs -->|Document Write Trigger| TriggerFn
+    TriggerFn --> SSRF
+    TriggerFn --> GeminiFlash
+    TriggerFn --> TextEmbed
+    TriggerFn --> ServerDocs
+    TriggerFn --> CostLedger
+    
+    Callables --> SecretMgr
+    Callables --> CostLedger
+    Callables --> GeminiFlash
+    Callables --> TextEmbed
+    Callables --> GoogleSearch
+    Callables --> ServerDocs
+    Callables --> UserDocs

@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor User as Creator / User
+    participant App as Mobile App (iOS/Android) / Web App
+    participant FS as Cloud Firestore
+    participant Fn as Cloud Functions (2nd Gen)
+    participant Scraper as SSRF Safe Scraper
+    participant Gemini as Google Gemini AI Suite
+    
+    User->>App: Share Link (iOS/Android Share Sheet) or Direct Paste (Web)
+    App->>App: Normalize URL & Compute SHA-256 Content Hash
+    App->>FS: Query Duplicate Hash (prevent double-saves)
+    alt Hash Already Exists
+        App-->>User: Prompt "Already saved in Bank" & Preview Existing Item
+    else New Inspiration
+        App->>FS: Write doc (users/{uid}/inspirations) with status="pending"
+        App-->>User: Instant Optimistic UI Confirmation (<100ms)
+        FS->>Fn: onInspirationWritten Event Trigger
+        Fn->>Scraper: Fetch OpenGraph metadata & remote preview image
+        Scraper-->>Fn: Return sanitized title, description, image URL
+        Fn->>Gemini: gemini-3.5-flash-lite (JSON Mode Summary + Tags + Concepts)
+        Gemini-->>Fn: Return { summary, aiTags, concepts }
+        Fn->>Gemini: text-embedding-004 (768-dim Vector)
+        Gemini-->>Fn: Return dense vector embedding
+        Fn->>FS: Save vector to server-only _aiInspirationIndex
+        Fn->>FS: Update inspiration status="ready" + aiSummary + aiTags
+        Fn->>FS: Append integer-micros token cost to _aiUsageLedger
+    end

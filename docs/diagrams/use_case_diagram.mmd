@@ -1,0 +1,63 @@
+flowchart TD
+    User([Creator / Strategist])
+    
+    subgraph ClientSurfaces ["Client Surfaces"]
+        Web[Web App: rut.web.app]
+        Mobile[Mobile App: iOS & Android]
+        Ext[Chrome Extension: MV3]
+    end
+
+    subgraph CaptureWorkflows ["1. Capture & Ingestion Engine"]
+        UC1[Universal Share Target & Quick Dump]
+        UC2[Browser Extension 1-Click Dump]
+        UC3[Browser Extension Social Collections Sync]
+        UC4[Auto Metadata Extraction & SSRF Scrape]
+        UC5[Gemini Background Ingestion & Tagging]
+        UC6[Dense Vector Indexing text-embedding-004]
+    end
+    
+    subgraph IdeationWorkflows ["2. Ideation & Synthesis Engine"]
+        UC7[Semantic Natural-Language Search]
+        UC8[Train of Thought Multi-Turn RAG Chat]
+        UC9[Live Web Grounding via Google Search]
+        UC10[Idea Studio Concept Brief Matching]
+    end
+    
+    subgraph VaultManagement ["3. Vault & Safety Controls"]
+        UC11[Platform Filtering & Batch Deletion]
+        UC12[Trash Vault & Soft-Delete Recovery]
+        UC13[Model Selection & Real-Time Cost Monitor]
+    end
+    
+    User --> Web
+    User --> Mobile
+    User --> Ext
+    
+    Web --> UC1
+    Web --> UC7
+    Web --> UC8
+    Web --> UC10
+    Web --> UC11
+    Web --> UC12
+    Web --> UC13
+    
+    Mobile --> UC1
+    Mobile --> UC7
+    Mobile --> UC8
+    Mobile --> UC10
+    Mobile --> UC11
+    Mobile --> UC12
+    Mobile --> UC13
+    
+    Ext --> UC2
+    Ext --> UC3
+    
+    UC1 --> UC4
+    UC2 --> UC4
+    UC3 --> UC4
+    UC4 --> UC5
+    UC5 --> UC6
+    UC8 -.-> UC9
+    UC8 -.-> UC6
+    UC7 -.-> UC6
+    UC10 -.-> UC6

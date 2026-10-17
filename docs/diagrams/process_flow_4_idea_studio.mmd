@@ -1,0 +1,17 @@
+sequenceDiagram
+    autonumber
+    actor User as Creator
+    participant Studio as Idea Studio Screen (Web & Mobile)
+    participant Linker as suggestProjectLinks Callable
+    participant FS as Cloud Firestore
+    participant Gemini as Gemini 3.5 Flash Lite
+    
+    User->>Studio: Open Project Concept & Tap "Find Relevant References"
+    Studio->>Linker: Invoke suggestProjectLinks(projectId)
+    Linker->>FS: Fetch Project Brief & up to 30 unlinked bank inspirations
+    Linker->>Gemini: Evaluate brief against candidate snippets (JSON Schema Mode)
+    Gemini-->>Linker: Return ranked matches: [{ inspirationId, score, reasoning }]
+    Linker-->>Studio: Display ranked recommendations with match percentage & rationale
+    User->>Studio: Tap "Link to Project" on suggested item
+    Studio->>FS: Write to users/{uid}/projects/{id}/inspirationLinks
+    Studio-->>User: Item pinned to project board
