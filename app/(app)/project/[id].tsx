@@ -1520,15 +1520,41 @@ export default function ProjectDetailScreen() {
                   </View>
                 )}
 
+                {/* ATTACHED REFERENCES SECTION HEADER & BATCH ACTIONS */}
+                <View style={styles.refSectionHeaderRow}>
+                  <Text style={styles.sectionHeading}>
+                    ATTACHED REFERENCES ({links.length})
+                  </Text>
+                  {links.length > 0 && !selectRefsMode && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                      <Button
+                        title="SELECT MANY"
+                        variant="secondary"
+                        onPress={() => setSelectRefsMode(true)}
+                        style={{ height: 28, paddingHorizontal: 10 }}
+                      />
+                      <Button
+                        title="SELECT ALL"
+                        variant="secondary"
+                        onPress={() => {
+                          setSelectRefsMode(true);
+                          setSelectedRefIds(links.map((l) => l.inspirationId));
+                        }}
+                        style={{ height: 28, paddingHorizontal: 10 }}
+                      />
+                    </View>
+                  )}
+                </View>
+
                 {/* MULTI-SELECT BAR FOR REFERENCES */}
-                {selectRefsMode ? (
+                {selectRefsMode && links.length > 0 && (
                   <View style={styles.refSelectionBar}>
                     <Text style={styles.refSelectionCount}>
                       {selectedRefIds.length} OF {links.length} SELECTED
                     </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' }}>
                       <Button
-                        title={selectedRefIds.length === links.length ? 'DESELECT' : 'SELECT ALL'}
+                        title={selectedRefIds.length === links.length ? 'DESELECT ALL' : 'SELECT ALL'}
                         variant="secondary"
                         onPress={handleToggleSelectAllRef}
                         style={{ height: 32, paddingHorizontal: 10 }}
@@ -1542,6 +1568,7 @@ export default function ProjectDetailScreen() {
                           paddingHorizontal: 12,
                           backgroundColor: colors.statusErrorText || '#E03131',
                           borderWidth: 0,
+                          opacity: selectedRefIds.length === 0 ? 0.4 : 1,
                         }}
                       />
                       <Button
@@ -1555,17 +1582,7 @@ export default function ProjectDetailScreen() {
                       />
                     </View>
                   </View>
-                ) : links.length > 0 ? (
-                  <View style={styles.refSelectBarRow}>
-                    <View />
-                    <Button
-                      title="SELECT"
-                      variant="secondary"
-                      onPress={() => setSelectRefsMode(true)}
-                      style={{ height: 30, paddingHorizontal: 12, marginBottom: spacing.xs }}
-                    />
-                  </View>
-                ) : null}
+                )}
 
                 {/* ATTACHED REFERENCES LIST */}
                 {links.length === 0 ? (
@@ -1634,14 +1651,22 @@ export default function ProjectDetailScreen() {
                               />
                             ) : null}
                             {selectRefsMode && (
-                              <View
+                              <Pressable
+                                onPress={(e) => {
+                                  e.stopPropagation?.();
+                                  toggleSelectRef(link.inspirationId);
+                                }}
+                                hitSlop={8}
                                 style={[
                                   styles.selectCheckbox,
                                   isSelected && styles.selectCheckboxActive,
                                 ]}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: isSelected }}
+                                accessibilityLabel={isSelected ? 'Deselect reference' : 'Select reference'}
                               >
                                 {isSelected && <Text style={styles.selectCheckboxCheck}>✓</Text>}
-                              </View>
+                              </Pressable>
                             )}
                           </View>
                         </View>
@@ -1665,7 +1690,7 @@ export default function ProjectDetailScreen() {
                               />
                             ) : null}
                             <Button
-                              title="✕ DETACH"
+                              title="✕ DELETE"
                               variant="text"
                               onPress={() => handleDetachReference(link.inspirationId)}
                               style={{ height: 28, paddingHorizontal: 4 }}
@@ -2610,6 +2635,15 @@ const getStyles = (colors: ThemeColors) =>
     ...typography.captionCap,
     color: colors.ink,
     letterSpacing: 0.5,
+  },
+  refSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.base,
+    marginBottom: spacing.xs,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   refSelectBarRow: {
     flexDirection: 'row',
