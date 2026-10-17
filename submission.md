@@ -3,6 +3,12 @@
 
 ---
 
+### Problem Statement (1 Sentence)
+
+> **"Creative inspiration is hopelessly fragmented across siloed social bookmarks and browser tabs, making it nearly impossible to pull out, synthesize, and leverage relevant references when it is time to actually design and build."**
+
+---
+
 ### 1. Brief About the Idea (100 words)
 
 `rut` is an AI-powered creative inspiration vault and visual thinking studio available across Web, iOS, Android, and a Chrome extension. It replaces fragmented digital bookmark hoarding with universal one-click capture and social collection syncing from Instagram, Pinterest, and Facebook. Every captured link, snippet, and note is autonomously analyzed, tagged, and indexed with Google Gemini and dense text embeddings. Creators brainstorm inside an interactive "Train of Thought" canvas that cites private inspirations and live web precedents inline, while an automated brief matcher connects saved assets directly to active project concepts with zero media storage overhead.
