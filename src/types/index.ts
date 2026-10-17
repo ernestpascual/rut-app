@@ -3,6 +3,7 @@ export type InspirationKind = 'link' | 'note' | 'quote';
 export type SourcePlatform =
   | 'instagram'
   | 'pinterest'
+  | 'facebook'
   | 'tiktok'
   | 'x'
   | 'threads'

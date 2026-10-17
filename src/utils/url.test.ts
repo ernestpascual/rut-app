@@ -58,6 +58,21 @@ describe('URL Utilities', () => {
     });
     expect(res3).toContain('/(app)/inspiration/new?');
 
+    // TikTok shared text with video link
+    const resTikTok = redirectSystemPath({
+      path: 'rut://share?text=Check out this video on TikTok: https://www.tiktok.com/@creator/video/1234567890',
+      initial: false
+    });
+    expect(resTikTok).toContain('/(app)/inspiration/new?');
+    expect(resTikTok).toContain('https%3A%2F%2Fwww.tiktok.com%2F%40creator%2Fvideo%2F1234567890');
+
+    // Internal iOS share extension dataUrl link routes Expo Router safely to Bank tab so native module handles data without 404
+    const resDataUrl = redirectSystemPath({
+      path: 'rut://dataUrl=rutShareKey?nonce=123#media',
+      initial: false
+    });
+    expect(resDataUrl).toBe('/(app)/(tabs)/bank');
+
     // Standard internal routes remain untouched
     expect(redirectSystemPath({ path: '/(app)/(tabs)/bank', initial: false })).toBe('/(app)/(tabs)/bank');
     expect(redirectSystemPath({ path: '/(app)/project/p-1', initial: false })).toBe('/(app)/project/p-1');

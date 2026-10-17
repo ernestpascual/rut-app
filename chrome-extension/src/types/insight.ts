@@ -3,6 +3,7 @@ export type InspirationKind = 'link' | 'note' | 'quote';
 export type SourcePlatform =
   | 'instagram'
   | 'pinterest'
+  | 'facebook'
   | 'tiktok'
   | 'x'
   | 'threads'
@@ -70,7 +71,7 @@ export interface ScrapedReelMetadata {
     slug: string;
     name: string;
   };
-  source: 'instagram_collection';
+  source: 'instagram_collection' | 'facebook_collection' | 'pinterest_collection' | string;
   scrapedAt: string;           // ISO timestamp
 }
 
@@ -105,11 +106,12 @@ export type ExtensionMessage =
       items: ScrapedReelMetadata[];
       customTags?: string[];
       collectionOrigin?: string;
+      platform?: 'instagram' | 'facebook' | 'pinterest';
     }
   | {
       type: 'DUMP_URL_ITEM';
       payload: {
-        platform: 'instagram' | 'pinterest';
+        platform?: SourcePlatform;
         url: string;
         title?: string;
         tags: string[];

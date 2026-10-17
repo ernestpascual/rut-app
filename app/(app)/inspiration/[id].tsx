@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -28,7 +29,7 @@ import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
-import { getDumpInspirations, setDumpInspirations } from '../../../src/features/dump/dumpService';
+import { getDumpInspirations, setDumpInspirations, deleteInspiration } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
 export default function InspirationDetailScreen() {
@@ -47,6 +48,7 @@ export default function InspirationDetailScreen() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showImage, setShowImage] = useState(true);
 
   useEffect(() => {
@@ -77,7 +79,11 @@ export default function InspirationDetailScreen() {
         setEditTags(found.tags || []);
       } else {
         Alert.alert('Not Found', 'Inspiration item does not exist.');
-        router.back();
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(app)/(tabs)/bank');
+        }
       }
       setLoading(false);
     };
@@ -145,29 +151,40 @@ export default function InspirationDetailScreen() {
 
   const handleDelete = async () => {
     if (!item) return;
-    Alert.alert(
-      'Delete Inspiration',
-      'Are you sure you want to permanently remove this inspiration from your bank?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (user) {
-                await deleteDoc(doc(db, 'users', user.uid, 'inspirations', item.id)).catch(() => {});
-              }
-              const local = await getDumpInspirations();
-              await setDumpInspirations(local.filter((i) => i.id !== item.id));
-              router.back();
-            } catch (err: any) {
-              Alert.alert('Delete Failed', err.message);
-            }
-          },
-        },
-      ]
-    );
+
+    const performDelete = async () => {
+      setDeleting(true);
+      try {
+        await deleteInspiration(item.id, user?.uid);
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(app)/(tabs)/bank');
+        }
+      } catch (err: any) {
+        Alert.alert('Delete Failed', err.message);
+        setDeleting(false);
+      }
+    };
+
+    const confirmMessage = `Are you sure you want to permanently remove "${item.title}" from your bank?`;
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && window.confirm(`Delete Inspiration\n\n${confirmMessage}`);
+      if (confirmed) {
+        await performDelete();
+      }
+      return;
+    }
+
+    Alert.alert('Delete Inspiration', confirmMessage, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: performDelete,
+      },
+    ]);
   };
 
   const handleDeleteAiInsight = () => {
@@ -398,7 +415,7 @@ export default function InspirationDetailScreen() {
                     <Text style={styles.conceptHeading}>EXTRACTED CONCEPTS:</Text>
                     <View style={styles.tagRow}>
                       {Array.from(new Set(item.concepts)).map((c, idx) => (
-                        <Badge key={`concept-${c}-${idx}`} label={c} variant="outline" />
+                        <Badge key={`concept-${c}-${idx}`} label={String(c)} variant="outline" />
                       ))}
                     </View>
                   </View>
@@ -439,8 +456,10 @@ export default function InspirationDetailScreen() {
                 style={{ marginBottom: spacing.sm }}
               />
               <Button
-                title="DELETE FROM BANK"
+                title={deleting ? 'DELETING...' : 'DELETE FROM BANK'}
                 variant="secondary"
+                disabled={deleting || saving}
+                loading={deleting}
                 onPress={handleDelete}
               />
             </View>

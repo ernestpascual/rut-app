@@ -8,21 +8,30 @@
 
 ## 2. Platform Share Targets
 
-### A. Android Intent Filter
-Configured in `app.json` under `expo.android.intentFilters`:
-```json
-{
-  "action": "SEND",
-  "category": ["DEFAULT"],
-  "data": [{ "mimeType": "text/plain" }]
-}
-```
-When a user taps "Share via..." on Android in an app like Instagram, TikTok, or Chrome, Android passes the plain text or URL into `rut` via deep-link scheme `rut://`.
+### A. Android Intent Filter & Activity
+Configured via `expo-share-intent` in `app.json`:
+- Intercepts `android.intent.action.SEND` and `SEND_MULTIPLE` for MIME types `text/*`, `image/*`, `video/*`, and `*/*`.
+- Configures `android:launchMode="singleTask"` so incoming shares are routed directly into the running instance without creating ghost activities.
+- When a user taps "Share" on Instagram, TikTok, Chrome, or X, the Android share sheet displays `rut`, and passing the intent forwards text, URL, and title into `useShareIntentContext()`.
 
-### B. iOS Share Handling
-Configured with custom URL scheme `rut`:
-- `CFBundleURLTypes` registers scheme `rut`.
-- `app/+native-intent.ts` intercepts deep links starting with `rut://share` or incoming intent paths, rewriting them to `/share-target`.
+### B. iOS Share Extension & TestFlight Readiness
+Configured via `expo-share-intent` with automated EAS Build support:
+- **Share Extension Target**: Target name `rut`, bundle identifier `com.rut.app.share-extension`.
+- **App Group**: `group.com.rut.app` enables secure cross-process IPC between the iOS Share Sheet extension and the main React Native application.
+- **Activation Rules (`NSExtensionActivationRule`)**:
+  ```json
+  {
+    "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+    "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+    "NSExtensionActivationSupportsText": true,
+    "NSExtensionActivationSupportsImageWithMaxCount": 10,
+    "NSExtensionActivationSupportsMovieWithMaxCount": 1
+  }
+  ```
+  Ensures `rut` appears in the iOS Share Sheet when sharing from Instagram (posts, reels, links, thumbnails) and TikTok (videos, sounds, profile links, captions), even when media previews are attached to the share.
+- **TestFlight & Production**: Preconfigured for EAS Build (`extra.eas.build.experimental.ios.appExtensions`). Provisioning profiles and entitlements are managed automatically during EAS iOS builds (`eas build --platform ios`).
+- **Silent Handoff (`iosHideView: true`)**: The extension immediately passes the shared payload to the shared App Group container and opens `rut://` without an intermediary modal flash.
+- `app/_layout.tsx` wraps the app in `<ShareIntentProvider>` and handles incoming shares via `<ShareIntentHandler>`, routing directly to `/(app)/inspiration/new`.
 
 ### C. Installable PWA Share Target
 Declared in `public/manifest.json`:

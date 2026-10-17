@@ -120,3 +120,10 @@ To immediately stop all billable AI calls across the entire infrastructure witho
 4. All callable endpoints and triggers will immediately halt AI provider calls, return `AI_DISABLED` errors to clients, and prevent further cost accumulation.
 
 To reactivate: set `killSwitchEnabled: false`.
+
+---
+
+## 8. Related Documentation
+- For current per-user unit economics and scaling projections, see **[COST_ESTIMATE_20261017_165100.md](COST_ESTIMATE_20261017_165100.md)**.
+- For operational procedures on configuring guardrails and daily quotas, see **[COST_SAFETY_GUARDRAILS.md](COST_SAFETY_GUARDRAILS.md)**.
+

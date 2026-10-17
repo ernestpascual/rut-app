@@ -20,13 +20,9 @@ export default function NotFoundScreen() {
           The page you are looking for does not exist in this inspiration bank.
         </Text>
         <Button
-          title="← GO BACK"
+          title="← GO TO INSPIRATION BANK"
           onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(app)/(tabs)/bank');
-            }
+            router.replace('/(app)/(tabs)/bank');
           }}
           style={{ marginTop: spacing.lg }}
         />

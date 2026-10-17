@@ -1,219 +1,105 @@
 # rut: Universal Inspiration Bank & Idea Studio
 
-`rut` is a cross-platform (iOS, Android, Web, and Chrome Extension) private creative workspace and inspiration bank. Dump links, snippets, thoughts, and shared social posts from Instagram, Pinterest, TikTok, X, Threads, YouTube, and the web. Organize your dump, draft creative ideas, auto-match saved inspirations as references, and brainstorm in an interactive AI Train of Thought with live internet search grounding.
+`rut` is a cross-platform (iOS, Android, Web, and Chrome Extension) private creative workspace and inspiration bank. Capture links, snippets, thoughts, and social posts from Instagram, Pinterest, TikTok, X, Threads, YouTube, and the web. Organize your dump, auto-match saved inspirations to creative briefs, and brainstorm with an interactive AI Train of Thought grounded in your private vault and live Google search.
 
 Live Web App: **[rut.web.app](https://rut.web.app)**
 
 ---
 
-## 1. Product Overview
+## Core Features at a Glance
 
-`rut` solves creative fragmentation:
-
-1. **Share From Phone ➔ Dump**: Share from your phone (iOS, Android, or PWA share target) or browser to instantly capture inspiration. Everything starts in the **Dump** inbox.
-2. **Instagram Collection Importer (Chrome Extension)**: Connect your Chrome Extension to your Instagram Saved Collections. The extension auto-scrolls the virtualized DOM and syncs Reels, captions, and thumbnails directly to your Insight Bank.
-3. **Fast Filter & Search**: Instant client-side search across titles, notes, domains, and auto-generated tags, with multi-platform filtering (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`, etc.).
-4. **Idea Studio & Reference Matcher**: Write your creative concept, brief, and specifications. Run **Find Inspirations From Dump** to automatically score and attach relevant references from your bank.
-5. **Interactive AI Train of Thought**: Brainstorm directly on any idea or standalone chat. Query your personal dump, toggle live internet search grounding (`🌐 Live Web Search`), switch Gemini models on the fly, and navigate with a clean, uncluttered interface.
-
----
-
-## 2. Active Features & Capabilities
-
-### 💬 Interactive AI Train of Thought & Brainstorming
-- **Decluttered Chat Canvas**: A clean, distraction-free creative workspace with a prominent back button (`← CHATS`) and streamlined input bar.
-- **Hamburger Options Menu (`☰`)**:
-  - **AI Model Switcher**: Switch on the fly between Google Gemini models (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`) with preferences saved across sessions.
-  - **Pull & Check From Dump**: Browse saved inspirations, pin them into reasoning context, or ask the AI directly about any item.
-  - **Live Web Search Toggle**: One-tap toggle (`🌐 Live Web Search: ON/OFF`) to ground answers in real-time Google search results and contemporary precedents.
-  - **Delete Train of Thought**: Safe deletion with an in-app confirmation modal.
-- **RAG Over Your Personal Dump**: The AI inference engine anchors your saved inspirations into reasoning context, citing specific references inline with clickable source cards.
-- **Formatted Markdown & Sources**: Cross-platform Markdown rendering supporting headers, bullet lists, bold emphasis, code blocks, and source pill links.
-
-### 🧩 Instagram Saved Collection Chrome Extension (`/chrome-extension`)
-- **Manifest V3 & CSP Compliant**: Built with Vite and `@crxjs/vite-plugin`, leveraging `firebase/auth/web-extension` to prevent Content Security Policy violations.
-- **Virtualized DOM Scraper**: Handles Instagram's DOM recycling by harvesting Reel shortcodes, canonical links, captions, and CDN thumbnails on every scroll tick with randomized jitter (1200ms–1600ms) to avoid rate limits.
-- **Deterministic Batch Sync**: Deduplicates and batches writes in chunks of 400 directly to `users/{uid}/inspirations/ig_reel_{shortcode}`.
-- **Background AI Auto-Enrichment**: Writes with `processingStatus: 'pending'` to automatically trigger background Cloud Functions for AI auto-tagging, summarization, and vector embeddings.
-- **One-Command Distribution**: `npm run zip` packages `rut-extension.zip` for instant sharing with teammates and beta testers.
-
-### 📥 Universal Phone Share ➔ Dump Folder
-- **Single Inbox Architecture**: All incoming material begins in the `dump` folder, keeping discovery separate from structured project ideas.
-- **Native OS & PWA Share Targets**: Native iOS/Android share sheets and PWA Web Share Target API capture links directly into the database.
-- **Quick Dump Input**: Paste links from Pinterest, Instagram, TikTok, X, YouTube, or any website with automatic platform detection, metadata extraction, and canonicalization.
-
-### 🎯 Idea Studio & Reference Attachment
-- **Structured Idea Workspace**: Formulate titles, briefs, notes, specifications, and tags.
-- **Dump Reference Matcher**: Scans saved inspirations with concept clustering and token affinity, providing transparent match reasoning (*e.g., "94% MATCH — Matches brutalist, typography, poster in dump tags"*).
-- **One-Tap Linking**: Attach individual matches, attach all, or manually browse and connect inspirations.
-- **Integrated Thought Flow**: View thought trains attached directly to your ideas, with one-tap expansion into the full chat workspace.
-
-### 🎨 Editorial Monochrome Design System
-- **High-Contrast Fashion Layout**: Strict adherence to [`DESIGN.md`](DESIGN.md) — 0px sharp corners, pure `#000000` / `#ffffff` contrasts, clean hairlines, and modern typographic hierarchies.
-- **Light & Dark Themes**: Instant toggle with persistence in `AsyncStorage`.
-
-### 🛡️ Cost Safety & Guardrails
-- **Integer Micros Accounting**: Costs tracked in integer micros (`1 USD = 1,000,000 micros`) on the backend.
-- **Daily Budget Cap**: Enforces a strict $2.00 / 500 requests per user per day safety cap.
-- **Emergency Kill-Switch**: Central boolean in Firestore halts all AI operations instantly.
-- Detailed documentation: [`COST_ANALYSIS.md`](COST_ANALYSIS.md) and [`COST_SAFETY_GUARDRAILS.md`](COST_SAFETY_GUARDRAILS.md).
+- **Universal Capture & Phone Share**: Ingest links directly from iOS and Android native share sheets, PWA web share targets, or direct URL paste.
+- **Instagram Saved Collection Sync**: Chrome extension auto-scrolls virtualized collections, harvesting Reels, captions, and thumbnails into your bank in deterministic batches.
+- **Fast Filter & Search**: Instant client-side search across titles, notes, and auto-generated tags with multi-platform filtering (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`).
+- **Interactive AI Train of Thought**: Brainstorm directly against your personal dump. Cites specific inspirations inline with clickable cards, supports on-the-fly Gemini model switching, and toggles real-time Google Search grounding (`🌐 Live Web Search`).
+- **Idea Studio & Reference Matcher**: Draft briefs and concepts while the AI automatically scores and links relevant references from your dump with transparent match reasoning.
+- **Editorial Monochrome Design**: High-contrast, typography-first aesthetic strictly adhering to [`DESIGN.md`](DESIGN.md) (0px radius vocabulary, pure black & white, flat elevation).
+- **Cost Safety & Deterministic Accounting**: Integer micros accounting (`$1 = 1,000,000 µs`), daily user budget caps ($2.00 / 500 requests), and an instant global emergency kill-switch.
 
 ---
 
-## 3. Architecture & Tech Stack
+## Documentation Deep-Dives
 
-```
-rut/
-├── app/                        # Expo Router cross-platform app (iOS, Android, Web)
-│   ├── (auth)/                 # Auth flows (Login, Sign-up, Forgot Password)
-│   ├── (app)/
-│   │   ├── (tabs)/             # Tab navigation: Bank (Dump), Ideas, Chats, Settings
-│   │   ├── project/[id].tsx    # Idea Studio & Train of Thought workspace
-│   │   ├── chat/[id].tsx       # Full Chat interface with hamburger menu & live web
-│   │   └── inspiration/[id].tsx# Inspiration detail & edit view
-│   └── share-target.tsx        # Mobile OS & PWA incoming share receiver
-├── chrome-extension/           # Standalone Manifest V3 Chrome Extension
-│   ├── src/
-│   │   ├── background/         # Service worker: MV3 Auth & Firestore batch sync
-│   │   ├── content/            # Instagram DOM virtualized scraper
-│   │   ├── popup/              # React Popup UI (4 states)
-│   │   └── types/              # Mirrored schemas & message contracts
-│   └── manifest.json           # Chrome MV3 manifest with externally_connectable
-├── functions/                  # Firebase Cloud Functions (Node.js 20, TypeScript)
-│   └── src/
-│       ├── ai/                 # Gemini API integration & vector embeddings
-│       ├── callable/           # captureMetadata, chatWithBank, suggestProjectLinks
-│       ├── cost/               # Integer micros ledger, guardrails, pricing tables
-│       └── triggers/           # onInspirationWritten (auto AI enrichment)
-└── src/
-    ├── components/ui/          # Design system components & MarkdownRenderer
-    ├── design/                 # Tokens (typography, monochrome palette, spacing)
-    ├── features/
-    │   ├── auth/               # AuthContext, dummy login fallback, session sync
-    │   ├── chat/               # Chat service, model manager, web search grounding
-    │   ├── dump/               # Dump CRUD, sorting algorithms, enrichment
-    │   └── ideas/              # Concept cluster matcher engine
-    ├── lib/firebase/           # Firebase client initialization
-    └── utils/                  # URL normalization, domain detection, metadata
-```
+Detailed technical guides, architectural specifications, and audits are maintained in [`docs/`](docs/):
 
-- **Frontend**: React Native 0.86, Expo SDK 52+, Expo Router v4, React 19.
-- **Chrome Extension**: Vite 6, `@crxjs/vite-plugin`, React 19, TypeScript.
-- **Backend**: Firebase Cloud Functions v2 (TypeScript), Cloud Firestore.
-- **AI & Reasoning**: Google Gemini API (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, `text-embedding-004`).
-- **Hosting**: Firebase Hosting ([rut.web.app](https://rut.web.app)).
+| Guide | Description |
+|---|---|
+| **[Architecture & System Design](docs/ARCHITECTURE.md)** | High-level topology, technical pillars, data flow, and isolation principles. |
+| **[Google Cloud, Firebase & Gemini AI](docs/GOOGLE_USAGE.md)** | Full breakdown of Gemini models, `text-embedding-004`, Search Grounding, and Cloud Functions. |
+| **[Universal Sharing & Capture Pipeline](docs/SHARING.md)** | iOS Share Extension, Android SEND intents, PWA Share Target, and deduplication logic. |
+| **[Cost Estimates & Unit Economics](docs/COST_ESTIMATE_20261017_165100.md)** | Per-action unit costs, user persona monthly estimates, and fleet scaling projections. |
+| **[Cost Safety & Guardrails Manual](docs/COST_SAFETY_GUARDRAILS.md)** | Step-by-step procedures for adjusting daily limits, billing alerts, and the central kill-switch. |
+| **[Security Audit & Vulnerability Assessment](docs/SECURITY_SCAN_20261017_165100.md)** | Automated dependency scan, Red Team Firestore security rules audit, and SSRF defenses. |
+| **[Design System Guidelines](DESIGN.md)** | Editorial typography tokens, monochrome palette, spacing rules, and layout constraints. |
 
 ---
 
-## 4. Google Cloud & Firebase Ecosystem: How Google Services Are Used
+## Tech Stack
 
-`rut` is built entirely on top of the Google Cloud, Firebase, and Gemini AI ecosystem. Here is how each service is utilized across the project:
-
-| Google Service | Implementation & Location | Purpose & Capabilities |
-| :--- | :--- | :--- |
-| **Google Gemini Generative AI** | `functions/src/ai/gemini-provider.ts`<br>`src/features/chat/chatService.ts` | Multi-model conversational inference (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.5-flash-lite`, `gemini-2.0-flash`). Powers interactive Train of Thought brainstorming, auto-summarization, multi-tag extraction, and project idea conceptual matching. |
-| **Google Search Grounding** | `tools: [{ googleSearch: {} }]`<br>`functions/src/ai/gemini-provider.ts` | Integrated directly into Gemini chat inference. When the user enables `🌐 Live Web Search`, Gemini grounds responses in real-time Google search results, citing contemporary design studios, exhibitions, and spatial precedents with clickable URL pills. |
-| **Google Embeddings (`text-embedding-004`)** | `functions/src/ai/gemini-provider.ts`<br>`functions/src/callable/semanticSearch.ts` | Computes 768-dimensional vector embeddings for user inspiration saves and queries, enabling semantic retrieval over the user's personal dump. |
-| **Cloud Firestore** | Client SDK & Firebase Admin<br>`users/{uid}/*` collections | Primary application database. Handles hierarchical subcollections (`inspirations`, `ideas`, `chats`, `messages`), real-time offline-first snapshot listeners (`onSnapshot`), and high-throughput atomic batch writes (batching up to 400 Instagram saves from the extension). |
-| **Cloud Functions (2nd Gen / Cloud Run)** | `functions/src/index.ts`<br>`functions/src/callable/*`<br>`functions/src/triggers/*` | Serverless backend execution on Node.js 20 with Cloud Run: `chatWithBank` (RAG chat), `onInspirationWritten` (background AI enrichment trigger), `captureMetadata` (OpenGraph extraction), `suggestProjectLinks` (concept clustering), and `deleteAccountData` (privacy data purge). |
-| **Google Secret Manager** | `functions/src/config.ts` | Secure server-side credential isolation. The `GEMINI_API_KEY` is loaded directly via Cloud Functions 2nd Gen secret bindings (`runWith({ secrets: ['GEMINI_API_KEY'] })`), preventing API key leakage in client code. |
-| **Firebase Authentication** | `src/features/auth/AuthContext.tsx`<br>`chrome-extension/src/background/` | Manages user identity, session persistence, and token issuance across React Native, Web, and Chrome Extension (via `firebase/auth/web-extension`). |
-| **Firebase Hosting** | `firebase.json` (`hosting:rut`)<br>URL: [rut.web.app](https://rut.web.app) | Global, high-speed CDN hosting with edge SSL and automated single-page application rewrites for the cross-platform web client. |
-| **Google Chrome Extensions Platform (MV3)** | `chrome-extension/manifest.json`<br>`chrome-extension/src/*` | Companion browser extension leveraging Manifest V3 background service workers, `chrome.storage.local`, content script DOM listeners for Instagram Saved Collections, and `externally_connectable` web messaging. |
+| Layer | Technologies |
+|---|---|
+| **Mobile & Web App** | React Native 0.86, Expo SDK 52+, Expo Router v4, React 19, TypeScript |
+| **Chrome Extension** | Manifest V3, Vite 6, `@crxjs/vite-plugin`, React 19 |
+| **Backend & Compute** | Firebase Cloud Functions v2 (Node.js 20 on Google Cloud Run) |
+| **Database & Auth** | Cloud Firestore, Firebase Authentication |
+| **AI & Embeddings** | Google Gemini (`gemini-3.5-flash-lite`, `gemini-3.6-flash`), `text-embedding-004` |
+| **Hosting & Edge** | Firebase Hosting ([rut.web.app](https://rut.web.app)) |
 
 ---
 
-## 5. Getting Started
+## Quickstart
 
-### Prerequisites
-- **Node.js**: `v20.x` or `v22.x`
-- **npm**: `v10.x` or higher
-
-### Installation
+### 1. Installation
 ```bash
-# 1. Clone the repository
+# Clone repository
 git clone https://github.com/ernestpascual/rut-app.git
 cd rut
 
-# 2. Install main app dependencies
+# Install app dependencies
 npm install
 
-# 3. Install Cloud Functions dependencies (optional)
+# Optional: Install Cloud Functions or Extension dependencies
 cd functions && npm install && cd ..
-
-# 4. Install Chrome Extension dependencies (optional)
 cd chrome-extension && npm install && cd ..
 ```
 
-### Environment Setup
-Copy the sample environment configuration:
+### 2. Environment Configuration
+Copy sample config to `.env.local` (kept strictly in `.gitignore`):
 ```bash
 cp .env.example .env.local
 ```
-Add your Firebase and Gemini credentials to `.env.local` (this file is `.gitignore`d and never committed).
 
----
-
-## 6. Development & Execution
-
-### Safe Expo CLI Execution
+### 3. Safe Execution (Expo)
 > [!IMPORTANT]
-> In accordance with [`AGENTS.md`](AGENTS.md), always run Expo commands with `EXPO_NO_DOTENV=1` to prevent automatic `.env.local` loading:
+> Always execute Expo CLI commands with `EXPO_NO_DOTENV=1` to ensure environment boundaries are preserved:
 
 ```bash
-# Start Expo development server safely
+# Start development server safely
 npm run start:safe
 
-# Start Web development server
+# Launch Web development server
 npm run web:safe
 ```
 
-### Building & Deploying the Web App
+### 4. Tests & Type Checks
 ```bash
-# Export static web bundle safely
-npm run export:web:safe
-
-# Deploy to Firebase Hosting (rut)
-npx -y firebase-tools@latest deploy --only hosting:rut
-```
-
-### Building & Testing the Chrome Extension
-```bash
-cd chrome-extension
-
-# Build production unpacked extension
-npm run build
-
-# Or package as a zip archive for distribution
-npm run zip
-```
-
-**Loading the Extension in Google Chrome:**
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Toggle on **Developer mode** in the upper-right corner.
-3. Click **Load unpacked** and select the `chrome-extension/dist` folder.
-4. Pin the **rut** icon to your Chrome toolbar.
-5. Log in and navigate to any Instagram Saved Collection (`instagram.com/{username}/saved/`) to start syncing Reels.
-
----
-
-## 7. Testing & Quality Assurance
-
-Run all test suites and TypeScript verifications:
-
-```bash
-# Run unit tests across services, matching engine, and URL utilities
+# Run unit test suite
 npm test
 
-# Run TypeScript type check on the main app
+# Run TypeScript verification
 npx tsc --noEmit
-
-# Run TypeScript type check on the Chrome Extension
-cd chrome-extension && npx tsc --noEmit && cd ..
 ```
+
+### 5. Chrome Extension Build
+```bash
+cd chrome-extension
+npm run build   # Production unpacked build in chrome-extension/dist
+npm run zip     # Packaged zip distribution
+```
+Load the unpacked extension in Chrome via `chrome://extensions/` with Developer Mode enabled.
 
 ---
 
-## 8. License
+## License
 
 MIT License. See [LICENSE](LICENSE) for details.

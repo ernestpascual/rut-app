@@ -1,6 +1,6 @@
 {
   "name": "rut-instagram-sync-extension",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Sync Instagram Saved Collections and Reels directly to your rut Insight Bank",
   "type": "module",
   "scripts": {

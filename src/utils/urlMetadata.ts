@@ -277,6 +277,25 @@ export function extractAuthorAndCaption(
       if (pathParts[0] && pathParts[0].startsWith('@')) {
         author = pathParts[0].slice(1);
       }
+      const ttAuthorMatch = text.match(/([a-zA-Z0-9_.\s]+)\s+on\s+TikTok[:\s]/i) ||
+                            text.match(/@([a-zA-Z0-9_.]{2,30})/);
+      if (!author && ttAuthorMatch && ttAuthorMatch[1]) {
+        author = ttAuthorMatch[1].trim().replace(/^@/, '');
+      }
+
+      const ttCaptionMatch = text.match(/on\s+TikTok:\s*(.+?)(?:https?:\/\/|$)/is) ||
+                             text.match(/["“]([^"”]+)["”]/) ||
+                             text.match(/Check out .+? video![:\s]*(.+?)(?:https?:\/\/|$)/is) ||
+                             text.match(/(.+?)(?:\s*#TikTok|\s*https?:\/\/|$)/is);
+      if (ttCaptionMatch && ttCaptionMatch[1] && ttCaptionMatch[1].trim().length > 3) {
+        const cleanedCaption = ttCaptionMatch[1]
+          .replace(/#TikTok/gi, '')
+          .replace(/Check out .+? video!?/gi, '')
+          .trim();
+        if (cleanedCaption.length > 3) {
+          caption = cleanedCaption;
+        }
+      }
     }
 
     // 7. BEHANCE

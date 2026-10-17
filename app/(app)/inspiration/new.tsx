@@ -13,7 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
 import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
 import { useTheme } from '../../../src/design/ThemeContext';
@@ -71,16 +71,16 @@ export default function NewInspirationScreen() {
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Sync if mobile intent parameters arrive after mount
+  // Sync if mobile intent parameters arrive after mount or update
   useEffect(() => {
-    if (initialUrl && !url) {
+    if (initialUrl) {
       setUrl(initialUrl);
       setKind('link');
     }
-    if (remainingText && !userNote) {
+    if (remainingText) {
       setUserNote(remainingText);
     }
-    if (rawParamTitle && !title) {
+    if (rawParamTitle) {
       setTitle(rawParamTitle);
     }
   }, [initialUrl, remainingText, rawParamTitle]);
@@ -220,6 +220,22 @@ export default function NewInspirationScreen() {
       const targetUid = user?.uid || DUMMY_USER_UID;
       newItem.ownerUid = targetUid;
 
+      // Check if link already exists in user's dump
+      if (normalized) {
+        try {
+          const q = query(
+            collection(db, 'users', targetUid, 'inspirations'),
+            where('normalizedUrl', '==', normalized),
+            limit(1)
+          );
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            router.replace('/(app)/(tabs)/bank');
+            return;
+          }
+        } catch {}
+      }
+
       try {
         const docRef = await addDoc(collection(db, 'users', targetUid, 'inspirations'), newItem);
         newItem.id = docRef.id;
@@ -229,10 +245,10 @@ export default function NewInspirationScreen() {
 
       const existing = await getDumpInspirations(targetUid);
       await setDumpInspirations([newItem, ...existing.filter((i) => i.id !== newItem.id)]);
-      router.back();
+      router.replace('/(app)/(tabs)/bank');
     } catch (err: any) {
       // Local fallback
-      router.back();
+      router.replace('/(app)/(tabs)/bank');
     } finally {
       setLoading(false);
     }

@@ -29,6 +29,12 @@ export function redirectSystemPath({
       }
     } catch {}
 
+    // Internal share extension data payload handled natively by expo-share-intent
+    // Must return a valid Expo Router screen route so Expo Router does not 404
+    if (decoded.includes('dataUrl=')) {
+      return '/(app)/(tabs)/bank';
+    }
+
     // 1. Instagram direct share detection (URL or text containing Instagram link)
     if (decoded.includes('instagram.com') || decoded.includes('instagr.am')) {
       const igUrl = extractInstagramUrl(decoded);

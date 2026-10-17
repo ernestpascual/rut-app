@@ -11,7 +11,7 @@ import { useAuth } from '../src/features/auth/AuthContext';
  */
 export default function ShareTargetRedirect() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, stagedShare, clearStagedShare } = useAuth();
   const params = useLocalSearchParams<{ title?: string; text?: string; url?: string }>();
 
   useEffect(() => {
@@ -25,11 +25,19 @@ export default function ShareTargetRedirect() {
     if (params.text) queryParams.text = String(params.text);
     if (params.title) queryParams.title = String(params.title);
 
+    // If query params are empty but stagedShare exists (e.g., from login after sharing while signed out):
+    if (!queryParams.url && !queryParams.text && stagedShare) {
+      if (stagedShare.url) queryParams.url = stagedShare.url;
+      if (stagedShare.text) queryParams.text = stagedShare.text;
+      if (stagedShare.title) queryParams.title = stagedShare.title;
+      clearStagedShare();
+    }
+
     router.replace({
       pathname: '/(app)/inspiration/new',
       params: queryParams,
     });
-  }, [user, params, router]);
+  }, [user, params, stagedShare, clearStagedShare, router]);
 
   return null;
 }

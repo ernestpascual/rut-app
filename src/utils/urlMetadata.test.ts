@@ -89,6 +89,23 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(meta.caption).toBe('Brutalist Concrete Architecture');
   });
 
+  test('extracts author and caption from TikTok shared link and text', () => {
+    const { author, caption } = extractAuthorAndCaption(
+      'https://www.tiktok.com/@minimalistdesign/video/7123456789012345678',
+      'Check out @minimalistdesign on TikTok: Brutalist concrete house tour #TikTok https://vt.tiktok.com/ZSjV2d9A/'
+    );
+    expect(author).toBe('minimalistdesign');
+    expect(caption).toContain('Brutalist concrete house tour');
+
+    const meta = extractUrlMetadataFromUrl(
+      'https://www.tiktok.com/@minimalistdesign/video/7123456789012345678',
+      'Check out @minimalistdesign on TikTok: Brutalist concrete house tour #TikTok https://vt.tiktok.com/ZSjV2d9A/'
+    );
+    expect(meta.platform).toBe('tiktok');
+    expect(meta.author).toBe('minimalistdesign');
+    expect(meta.caption).toContain('Brutalist concrete house tour');
+  });
+
   test('formats notes cleanly with creator and caption', () => {
     const formatted = formatNotesWithCaption(
       'designstudio',

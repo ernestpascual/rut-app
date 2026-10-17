@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { CollectionInfo, ScrapedReelMetadata, UserSnapshot } from '../types/insight';
 import { RUT_WEB_APP_URL } from '../config/firebase';
 
+export const EXTENSION_VERSION =
+  (typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.()?.version) || '1.0.3';
+
 export function Popup() {
   const [user, setUser] = useState<UserSnapshot | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -21,17 +24,20 @@ export function Popup() {
   const [activeMode, setActiveMode] = useState<'quick_dump' | 'collection_sync'>('quick_dump');
 
   // Quick Dump State
-  const [platform, setPlatform] = useState<'instagram' | 'pinterest'>('instagram');
   const [dumpUrl, setDumpUrl] = useState('');
   const [dumpTitle, setDumpTitle] = useState('');
-  const [collectionOrigin, setCollectionOrigin] = useState('');
   const [dumpTags, setDumpTags] = useState('');
   const [dumpNote, setDumpNote] = useState('');
   const [dumping, setDumping] = useState(false);
-  const [dumpSuccessItem, setDumpSuccessItem] = useState<{ title: string; id: string } | null>(null);
+  const [dumpSuccessItem, setDumpSuccessItem] = useState<{
+    title: string;
+    id: string;
+    alreadyExists?: boolean;
+  } | null>(null);
   const [dumpError, setDumpError] = useState<string | null>(null);
 
-  // Collection Sync Custom Tags State
+  // Collection Sync State
+  const [syncPlatform, setSyncPlatform] = useState<'instagram' | 'facebook' | 'pinterest'>('instagram');
   const [collectionCustomTags, setCollectionCustomTags] = useState('');
   const [collectionOriginTag, setCollectionOriginTag] = useState('');
 
@@ -64,15 +70,32 @@ export function Popup() {
       setActiveTab(current || null);
 
       if (current?.url) {
-        // Auto-select platform and pre-populate URL
         if (current.url.includes('pinterest.com')) {
-          setPlatform('pinterest');
+          setSyncPlatform('pinterest');
           setDumpUrl(current.url);
-          if (current.title) setDumpTitle(current.title.replace(/\s*\|.*Pinterest/i, '').trim());
+          if (current.title) {
+            const cleanTitle = current.title.replace(/\s*\|.*Pinterest/i, '').trim();
+            setDumpTitle(cleanTitle);
+            setCollectionOriginTag(cleanTitle);
+          }
+        } else if (current.url.includes('facebook.com')) {
+          setSyncPlatform('facebook');
+          setDumpUrl(current.url);
+          if (current.title) {
+            const cleanTitle = current.title.replace(/\s*\|.*Facebook/i, '').trim();
+            setDumpTitle(cleanTitle);
+            setCollectionOriginTag(cleanTitle);
+          }
         } else if (current.url.includes('instagram.com')) {
-          setPlatform('instagram');
+          setSyncPlatform('instagram');
           setDumpUrl(current.url);
-          if (current.title) setDumpTitle(current.title.replace(/\s*•\s*Instagram.*$/i, '').trim());
+          if (current.title) {
+            const cleanTitle = current.title.replace(/\s*•\s*Instagram.*$/i, '').trim();
+            setDumpTitle(cleanTitle);
+          }
+        } else {
+          setDumpUrl(current.url);
+          if (current.title) setDumpTitle(current.title.trim());
         }
       }
 
@@ -84,7 +107,6 @@ export function Popup() {
             setCollection(res);
             if (res.title) {
               setCollectionOriginTag(res.title);
-              setCollectionOrigin(res.title);
             }
             if (res.isScraping) {
               setIsScraping(true);
@@ -116,7 +138,7 @@ export function Popup() {
       } else if (msg.type === 'SCRAPE_COMPLETE') {
         setIsScraping(false);
         setScrapedCount(msg.items.length);
-        handleSyncToFirestore(msg.items);
+        handleSyncToFirestore(msg.items, 'instagram');
       }
     };
 
@@ -125,19 +147,6 @@ export function Popup() {
   }, [collectionCustomTags, collectionOriginTag, collection]);
 
   // Auth Handlers
-  const handleGoogleLogin = () => {
-    setAuthError(null);
-    setSubmittingAuth(true);
-    chrome.runtime.sendMessage({ type: 'AUTH_LOGIN_GOOGLE' }, (res) => {
-      setSubmittingAuth(false);
-      if (res?.success) {
-        setUser(res.user);
-      } else {
-        setAuthError(res?.error || 'Google login failed.');
-      }
-    });
-  };
-
   const handleEmailLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
@@ -179,24 +188,38 @@ export function Popup() {
       .map((t) => t.trim())
       .filter(Boolean);
 
+    // Auto-detect platform from URL
+    const detectPlatform = (urlStr: string) => {
+      const lower = urlStr.toLowerCase();
+      if (lower.includes('instagram.com') || lower.includes('instagr.am')) return 'instagram';
+      if (lower.includes('pinterest.com') || lower.includes('pin.it')) return 'pinterest';
+      if (lower.includes('facebook.com') || lower.includes('fb.com') || lower.includes('fb.watch')) return 'facebook';
+      if (lower.includes('tiktok.com')) return 'tiktok';
+      if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+      return 'web';
+    };
+
     chrome.runtime.sendMessage(
       {
         type: 'DUMP_URL_ITEM',
         payload: {
-          platform,
+          platform: detectPlatform(dumpUrl.trim()) as any,
           url: dumpUrl.trim(),
           title: dumpTitle.trim() || undefined,
           tags: parsedTags,
-          collectionOrigin: collectionOrigin.trim() || undefined,
           userNote: dumpNote.trim() || undefined,
         },
       },
       (res) => {
         setDumping(false);
         if (res?.success) {
-          setDumpSuccessItem({ title: res.title || 'Inspiration Link', id: res.id });
+          setDumpSuccessItem({
+            title: res.title || 'Saved Link',
+            id: res.id,
+            alreadyExists: res.alreadyExists,
+          });
         } else {
-          setDumpError(res?.error || 'Failed to dump item to Insight Bank.');
+          setDumpError(res?.error || 'Failed to dump item to Rut Bank.');
         }
       }
     );
@@ -225,7 +248,174 @@ export function Popup() {
     });
   };
 
-  const handleSyncToFirestore = (items: ScrapedReelMetadata[]) => {
+  const handleStartFacebookSync = async () => {
+    if (!activeTab?.id) return;
+    setIsScraping(true);
+    setScrapedCount(0);
+    setSyncedCount(null);
+    setSyncError(null);
+
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => {
+          const items: Array<{
+            shortcode: string;
+            url: string;
+            title: string;
+            caption: string | null;
+            thumbnailUrl: string | null;
+          }> = [];
+          const seen = new Set<string>();
+
+          const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
+          for (const a of links) {
+            const href = a.href;
+            if (!href || href.startsWith('javascript:') || href.includes('/login') || href.includes('/help/')) continue;
+            const isItemLink =
+              href.includes('/reel/') ||
+              href.includes('/videos/') ||
+              href.includes('/watch') ||
+              href.includes('/posts/') ||
+              href.includes('/photo') ||
+              href.includes('/saved/');
+
+            if (isItemLink && !seen.has(href)) {
+              seen.add(href);
+              const img = a.querySelector<HTMLImageElement>('img') || a.parentElement?.querySelector<HTMLImageElement>('img');
+              const text = a.textContent?.trim() || a.getAttribute('aria-label') || '';
+              const idMatch = href.match(/([0-9]{7,})/);
+              const shortcode = idMatch ? idMatch[1] : Math.random().toString(36).substring(2, 10);
+              items.push({
+                shortcode,
+                url: href,
+                title: text.slice(0, 100) || 'Facebook Saved Item',
+                caption: text || null,
+                thumbnailUrl: img?.src || null,
+              });
+            }
+          }
+          return items;
+        },
+      });
+
+      const harvested = results?.[0]?.result || [];
+      if (harvested.length === 0) {
+        setIsScraping(false);
+        setSyncError('No saved items detected on this Facebook page. Open facebook.com/saved.');
+        return;
+      }
+
+      setScrapedCount(harvested.length);
+      setIsScraping(false);
+
+      const mappedItems: ScrapedReelMetadata[] = harvested.map((item: any) => ({
+        shortcode: item.shortcode,
+        url: item.url,
+        type: 'url',
+        title: item.title,
+        caption: item.caption,
+        thumbnailUrl: item.thumbnailUrl,
+        viewCountText: null,
+        collection: {
+          id: 'fb-saved',
+          slug: 'saved',
+          name: collectionOriginTag.trim() || activeTab.title || 'Facebook Saved',
+        },
+        source: 'facebook_collection',
+        scrapedAt: new Date().toISOString(),
+      }));
+
+      handleSyncToFirestore(mappedItems, 'facebook');
+    } catch (err: any) {
+      setIsScraping(false);
+      setSyncError(err.message || 'Failed to inspect Facebook page.');
+    }
+  };
+
+  const handleStartPinterestSync = async () => {
+    if (!activeTab?.id) return;
+    setIsScraping(true);
+    setScrapedCount(0);
+    setSyncedCount(null);
+    setSyncError(null);
+
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => {
+          const items: Array<{
+            shortcode: string;
+            url: string;
+            title: string;
+            caption: string | null;
+            thumbnailUrl: string | null;
+          }> = [];
+          const seen = new Set<string>();
+
+          const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/pin/"]'));
+          for (const a of links) {
+            const href = a.href;
+            const match = href.match(/\/pin\/([0-9a-zA-Z_-]+)/);
+            if (!match) continue;
+            const shortcode = match[1];
+            if (seen.has(shortcode)) continue;
+            seen.add(shortcode);
+
+            const img = a.querySelector<HTMLImageElement>('img') || a.parentElement?.querySelector<HTMLImageElement>('img');
+            const alt = img?.alt || a.textContent?.trim() || '';
+            const title = alt.slice(0, 100) || `Pinterest Pin (${shortcode})`;
+
+            items.push({
+              shortcode,
+              url: `https://www.pinterest.com/pin/${shortcode}/`,
+              title,
+              caption: alt || null,
+              thumbnailUrl: img?.src || null,
+            });
+          }
+          return items;
+        },
+      });
+
+      const harvested = results?.[0]?.result || [];
+      if (harvested.length === 0) {
+        setIsScraping(false);
+        setSyncError('No pins detected on this page. Navigate to a Pinterest board.');
+        return;
+      }
+
+      setScrapedCount(harvested.length);
+      setIsScraping(false);
+
+      const mappedItems: ScrapedReelMetadata[] = harvested.map((item: any) => ({
+        shortcode: item.shortcode,
+        url: item.url,
+        type: 'url',
+        title: item.title,
+        caption: item.caption,
+        thumbnailUrl: item.thumbnailUrl,
+        viewCountText: null,
+        collection: {
+          id: 'pinterest-board',
+          slug: 'board',
+          name: collectionOriginTag.trim() || activeTab.title || 'Pinterest Board',
+        },
+        source: 'pinterest_collection',
+        scrapedAt: new Date().toISOString(),
+      }));
+
+      handleSyncToFirestore(mappedItems, 'pinterest');
+    } catch (err: any) {
+      setIsScraping(false);
+      setSyncError(err.message || 'Failed to inspect Pinterest board.');
+    }
+  };
+
+  const handleSyncToFirestore = (
+    items: ScrapedReelMetadata[],
+    platform: 'instagram' | 'facebook' | 'pinterest' = syncPlatform
+  ) => {
     setIsSyncing(true);
     const parsedCustomTags = collectionCustomTags
       .split(',')
@@ -238,13 +428,14 @@ export function Popup() {
         items,
         customTags: parsedCustomTags,
         collectionOrigin: collectionOriginTag.trim() || collection?.title || undefined,
+        platform,
       },
       (res) => {
         setIsSyncing(false);
         if (res?.success) {
           setSyncedCount(res.count);
         } else {
-          setSyncError(res?.error || 'Failed to sync to Insight Bank.');
+          setSyncError(res?.error || 'Failed to sync to Rut Bank.');
         }
       }
     );
@@ -257,8 +448,11 @@ export function Popup() {
     return (
       <div style={styles.container}>
         <div style={styles.header}>
-          <span style={styles.logo}>RUT</span>
-          <span style={styles.badge}>EXTENSION</span>
+          <div style={styles.logoRow}>
+            <span style={styles.logo}>RUT</span>
+            <span style={styles.badge}>EXTENSION</span>
+            <span style={styles.versionBadge}>v{EXTENSION_VERSION}</span>
+          </div>
         </div>
         <div style={styles.centerBox}>
           <p style={styles.subtitle}>Connecting to rut...</p>
@@ -274,32 +468,21 @@ export function Popup() {
     return (
       <div style={styles.container}>
         <div style={styles.header}>
-          <div>
+          <div style={styles.logoRow}>
             <span style={styles.logo}>RUT</span>
             <span style={styles.badge}>EXTENSION</span>
+            <span style={styles.versionBadge}>v{EXTENSION_VERSION}</span>
           </div>
         </div>
 
         <div style={styles.banner}>
-          <p style={styles.bannerTitle}>DUMP INSPIRATION TO RUT BANK</p>
+          <p style={styles.bannerTitle}>DUMP & SYNC TO RUT BANK</p>
           <p style={styles.bannerDesc}>
-            Log into your rut account to dump Instagram & Pinterest links or sync entire collections with tags & origin preserved.
+            Sign in with your rut account to dump links or sync entire collections with tags & origin preserved.
           </p>
         </div>
 
         {authError && <div style={styles.errorBox}>{authError}</div>}
-
-        <button
-          onClick={handleGoogleLogin}
-          disabled={submittingAuth}
-          style={{ ...styles.btnPrimary, marginBottom: '12px' }}
-        >
-          {submittingAuth ? 'CONNECTING...' : 'CONTINUE WITH GOOGLE'}
-        </button>
-
-        <div style={styles.divider}>
-          <span style={styles.dividerText}>OR EMAIL</span>
-        </div>
 
         <form onSubmit={handleEmailLogin} style={styles.form}>
           <input
@@ -318,8 +501,8 @@ export function Popup() {
             required
             style={styles.input}
           />
-          <button type="submit" disabled={submittingAuth} style={styles.btnSecondary}>
-            {submittingAuth ? 'AUTHENTICATING...' : 'SIGN IN WITH PASSWORD'}
+          <button type="submit" disabled={submittingAuth} style={styles.btnPrimary}>
+            {submittingAuth ? 'AUTHENTICATING...' : 'SIGN IN'}
           </button>
         </form>
       </div>
@@ -333,9 +516,10 @@ export function Popup() {
     return (
       <div style={styles.container}>
         <div style={styles.header}>
-          <div>
+          <div style={styles.logoRow}>
             <span style={styles.logo}>RUT</span>
             <span style={styles.badge}>SYNCING</span>
+            <span style={styles.versionBadge}>v{EXTENSION_VERSION}</span>
           </div>
           <button onClick={handleSignOut} style={styles.linkBtn}>LOGOUT</button>
         </div>
@@ -343,23 +527,25 @@ export function Popup() {
         <div style={styles.card}>
           <div style={styles.cardMetaRow}>
             <span style={styles.cardTag}>COLLECTION ORIGIN</span>
-            <span style={styles.cardTitle}>{collectionOriginTag || collection?.title || 'Saved Reels'}</span>
+            <span style={styles.cardTitle}>{collectionOriginTag || collection?.title || 'Saved Items'}</span>
           </div>
 
           {isScraping && (
             <div style={{ marginTop: '16px' }}>
               <div style={styles.progressRow}>
                 <span style={styles.pulseDot} />
-                <span style={styles.progressText}>Auto-scrolling Instagram DOM...</span>
+                <span style={styles.progressText}>Scanning collection DOM...</span>
               </div>
               <div style={styles.countDisplay}>
                 <span style={styles.countNumber}>{scrapedCount}</span>
-                <span style={styles.countLabel}>REELS DISCOVERED</span>
+                <span style={styles.countLabel}>ITEMS DISCOVERED</span>
               </div>
               <p style={styles.subtext}>Extracting captions, thumbnails, and origin tags with rate-limit protection.</p>
-              <button onClick={handleStopScrapeEarly} style={{ ...styles.btnSecondary, marginTop: '14px' }}>
-                STOP & SYNC EARLY ({scrapedCount})
-              </button>
+              {syncPlatform === 'instagram' && (
+                <button onClick={handleStopScrapeEarly} style={{ ...styles.btnSecondary, marginTop: '14px' }}>
+                  STOP & SYNC EARLY ({scrapedCount})
+                </button>
+              )}
             </div>
           )}
 
@@ -369,23 +555,23 @@ export function Popup() {
                 <span style={styles.pulseDot} />
                 <span style={styles.progressText}>Writing batch to Firestore...</span>
               </div>
-              <p style={styles.subtext}>Committing {scrapedCount} Reels with origin tags to your Insight Bank.</p>
+              <p style={styles.subtext}>Committing {scrapedCount} items with origin tags to your Rut Bank.</p>
             </div>
           )}
 
           {syncedCount !== null && (
             <div style={{ marginTop: '16px' }}>
               <div style={styles.successBanner}>
-                ✓ SUCCESSFULLY SYNCED {syncedCount} REELS
+                ✓ SUCCESSFULLY SYNCED {syncedCount} ITEMS
               </div>
               <p style={styles.subtext}>
-                Origin collection tag and custom tags have been applied to all items in your Inspiration Dump!
+                Origin collection tag and custom tags have been applied to all items in your Rut Bank!
               </p>
               <button
                 onClick={() => chrome.tabs.create({ url: `${RUT_WEB_APP_URL}/bank` })}
                 style={{ ...styles.btnPrimary, marginTop: '14px' }}
               >
-                OPEN RUT INSIGHT BANK ↗
+                OPEN RUT BANK ↗
               </button>
               <button
                 onClick={() => {
@@ -412,9 +598,10 @@ export function Popup() {
     <div style={styles.container}>
       {/* Top Header */}
       <div style={styles.header}>
-        <div>
+        <div style={styles.logoRow}>
           <span style={styles.logo}>RUT</span>
-          <span style={styles.badge}>INSPIRATION</span>
+          <span style={styles.badge}>SYNC</span>
+          <span style={styles.versionBadge}>v{EXTENSION_VERSION}</span>
         </div>
         <button onClick={handleSignOut} style={styles.linkBtn}>LOGOUT</button>
       </div>
@@ -452,12 +639,20 @@ export function Popup() {
         <div style={styles.card}>
           {dumpSuccessItem ? (
             <div style={{ marginTop: '6px' }}>
-              <div style={styles.successBanner}>
-                ✓ DUMPED TO RUT BANK
+              <div
+                style={
+                  dumpSuccessItem.alreadyExists ? styles.infoBanner : styles.successBanner
+                }
+              >
+                {dumpSuccessItem.alreadyExists
+                  ? 'ℹ ALREADY IN DUMP (NOT DUPLICATED)'
+                  : '✓ DUMPED TO RUT BANK'}
               </div>
               <p style={styles.successItemTitle}>&ldquo;{dumpSuccessItem.title}&rdquo;</p>
               <p style={styles.subtext}>
-                Added with platform, collection origin, and custom tags. Available immediately in your Inspiration Dump!
+                {dumpSuccessItem.alreadyExists
+                  ? 'This link already exists in your Rut Bank, so a duplicate was not created.'
+                  : 'Added with tags. Available immediately in your Rut Bank!'}
               </p>
               <button
                 onClick={() => chrome.tabs.create({ url: `${RUT_WEB_APP_URL}/bank` })}
@@ -478,33 +673,6 @@ export function Popup() {
             </div>
           ) : (
             <form onSubmit={handleDumpItem} style={styles.form}>
-              {/* Platform Selector */}
-              <div>
-                <label style={styles.inputLabel}>CHOOSE PLATFORM</label>
-                <div style={styles.platformSelectorRow}>
-                  <button
-                    type="button"
-                    onClick={() => setPlatform('instagram')}
-                    style={{
-                      ...styles.platformBtn,
-                      ...(platform === 'instagram' ? styles.platformBtnActive : {}),
-                    }}
-                  >
-                    📸 INSTAGRAM
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlatform('pinterest')}
-                    style={{
-                      ...styles.platformBtn,
-                      ...(platform === 'pinterest' ? styles.platformBtnActive : {}),
-                    }}
-                  >
-                    📌 PINTEREST
-                  </button>
-                </div>
-              </div>
-
               {/* URL Input */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -524,11 +692,7 @@ export function Popup() {
                 </div>
                 <input
                   type="url"
-                  placeholder={
-                    platform === 'pinterest'
-                      ? 'https://pinterest.com/pin/...'
-                      : 'https://instagram.com/reel/... or /p/...'
-                  }
+                  placeholder="https://..."
                   value={dumpUrl}
                   onChange={(e) => setDumpUrl(e.target.value)}
                   required
@@ -546,21 +710,6 @@ export function Popup() {
                   onChange={(e) => setDumpTitle(e.target.value)}
                   style={styles.input}
                 />
-              </div>
-
-              {/* Collection Name Origin (Saved as Tag) */}
-              <div>
-                <label style={styles.inputLabel}>COLLECTION ORIGIN (SAVED AS TAG)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Minimal Ceramics, Saved Architecture"
-                  value={collectionOrigin}
-                  onChange={(e) => setCollectionOrigin(e.target.value)}
-                  style={styles.input}
-                />
-                <span style={styles.fieldHint}>
-                  Adds #{collectionOrigin.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'origin'} tag to this item
-                </span>
               </div>
 
               {/* Tags */}
@@ -594,87 +743,280 @@ export function Popup() {
                 disabled={dumping || !dumpUrl.trim()}
                 style={{ ...styles.btnPrimary, marginTop: '4px' }}
               >
-                {dumping ? 'DUMPING TO RUT...' : `⚡ DUMP ${platform.toUpperCase()} TO RUT`}
+                {dumping ? 'DUMPING...' : 'DUMP'}
               </button>
             </form>
           )}
         </div>
       )}
 
-      {/* MODE 2: INSTAGRAM COLLECTION SYNC */}
+      {/* MODE 2: COLLECTION SYNC */}
       {activeMode === 'collection_sync' && (
         <div style={styles.card}>
-          {collection?.detected ? (
-            <div>
-              <div style={styles.collectionBadgeRow}>
-                <span style={styles.highlightBadge}>INSTAGRAM COLLECTION DETECTED</span>
-              </div>
-              <h2 style={styles.collectionHeading}>{collection.title}</h2>
-              <p style={styles.collectionPath}>/{collection.slug}/</p>
-
-              {/* Collection Origin Tag Input */}
-              <div style={{ marginTop: '12px' }}>
-                <label style={styles.inputLabel}>COLLECTION ORIGIN TAG</label>
-                <input
-                  type="text"
-                  value={collectionOriginTag}
-                  onChange={(e) => setCollectionOriginTag(e.target.value)}
-                  placeholder="e.g. Saved Architecture"
-                  style={styles.input}
-                />
-                <span style={styles.fieldHint}>
-                  Each item will be tagged with #{collectionOriginTag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'collection'}
-                </span>
-              </div>
-
-              {/* Extra Tags for Collection */}
-              <div style={{ marginTop: '10px' }}>
-                <label style={styles.inputLabel}>ADDITIONAL TAGS (COMMA SEPARATED)</label>
-                <input
-                  type="text"
-                  value={collectionCustomTags}
-                  onChange={(e) => setCollectionCustomTags(e.target.value)}
-                  placeholder="e.g. brutalist, concrete, grid"
-                  style={styles.input}
-                />
-              </div>
-
-              <p style={{ ...styles.subtext, marginTop: '12px' }}>
-                Auto-scrolls the collection DOM to scrape virtualized Reels, extracting captions, thumbnails, and tagging each item with the origin.
-              </p>
-
-              <button onClick={handleStartScrape} style={{ ...styles.btnPrimary, marginTop: '14px' }}>
-                ⚡ SYNC COLLECTION WITH TAGS
+          {/* Platform Option Selector */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={styles.inputLabel}>CHOOSE COLLECTION PLATFORM</label>
+            <div style={styles.platformSelectorRow}>
+              <button
+                type="button"
+                onClick={() => setSyncPlatform('instagram')}
+                style={{
+                  ...styles.platformBtn,
+                  ...(syncPlatform === 'instagram' ? styles.platformBtnActive : {}),
+                }}
+              >
+                📸 INSTAGRAM
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncPlatform('facebook')}
+                style={{
+                  ...styles.platformBtn,
+                  ...(syncPlatform === 'facebook' ? styles.platformBtnActive : {}),
+                }}
+              >
+                📘 FACEBOOK
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncPlatform('pinterest')}
+                style={{
+                  ...styles.platformBtn,
+                  ...(syncPlatform === 'pinterest' ? styles.platformBtnActive : {}),
+                }}
+              >
+                📌 PINTEREST
               </button>
             </div>
-          ) : (
-            <div>
-              <div style={styles.collectionBadgeRow}>
-                <span style={styles.neutralBadge}>STANDBY</span>
+          </div>
+
+          {/* INSTAGRAM OPTION */}
+          {syncPlatform === 'instagram' && (
+            collection?.detected ? (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.highlightBadge}>INSTAGRAM COLLECTION DETECTED</span>
+                </div>
+                <h2 style={styles.collectionHeading}>{collection.title}</h2>
+                <p style={styles.collectionPath}>/{collection.slug}/</p>
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={styles.inputLabel}>COLLECTION ORIGIN TAG</label>
+                  <input
+                    type="text"
+                    value={collectionOriginTag}
+                    onChange={(e) => setCollectionOriginTag(e.target.value)}
+                    placeholder="e.g. Saved Architecture"
+                    style={styles.input}
+                  />
+                  <span style={styles.fieldHint}>
+                    Each item will be tagged with #{collectionOriginTag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'collection'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <label style={styles.inputLabel}>ADDITIONAL TAGS (COMMA SEPARATED)</label>
+                  <input
+                    type="text"
+                    value={collectionCustomTags}
+                    onChange={(e) => setCollectionCustomTags(e.target.value)}
+                    placeholder="e.g. brutalist, concrete, grid"
+                    style={styles.input}
+                  />
+                </div>
+
+                <p style={{ ...styles.subtext, marginTop: '12px' }}>
+                  Auto-scrolls the collection DOM to scrape virtualized Reels, extracting captions, thumbnails, and tagging each item with the origin.
+                </p>
+
+                <button onClick={handleStartScrape} style={{ ...styles.btnPrimary, marginTop: '14px' }}>
+                  ⚡ SYNC INSTAGRAM COLLECTION
+                </button>
               </div>
-              <h3 style={styles.cardTitleNotice}>NAVIGATE TO A SAVED COLLECTION</h3>
-              <p style={styles.subtext}>
-                Open any Instagram Saved Collection or Saved Posts page on Instagram Web to start auto-syncing entire boards.
-              </p>
+            ) : (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.neutralBadge}>STANDBY</span>
+                </div>
+                <h3 style={styles.cardTitleNotice}>NAVIGATE TO AN INSTAGRAM COLLECTION</h3>
+                <p style={styles.subtext}>
+                  Open any Instagram Saved Collection or Saved Posts page on Instagram Web to start auto-syncing entire boards.
+                </p>
 
-              <button
-                onClick={() => chrome.tabs.create({ url: 'https://www.instagram.com/saved/' })}
-                style={{ ...styles.btnPrimary, marginTop: '14px' }}
-              >
-                OPEN INSTAGRAM SAVED ↗
-              </button>
+                <button
+                  onClick={() => chrome.tabs.create({ url: 'https://www.instagram.com/saved/' })}
+                  style={{ ...styles.btnPrimary, marginTop: '14px' }}
+                >
+                  OPEN INSTAGRAM SAVED ↗
+                </button>
 
-              <button
-                onClick={inspectActiveTab}
-                disabled={checkingTab}
-                style={{ ...styles.btnSecondary, marginTop: '8px' }}
-              >
-                {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
-              </button>
-            </div>
+                <button
+                  onClick={inspectActiveTab}
+                  disabled={checkingTab}
+                  style={{ ...styles.btnSecondary, marginTop: '8px' }}
+                >
+                  {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
+                </button>
+              </div>
+            )
+          )}
+
+          {/* FACEBOOK OPTION */}
+          {syncPlatform === 'facebook' && (
+            activeTab?.url?.includes('facebook.com') ? (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.highlightBadge}>FACEBOOK SAVED DETECTED</span>
+                </div>
+                <h2 style={styles.collectionHeading}>
+                  {activeTab.title?.replace(/\s*\|.*Facebook/i, '').trim() || 'Facebook Saved'}
+                </h2>
+                <p style={styles.collectionPath}>
+                  /{activeTab.url ? new URL(activeTab.url).pathname.replace(/^\/|\/$/g, '') : 'saved'}/
+                </p>
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={styles.inputLabel}>COLLECTION ORIGIN TAG</label>
+                  <input
+                    type="text"
+                    value={collectionOriginTag}
+                    onChange={(e) => setCollectionOriginTag(e.target.value)}
+                    placeholder="e.g. Saved Videos, Saved Architecture"
+                    style={styles.input}
+                  />
+                  <span style={styles.fieldHint}>
+                    Each item will be tagged with #{collectionOriginTag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'collection'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <label style={styles.inputLabel}>ADDITIONAL TAGS (COMMA SEPARATED)</label>
+                  <input
+                    type="text"
+                    value={collectionCustomTags}
+                    onChange={(e) => setCollectionCustomTags(e.target.value)}
+                    placeholder="e.g. video, inspiration, design"
+                    style={styles.input}
+                  />
+                </div>
+
+                <p style={{ ...styles.subtext, marginTop: '12px' }}>
+                  Extracts saved posts, videos, and links from the current Facebook page into your Rut Bank.
+                </p>
+
+                <button onClick={handleStartFacebookSync} style={{ ...styles.btnPrimary, marginTop: '14px' }}>
+                  ⚡ SYNC FACEBOOK COLLECTION
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.neutralBadge}>STANDBY</span>
+                </div>
+                <h3 style={styles.cardTitleNotice}>NAVIGATE TO FACEBOOK SAVED</h3>
+                <p style={styles.subtext}>
+                  Open any Facebook Saved Collection or Saved Posts page on Facebook Web to start syncing.
+                </p>
+
+                <button
+                  onClick={() => chrome.tabs.create({ url: 'https://www.facebook.com/saved/' })}
+                  style={{ ...styles.btnPrimary, marginTop: '14px' }}
+                >
+                  OPEN FACEBOOK SAVED ↗
+                </button>
+
+                <button
+                  onClick={inspectActiveTab}
+                  disabled={checkingTab}
+                  style={{ ...styles.btnSecondary, marginTop: '8px' }}
+                >
+                  {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
+                </button>
+              </div>
+            )
+          )}
+
+          {/* PINTEREST OPTION */}
+          {syncPlatform === 'pinterest' && (
+            activeTab?.url?.includes('pinterest.com') ? (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.highlightBadge}>PINTEREST BOARD DETECTED</span>
+                </div>
+                <h2 style={styles.collectionHeading}>
+                  {activeTab.title?.replace(/\s*\|.*Pinterest/i, '').trim() || 'Pinterest Board'}
+                </h2>
+                <p style={styles.collectionPath}>
+                  /{activeTab.url ? new URL(activeTab.url).pathname.replace(/^\/|\/$/g, '') : 'board'}/
+                </p>
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={styles.inputLabel}>COLLECTION ORIGIN TAG</label>
+                  <input
+                    type="text"
+                    value={collectionOriginTag}
+                    onChange={(e) => setCollectionOriginTag(e.target.value)}
+                    placeholder="e.g. Minimal Ceramics, Typography"
+                    style={styles.input}
+                  />
+                  <span style={styles.fieldHint}>
+                    Each item will be tagged with #{collectionOriginTag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'board'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <label style={styles.inputLabel}>ADDITIONAL TAGS (COMMA SEPARATED)</label>
+                  <input
+                    type="text"
+                    value={collectionCustomTags}
+                    onChange={(e) => setCollectionCustomTags(e.target.value)}
+                    placeholder="e.g. ceramics, interior, minimal"
+                    style={styles.input}
+                  />
+                </div>
+
+                <p style={{ ...styles.subtext, marginTop: '12px' }}>
+                  Extracts pins, titles, and preview images from the current Pinterest board into your Rut Bank.
+                </p>
+
+                <button onClick={handleStartPinterestSync} style={{ ...styles.btnPrimary, marginTop: '14px' }}>
+                  ⚡ SYNC PINTEREST COLLECTION
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={styles.collectionBadgeRow}>
+                  <span style={styles.neutralBadge}>STANDBY</span>
+                </div>
+                <h3 style={styles.cardTitleNotice}>NAVIGATE TO A PINTEREST BOARD</h3>
+                <p style={styles.subtext}>
+                  Open any Pinterest Board or Saved Pins page on Pinterest Web to start syncing.
+                </p>
+
+                <button
+                  onClick={() => chrome.tabs.create({ url: 'https://www.pinterest.com/' })}
+                  style={{ ...styles.btnPrimary, marginTop: '14px' }}
+                >
+                  OPEN PINTEREST ↗
+                </button>
+
+                <button
+                  onClick={inspectActiveTab}
+                  disabled={checkingTab}
+                  style={{ ...styles.btnSecondary, marginTop: '8px' }}
+                >
+                  {checkingTab ? 'CHECKING TAB...' : '↻ RE-CHECK CURRENT TAB'}
+                </button>
+              </div>
+            )
           )}
         </div>
       )}
+
+      {/* Footer Version Notice */}
+      <div style={styles.footer}>
+        <span style={styles.footerText}>RUT EXTENSION v{EXTENSION_VERSION}</span>
+      </div>
     </div>
   );
 }
@@ -701,6 +1043,35 @@ const styles: Record<string, React.CSSProperties> = {
     paddingBottom: '10px',
     borderBottom: '1px solid #222222',
     marginBottom: '10px',
+  },
+  logoRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  versionBadge: {
+    fontSize: '9px',
+    fontWeight: 700,
+    letterSpacing: '0.4px',
+    color: '#888888',
+    backgroundColor: '#161616',
+    border: '1px solid #282828',
+    padding: '2px 5px',
+    borderRadius: '0px',
+    fontFamily: 'monospace',
+  },
+  footer: {
+    marginTop: '10px',
+    paddingTop: '8px',
+    borderTop: '1px solid #1a1a1a',
+    display: 'flex',
+    justifyContent: 'center',
+  },
+  footerText: {
+    fontSize: '9px',
+    color: '#444444',
+    fontFamily: 'monospace',
+    letterSpacing: '0.6px',
   },
   logo: {
     fontWeight: 900,
@@ -960,6 +1331,16 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#0d2818',
     border: '1px solid #1b5e20',
     color: '#4caf50',
+    fontSize: '11px',
+    fontWeight: 800,
+    letterSpacing: '0.5px',
+    marginBottom: '6px',
+  },
+  infoBanner: {
+    padding: '8px 10px',
+    backgroundColor: '#112233',
+    border: '1px solid #1e3a5f',
+    color: '#64b5f6',
     fontSize: '11px',
     fontWeight: 800,
     letterSpacing: '0.5px',

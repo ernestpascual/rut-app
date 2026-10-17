@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   where,
+  limit,
 } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase/client';
 import { InspirationItem, Project, ProjectInspirationLink, SourcePlatform } from '../../types';
@@ -123,6 +124,28 @@ export async function resetDumpToInitial(): Promise<InspirationItem[]> {
 }
 
 /**
+ * Permanently deletes an inspiration item from Firestore (if user signed in) and local storage.
+ */
+export async function deleteInspiration(itemId: string, uid?: string): Promise<void> {
+  const targetUid = getTargetUid(uid);
+  try {
+    if (db && targetUid) {
+      await deleteDoc(doc(db, 'users', targetUid, 'inspirations', itemId));
+    }
+  } catch (err) {
+    console.warn('[dumpService] deleteInspiration Firestore fallback:', err);
+  }
+
+  try {
+    const current = await getDumpInspirations(targetUid);
+    const updated = current.filter((i) => i.id !== itemId);
+    await setDumpInspirations(updated);
+  } catch (err) {
+    console.warn('[dumpService] deleteInspiration local storage fallback:', err);
+  }
+}
+
+/**
  * Quick-dump a raw link or text note into the inspiration bank via Firebase Firestore.
  */
 export async function quickDumpLinkOrNote(
@@ -135,6 +158,32 @@ export async function quickDumpLinkOrNote(
   const trimmed = rawInput.trim();
   const normalized = normalizeUrl(trimmed);
   const hash = generateContentHash(normalized || trimmed);
+
+  // If the link is already in the dump, do not duplicate
+  if (normalized) {
+    try {
+      const q = query(
+        collection(db, 'users', targetUid, 'inspirations'),
+        where('normalizedUrl', '==', normalized),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const existing = snap.docs[0];
+        return enrichInspirationItem({ id: existing.id, ...(existing.data() as any) });
+      }
+    } catch (err) {
+      console.warn('[dumpService] Duplicate check fallback:', err);
+    }
+
+    const current = await getDumpInspirations(targetUid);
+    const existingLocal = current.find(
+      (i) => i.normalizedUrl === normalized || (i.url && normalizeUrl(i.url) === normalized)
+    );
+    if (existingLocal) {
+      return existingLocal;
+    }
+  }
 
   let meta;
   if (normalized) {

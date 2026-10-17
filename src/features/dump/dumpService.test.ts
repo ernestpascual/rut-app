@@ -1,6 +1,8 @@
 import {
   sortDumpItems,
   quickDumpLinkOrNote,
+  deleteInspiration,
+  getDumpInspirations,
 } from './dumpService';
 import { InspirationItem } from '../../types';
 
@@ -95,5 +97,30 @@ describe('dumpService sorting', () => {
     expect(item.concepts.length).toBeGreaterThan(0);
     expect(item.editorialContext).toContain('Behance');
     expect(item.editorialContext).toContain('Incredible use of concrete materials');
-  });
+  }, 15000);
+
+  test('quickDumpLinkOrNote does not duplicate an existing link in the dump', async () => {
+    const item1 = await quickDumpLinkOrNote(
+      'https://www.pinterest.com/pin/123456789/',
+      'First dump of ceramic vase'
+    );
+    const item2 = await quickDumpLinkOrNote(
+      'https://www.pinterest.com/pin/123456789/?utm_source=share',
+      'Second dump with tracking query'
+    );
+    expect(item1.id).toBe(item2.id);
+  }, 15000);
+
+  test('deleteInspiration removes an item from local storage dump', async () => {
+    const item = await quickDumpLinkOrNote(
+      'https://news.ycombinator.com/item?id=123456',
+      'Hacker News item to delete'
+    );
+    const before = await getDumpInspirations();
+    expect(before.some((i) => i.id === item.id)).toBe(true);
+
+    await deleteInspiration(item.id);
+    const after = await getDumpInspirations();
+    expect(after.some((i) => i.id === item.id)).toBe(false);
+  }, 15000);
 });

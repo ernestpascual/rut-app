@@ -38,20 +38,6 @@
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
         {
-          "action": "SEND",
-          "category": [
-            "DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "text/plain"
-            },
-            {
-              "mimeType": "text/*"
-            }
-          ]
-        },
-        {
           "action": "VIEW",
           "category": [
             "DEFAULT",
@@ -80,7 +66,34 @@
           "imageWidth": 76
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withShareExtensionDisplayName",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsImageWithMaxCount": 10,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1
+          },
+          "androidIntentFilters": [
+            "text/*",
+            "image/*",
+            "video/*",
+            "*/*"
+          ],
+          "androidMultiIntentFilters": [
+            "image/*",
+            "video/*",
+            "*/*"
+          ],
+          "androidMainActivityAttributes": {
+            "android:launchMode": "singleTask"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
