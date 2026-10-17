@@ -9,7 +9,9 @@ Live Web App: **[rut.web.app](https://rut.web.app)**
 ## Core Features at a Glance
 
 - **Universal Capture & Phone Share**: Ingest links directly from iOS and Android native share sheets, PWA web share targets, or direct URL paste.
-- **Instagram Saved Collection Sync**: Chrome extension auto-scrolls virtualized collections, harvesting Reels, captions, and thumbnails into your bank in deterministic batches.
+- **Chrome Extension (Single Dump Link & Collections Sync)**:
+  - **Single Dump Link**: Auto-captures and saves the website you are currently browsing directly to your dump folder with 1-click dumping and duplicate prevention.
+  - **Collections Sync**: Extracts and imports all your saved collections from **Instagram**, **Pinterest**, and **Facebook** directly into your dump folder with automated AI enrichment.
 - **Fast Filter & Search**: Instant client-side search across titles, notes, and auto-generated tags with multi-platform filtering (`INSTAGRAM`, `PINTEREST`, `TIKTOK`, `X`, `WEB`).
 - **Interactive AI Train of Thought**: Brainstorm directly against your personal dump. Cites specific inspirations inline with clickable cards, supports on-the-fly Gemini model switching, and toggles real-time Google Search grounding (`🌐 Live Web Search`).
 - **Idea Studio & Reference Matcher**: Draft briefs and concepts while the AI automatically scores and links relevant references from your dump with transparent match reasoning.
@@ -90,13 +92,45 @@ npm test
 npx tsc --noEmit
 ```
 
-### 5. Chrome Extension Build
+### 5. Chrome Extension Installation & Capabilities (v1.0.3)
+
+The `rut` browser extension provides two core capture workflows:
+- **Single Dump Link (Auto-Save Active Website)**: With one click, auto-saves the website you are currently browsing straight into your dump folder. Pre-populates the active tab URL and title, and automatically checks for duplicates to prevent saving identical links twice.
+- **Collections Sync (Instagram, Pinterest, Facebook)**: Select between Instagram Collection, Facebook Collection, or Pinterest Collection to batch-import all saved items from that collection into your dump folder. Features an auto-scrolling virtualized scraper for reels and posts, deterministic Firestore chunking, and instant triggering of AI tagging and embeddings.
+
+#### Quick Install (Pre-Built Package)
+The latest pre-compiled build is available at `chrome-extension/rut-extension.zip` (or `chrome-extension/dist/`):
+
+1. **Extract the package**:
+   Unzip `chrome-extension/rut-extension.zip` into a folder (e.g. `chrome-extension/rut-extension-unpacked/`) or use the existing `chrome-extension/dist/` folder.
+   ```bash
+   unzip -q chrome-extension/rut-extension.zip -d chrome-extension/rut-extension-unpacked
+   ```
+2. **Open Extensions in Chrome**:
+   Open Google Chrome (or any Chromium browser like Brave, Edge, or Arc) and navigate to `chrome://extensions/`.
+3. **Enable Developer Mode**:
+   Toggle on the **Developer mode** switch in the top-right corner of the page.
+4. **Load Unpacked Extension**:
+   Click the **Load unpacked** button in the top-left toolbar.
+   Select the extracted directory (`chrome-extension/rut-extension-unpacked` or `chrome-extension/dist`) containing `manifest.json`.
+5. **Verify & Pin**:
+   - Pin the **rut** extension to your toolbar for easy access.
+   - Click the extension icon: confirm the `v1.0.3` version badge in the header and sign in with your rut account (Email & Password).
+
+#### Building from Source
+To build a fresh release from source:
 ```bash
 cd chrome-extension
-npm run build   # Production unpacked build in chrome-extension/dist
-npm run zip     # Packaged zip distribution
+npm install
+npm run build   # Outputs production assets to chrome-extension/dist/
+npm run zip     # Re-packages chrome-extension/rut-extension.zip
 ```
-Load the unpacked extension in Chrome via `chrome://extensions/` with Developer Mode enabled.
+Then load `chrome-extension/dist/` via `chrome://extensions/` as unpacked.
+
+#### Updating & Reloading
+When pulling changes or rebuilding:
+1. Go to `chrome://extensions/`.
+2. Click the **Reload (↻)** icon on the rut extension card to apply the newest build immediately.
 
 ---
 

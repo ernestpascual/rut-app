@@ -3,7 +3,7 @@ import { db, isAiKillSwitchActive } from '../config';
 import { getAIProvider } from '../ai/factory';
 import { recordUsageEvent, checkCostGuardrails } from '../cost/ledger';
 
-export const suggestProjectLinks = onCall(async (request) => {
+export const suggestProjectLinks = onCall({ invoker: 'public', cors: true }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'User must be authenticated.');
   }

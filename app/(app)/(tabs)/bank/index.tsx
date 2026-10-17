@@ -33,6 +33,8 @@ import { Input } from '../../../../src/components/ui/Input';
 import { Button } from '../../../../src/components/ui/Button';
 import { Card } from '../../../../src/components/ui/Card';
 import { Badge } from '../../../../src/components/ui/Badge';
+import { openExternalUrl } from '../../../../src/utils/linking';
+import { PINTEREST_SVG } from '../../../../src/utils/urlMetadata';
 import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
 import { InspirationItem } from '../../../../src/types';
 import {
@@ -109,7 +111,7 @@ export default function BankScreen() {
           if (!isMounted) return;
           const fetched: InspirationItem[] = [];
           snapshot.forEach((docSnap) => {
-            const rawItem = { id: docSnap.id, ...(docSnap.data() as any) } as InspirationItem;
+            const rawItem = { ...(docSnap.data() as any), id: docSnap.id } as InspirationItem;
             fetched.push(enrichInspirationItem(rawItem));
           });
           setItems(fetched);
@@ -176,6 +178,37 @@ export default function BankScreen() {
     { label: 'TITLE Z-A', value: 'title-desc' },
     { label: 'TAGS', value: 'tags' },
   ];
+
+  // Totals calculations across bank items
+  const totalStats = useMemo(() => {
+    const active = items.filter((i) => !i.archived);
+    const links = active.filter((i) => i.kind === 'link' || Boolean(i.url)).length;
+    const notes = active.filter((i) => i.kind === 'note' || (!i.url && Boolean(i.userNote || i.caption))).length;
+    const images = active.filter((i) => Boolean(i.remotePreviewImageUrl)).length;
+    const indexed = active.filter((i) => i.processingStatus === 'ready' || Boolean(i.aiSummary)).length;
+
+    const platformsMap: Record<string, number> = { ALL: active.length };
+    const tagsMap: Record<string, number> = {};
+
+    for (const item of active) {
+      const plat = item.sourcePlatform?.toUpperCase() || (item.url ? 'WEB' : 'NOTE');
+      platformsMap[plat] = (platformsMap[plat] || 0) + 1;
+
+      for (const t of [...(item.tags || []), ...(item.aiTags || [])]) {
+        tagsMap[t] = (tagsMap[t] || 0) + 1;
+      }
+    }
+
+    return {
+      total: active.length,
+      links,
+      notes,
+      images,
+      indexed,
+      platformsMap,
+      tagsMap,
+    };
+  }, [items]);
 
   // Collect unique tags
   const allTags = Array.from(
@@ -249,7 +282,11 @@ export default function BankScreen() {
           ) : null}
         </View>
 
-        {item.processingStatus === 'pending' || item.processingStatus === 'processing' ? (
+        {item.processingStatus === 'pending' ? (
+          <Pressable onPress={() => handleRetryIndexing(item.id)}>
+            <Badge label="AI INDEXING..." variant="grade" />
+          </Pressable>
+        ) : item.processingStatus === 'processing' ? (
           <Badge label="AI INDEXING..." variant="grade" />
         ) : item.processingStatus === 'failed' ? (
           <Pressable onPress={() => handleRetryIndexing(item.id)}>
@@ -292,7 +329,7 @@ export default function BankScreen() {
     const footerTagsAndUrl = (
       <View style={styles.cardFooterArea}>
         {item.url ? (
-          <Pressable onPress={() => Linking.openURL(item.url!)}>
+          <Pressable onPress={() => openExternalUrl(item.url!)} accessibilityRole="link">
             <Text style={styles.sourceUrl} numberOfLines={1}>
               ↗ {item.url}
             </Text>
@@ -317,7 +354,11 @@ export default function BankScreen() {
         >
           <View style={styles.bentoFeaturedImageContainer}>
             <Image
-              source={{ uri: item.remotePreviewImageUrl! }}
+              source={{
+                uri: item.remotePreviewImageUrl?.includes('s.pinimg.com/webapp/logo')
+                  ? PINTEREST_SVG
+                  : item.remotePreviewImageUrl!,
+              }}
               style={styles.previewImage}
               resizeMode="cover"
             />
@@ -346,7 +387,11 @@ export default function BankScreen() {
           {hasImage ? (
             <View style={isBento ? styles.bentoImageContainer : styles.imageContainer}>
               <Image
-                source={{ uri: item.remotePreviewImageUrl! }}
+                source={{
+                  uri: item.remotePreviewImageUrl?.includes('s.pinimg.com/webapp/logo')
+                    ? PINTEREST_SVG
+                    : item.remotePreviewImageUrl!,
+                }}
                 style={styles.previewImage}
                 resizeMode="cover"
               />
@@ -366,7 +411,13 @@ export default function BankScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <TopNav
         title="rut"
-        subtitle="Dump Folder"
+        subtitle={
+          loading
+            ? 'Dump Folder'
+            : filtered.length === totalStats.total
+            ? `Dump Folder • ${totalStats.total} ${totalStats.total === 1 ? 'item' : 'items'}`
+            : `Dump Folder • ${filtered.length} of ${totalStats.total} items`
+        }
         rightAction={
           <Button
             title="+ NEW"
@@ -375,6 +426,42 @@ export default function BankScreen() {
           />
         }
       />
+
+      {/* TOTALS OVERVIEW BAR */}
+      <View style={styles.totalsBar}>
+        <View style={styles.totalsLeft}>
+          <Text style={styles.totalsHeadline}>
+            {filtered.length === totalStats.total
+              ? `${totalStats.total} TOTAL ${totalStats.total === 1 ? 'INSPIRATION' : 'INSPIRATIONS'}`
+              : `${filtered.length} OF ${totalStats.total} INSPIRATIONS`}
+          </Text>
+          {(searchQuery.trim() || selectedTag || selectedPlatform !== 'ALL') ? (
+            <Badge label="FILTERED" variant="grade" style={{ marginLeft: 6 }} />
+          ) : null}
+        </View>
+
+        <View style={styles.totalsStatsRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statNumber}>{totalStats.links}</Text>
+            <Text style={styles.statLabel}>LINKS</Text>
+          </View>
+          <Text style={styles.statDivider}>•</Text>
+          <View style={styles.statChip}>
+            <Text style={styles.statNumber}>{totalStats.notes}</Text>
+            <Text style={styles.statLabel}>NOTES</Text>
+          </View>
+          <Text style={styles.statDivider}>•</Text>
+          <View style={styles.statChip}>
+            <Text style={styles.statNumber}>{totalStats.images}</Text>
+            <Text style={styles.statLabel}>IMAGES</Text>
+          </View>
+          <Text style={styles.statDivider}>•</Text>
+          <View style={styles.statChip}>
+            <Text style={styles.statNumber}>{totalStats.indexed}</Text>
+            <Text style={styles.statLabel}>INDEXED</Text>
+          </View>
+        </View>
+      </View>
 
       {/* TUCKED CONTROL TABS */}
       <View style={styles.controlTabsBar}>
@@ -539,7 +626,7 @@ export default function BankScreen() {
                       selectedPlatform === plat && styles.platformPillTextActive,
                     ]}
                   >
-                    {plat}
+                    {plat}{totalStats.platformsMap[plat] !== undefined ? ` (${totalStats.platformsMap[plat]})` : ''}
                   </Text>
                 </Pressable>
               )}
@@ -555,7 +642,11 @@ export default function BankScreen() {
                       onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
                     >
                       <Badge
-                        label={selectedTag === tag ? `${tag} ✓` : tag}
+                        label={
+                          selectedTag === tag
+                            ? `${tag} (${totalStats.tagsMap[tag] || 1}) ✓`
+                            : `${tag} (${totalStats.tagsMap[tag] || 1})`
+                        }
                         variant={selectedTag === tag ? 'inverse' : 'grade'}
                         style={{ marginRight: spacing.xs, marginBottom: spacing.xs }}
                       />
@@ -634,6 +725,59 @@ const getStyles = (colors: ThemeColors, isDark: boolean, isDesktop: boolean) =>
   container: {
     flex: 1,
     backgroundColor: colors.canvas,
+  },
+  totalsBar: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gradeDivider,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    backgroundColor: colors.canvas,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
+  },
+  totalsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  totalsHeadline: {
+    ...typography.captionCap,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: colors.ink,
+  },
+  totalsStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  statNumber: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  statLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    color: colors.gradeDivider,
+    fontSize: 10,
   },
   controlTabsBar: {
     paddingHorizontal: spacing.base,

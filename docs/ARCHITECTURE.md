@@ -85,7 +85,7 @@ flowchart TB
 |---|---|
 | **[GOOGLE_USAGE.md](GOOGLE_USAGE.md)** | Comprehensive guide on Google Cloud, Firebase 2nd Gen, and Gemini AI services used across `rut`. |
 | **[SHARING.md](SHARING.md)** | Multi-platform incoming share pipeline (Android intents, iOS share extension, PWA share target). |
-| **[COST_ESTIMATE_20261017_165100.md](COST_ESTIMATE_20261017_165100.md)** | Unit economics, per-user monthly estimates, and fleet scale projections. |
+| **[COST_ESTIMATE_20261018_010900.md](COST_ESTIMATE_20261018_010900.md)** | Unit economics, per-user monthly estimates, and fleet scale projections. |
 | **[COST_SAFETY_GUARDRAILS.md](COST_SAFETY_GUARDRAILS.md)** | Step-by-step operational guide for adjusting budget limits, kill-switches, and billing alerts. |
 | **[SECURITY_SCAN_20261017_165100.md](SECURITY_SCAN_20261017_165100.md)** | Automated dependency vulnerability scan and Red Team Firestore security rules audit. |
 | **[COST_AUDIT.md](COST_AUDIT.md)** | Historical operational read/write analysis and Firestore budget breakdowns. |

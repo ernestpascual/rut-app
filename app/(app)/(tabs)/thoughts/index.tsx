@@ -66,7 +66,7 @@ export default function ChatsListScreen() {
           await deleteChatSession(cid, user?.uid);
         }
         setChats((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
-        setToastMessage(`✓ ${count} ${count === 1 ? 'train of thought' : 'trains of thought'} permanently deleted.`);
+        setToastMessage(`✓ ${count} ${count === 1 ? 'thought' : 'thoughts'} permanently deleted.`);
         setSelectedIds([]);
         setSelectMode(false);
       } catch (err) {
@@ -78,7 +78,7 @@ export default function ChatsListScreen() {
 
     if (Platform.OS === 'web') {
       const confirmed = typeof window !== 'undefined' && window.confirm(
-        `Delete Selected Chats?\n\nPermanently delete ${count} ${count === 1 ? 'train of thought' : 'trains of thought'}? This cannot be undone.`
+        `Delete Selected Thoughts?\n\nPermanently delete ${count} ${count === 1 ? 'thought' : 'thoughts'}? This cannot be undone.`
       );
       if (confirmed) {
         await performDelete();
@@ -87,8 +87,8 @@ export default function ChatsListScreen() {
     }
 
     Alert.alert(
-      'Delete Selected Chats',
-      `Permanently delete ${count} ${count === 1 ? 'train of thought' : 'trains of thought'}? This cannot be undone.`,
+      'Delete Selected Thoughts',
+      `Permanently delete ${count} ${count === 1 ? 'thought' : 'thoughts'}? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -102,7 +102,7 @@ export default function ChatsListScreen() {
 
   useEffect(() => {
     if (params.deleted === '1') {
-      const chatTitle = params.title ? `"${params.title}"` : 'Train of thought';
+      const chatTitle = params.title ? `"${params.title}"` : 'Thought';
       setToastMessage(`✓ ${chatTitle} permanently deleted.`);
     }
   }, [params.deleted, params.title]);
@@ -168,7 +168,7 @@ export default function ChatsListScreen() {
 
   const handleDeleteChat = async (chatId: string, title: string) => {
     if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' && window.confirm(`Delete Train of Thought?\n\nAre you sure you want to permanently delete "${title}"? This cannot be undone.`);
+      const confirmed = typeof window !== 'undefined' && window.confirm(`Delete Thought?\n\nAre you sure you want to permanently delete "${title}"? This cannot be undone.`);
       if (confirmed) {
         await deleteChatSession(chatId, user?.uid);
         setChats((prev) => prev.filter((c) => c.id !== chatId));
@@ -177,7 +177,7 @@ export default function ChatsListScreen() {
       return;
     }
 
-    Alert.alert('Delete Train of Thought', `Are you sure you want to delete "${title}"?`, [
+    Alert.alert('Delete Thought', `Are you sure you want to delete "${title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -195,7 +195,7 @@ export default function ChatsListScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <TopNav
         title="rut"
-        subtitle={selectMode ? `${selectedIds.length} OF ${chats.length} SELECTED` : 'Trains of Thought'}
+        subtitle={selectMode ? `${selectedIds.length} OF ${chats.length} SELECTED` : `Thoughts (${chats.length}/10)`}
         leftAction={
           selectMode ? (
             <Button
@@ -241,8 +241,17 @@ export default function ChatsListScreen() {
                 />
               )}
               <Button
-                title="+ NEW CHAT"
-                onPress={() => router.push('/(app)/chat/new')}
+                title="+ NEW THOUGHT"
+                onPress={() => {
+                  if (chats.length >= 10) {
+                    Alert.alert(
+                      'Thought Limit Reached',
+                      'You can have up to 10 thoughts for now. Please delete or archive an existing thought to start a new one.'
+                    );
+                    return;
+                  }
+                  router.push('/(app)/thought/new');
+                }}
                 style={{ height: 36, paddingHorizontal: 16 }}
               />
             </View>
@@ -275,13 +284,22 @@ export default function ChatsListScreen() {
         </View>
       ) : chats.length === 0 ? (
         <View style={styles.centerBox}>
-          <Text style={styles.emptyTitle}>NO ACTIVE THOUGHT TRAINS</Text>
+          <Text style={styles.emptyTitle}>NO ACTIVE THOUGHTS</Text>
           <Text style={styles.emptySubtitle}>
-            Each chat is an isolated exploration. Connect inspiration items, synthesize ideas, or brainstorm new concepts.
+            Each thought is an isolated exploration. Connect inspiration items, synthesize ideas, or brainstorm new concepts.
           </Text>
           <Button
-            title="+ START A TRAIN OF THOUGHT"
-            onPress={() => router.push('/(app)/chat/new')}
+            title="+ START A THOUGHT"
+            onPress={() => {
+              if (chats.length >= 10) {
+                Alert.alert(
+                  'Thought Limit Reached',
+                  'You can have up to 10 thoughts for now. Please delete or archive an existing thought to start a new one.'
+                );
+                return;
+              }
+              router.push('/(app)/thought/new');
+            }}
             style={{ marginTop: spacing.base }}
           />
         </View>
@@ -298,7 +316,7 @@ export default function ChatsListScreen() {
                   if (selectMode) {
                     toggleSelect(item.id);
                   } else {
-                    router.push(`/(app)/chat/${item.id}`);
+                    router.push(`/(app)/thought/${item.id}`);
                   }
                 }}
                 style={[styles.chatCard, selectMode && isSelected && styles.chatCardSelected]}

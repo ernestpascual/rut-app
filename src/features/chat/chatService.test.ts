@@ -311,6 +311,53 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     expect(assistantMessage.webSources).toBeDefined();
     expect(assistantMessage.content).toContain('live precedents');
   });
+
+  test('does not pull unrelated bank items and answers IoT query with domain substance', () => {
+    const unrelatedPins: InspirationItem[] = [
+      {
+        id: 'kesha-photo',
+        ownerUid: 'test',
+        kind: 'link',
+        title: 'Edited Photo of Kesha',
+        url: 'https://instagram.com/p/123',
+        previewDescription: 'Here is how I edited this photo of Kesha. While the video gives you layout tricks',
+        userNote: 'Portrait photography and color grade',
+        tags: ['photography', 'portrait', 'editing'],
+        concepts: ['lighting', 'color'],
+        aiSummary: 'Photo editing tutorial',
+        processingStatus: 'ready',
+        processingErrorCode: null,
+        duplicateOf: null,
+        archived: false,
+        createdAt: 1000,
+        updatedAt: 1000,
+        capturedAt: 1000,
+      } as any,
+    ];
+
+    const result = synthesizeThoughtTrain({
+      userQuery: 'I want to create an IOT device that uses wifi signals to map out something. is there any thing from my bank that tells me about it?',
+      allInspirations: unrelatedPins,
+    });
+
+    expect(result.sourceInspirationIds).not.toContain('kesha-photo');
+    expect(result.response).toContain("don't have any saved notes or inspirations");
+    expect(result.response).toContain('WiFi CSI');
+    expect(result.response).not.toContain('visual language');
+    expect(result.response).not.toContain('clean, distinct tension');
+  });
+
+  test('handles user correction with zero defensive boilerplate', () => {
+    const result = synthesizeThoughtTrain({
+      userQuery: 'it doesnt answer my question',
+      conversationHistory: [
+        { role: 'user', content: 'Tell me about IoT' },
+        { role: 'assistant', content: 'Here is some info' },
+      ],
+    });
+
+    expect(result.response).toContain("let's refocus directly");
+  });
 });
 
 

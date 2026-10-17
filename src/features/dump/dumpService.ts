@@ -81,7 +81,7 @@ export async function getDumpInspirations(uid?: string): Promise<InspirationItem
     const snap = await getDocs(q);
     const items: InspirationItem[] = [];
     snap.forEach((d) => {
-      items.push(enrichInspirationItem({ id: d.id, ...(d.data() as any) }));
+      items.push(enrichInspirationItem({ ...(d.data() as any), id: d.id }));
     });
     AsyncStorage.setItem(DUMP_STORAGE_KEY, JSON.stringify(items)).catch(() => {});
     return items;
@@ -131,6 +131,19 @@ export async function deleteInspiration(itemId: string, uid?: string): Promise<v
   try {
     if (db && targetUid) {
       await deleteDoc(doc(db, 'users', targetUid, 'inspirations', itemId));
+
+      // Also handle cases where legacy items had mismatched internal id fields
+      const q = query(
+        collection(db, 'users', targetUid, 'inspirations'),
+        where('id', '==', itemId),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        if (d.id !== itemId) {
+          await deleteDoc(d.ref);
+        }
+      }
     }
   } catch (err) {
     console.warn('[dumpService] deleteInspiration Firestore fallback:', err);
@@ -196,8 +209,11 @@ export async function quickDumpLinkOrNote(
   const rawTitle = meta?.title || (domain ? `Saved from ${domain}` : trimmed.slice(0, 60));
   const title = rawTitle.length > 300 ? rawTitle.slice(0, 100).trim() : rawTitle;
 
+  const docRef = db && targetUid ? doc(collection(db, 'users', targetUid, 'inspirations')) : null;
+  const docId = docRef ? docRef.id : `dump-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
   const newItem: InspirationItem = {
-    id: `dump-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    id: docId,
     ownerUid: targetUid,
     kind: normalized ? 'link' : 'note',
     folder: 'dump',
@@ -228,11 +244,9 @@ export async function quickDumpLinkOrNote(
   };
 
   try {
-    const docRef = await addDoc(
-      collection(db, 'users', targetUid, 'inspirations'),
-      newItem
-    );
-    newItem.id = docRef.id;
+    if (docRef) {
+      await setDoc(docRef, newItem);
+    }
   } catch (err) {
     console.warn('[dumpService] Firestore write fallback:', err);
   }

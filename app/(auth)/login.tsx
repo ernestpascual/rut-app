@@ -63,7 +63,7 @@ export default function LoginScreen() {
           <View style={styles.heroSection}>
             <Text style={styles.heroTitle}>Login</Text>
             <Text style={styles.heroSubhead}>
-              Access your saved links, trains of thought, and indexed ideas.
+              Access your saved links, thoughts, and indexed ideas.
             </Text>
           </View>
 

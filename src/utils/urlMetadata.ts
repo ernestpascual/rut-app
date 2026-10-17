@@ -609,6 +609,36 @@ export async function fetchLiveMetadata(rawUrl: string): Promise<LiveMetadataPay
     } catch {}
   }
 
+  // Strategy 4.5: Official Pinterest oEmbed (CORS enabled in mobile native and callable)
+  if (domain.includes('pinterest.com') || domain.includes('pin.it')) {
+    try {
+      const oembedUrl = `https://www.pinterest.com/oembed.json?url=${encodeURIComponent(norm)}`;
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          let thumbnail = data.thumbnail_url;
+          if (thumbnail && typeof thumbnail === 'string') {
+            thumbnail = thumbnail.replace('/236x/', '/736x/');
+          }
+          const author = cleanMetadata(data.author_name || '');
+          let title = cleanMetadata(data.title || '');
+          if (/video::cue|[{};]|font-family/i.test(title)) {
+            title = '';
+          }
+          return {
+            title: title || (author ? `Pinterest Pin by ${author}` : 'Pinterest Visual Pin'),
+            author: author || undefined,
+            caption: title || undefined,
+            description: title || (author ? `Pinned by ${author} on Pinterest.` : 'Pinterest visual inspiration pin.'),
+            thumbnail: thumbnail && !/s\.pinimg\.com\/webapp\/logo|favicon/i.test(thumbnail) ? thumbnail : undefined,
+            siteName: 'Pinterest',
+          };
+        }
+      }
+    } catch {}
+  }
+
   // Strategy 5: Universal CORS-friendly OpenGraph resolver (Microlink)
   // Perfectly handles Instagram, Pinterest, Threads, and arbitrary websites in browser contexts
   try {
@@ -673,6 +703,12 @@ export async function fetchLiveMetadata(rawUrl: string): Promise<LiveMetadataPay
           if (caption && /Instagram:/i.test(caption)) {
             const parsed = parseInstagramDesc(caption);
             if (parsed) caption = parsed;
+          }
+          if (image && /s\.pinimg\.com\/webapp\/logo|favicon/i.test(image)) {
+            image = undefined;
+          }
+          if (title && /video::cue|[{};]|font-family/i.test(title)) {
+            title = '';
           }
         }
 
@@ -769,7 +805,9 @@ export async function enrichUrlMetadata(
       }
     }
     if (live.thumbnail) {
-      base.previewImageUrl = live.thumbnail;
+      if (!/s\.pinimg\.com\/webapp\/logo|favicon/i.test(live.thumbnail)) {
+        base.previewImageUrl = live.thumbnail;
+      }
     }
     if (live.siteName) {
       const isCurated = Object.values(DOMAIN_PLATFORM_MAP).some((m) => m.siteName === base.siteName);
@@ -792,6 +830,10 @@ export async function enrichUrlMetadata(
 
   if (base.author || base.caption || userNote) {
     base.editorialContext = formatNotesWithCaption(base.author, base.caption, userNote, base.siteName);
+  }
+
+  if (base.previewImageUrl && /s\.pinimg\.com\/webapp\/logo|favicon/i.test(base.previewImageUrl)) {
+    base.previewImageUrl = getPlatformFallbackSvg(base.platform);
   }
 
   base.title = truncateTitle(base.title);

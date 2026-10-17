@@ -8,6 +8,8 @@ const fetcher_1 = require("../metadata/fetcher");
  * Pinterest, Threads, YouTube, and generic web links) without client-side CORS issues.
  */
 exports.captureMetadata = (0, https_1.onCall)({
+    invoker: 'public',
+    cors: true,
     maxInstances: 10,
     timeoutSeconds: 30,
     memory: '256MiB',

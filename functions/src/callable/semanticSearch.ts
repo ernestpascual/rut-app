@@ -4,7 +4,7 @@ import { searchOwnerIndex } from '../ai/retrieval';
 import { recordUsageEvent, checkCostGuardrails } from '../cost/ledger';
 import { isAiKillSwitchActive } from '../config';
 
-export const semanticSearch = onCall(async (request) => {
+export const semanticSearch = onCall({ invoker: 'public', cors: true }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'User must be signed in to perform search.');
   }
@@ -29,7 +29,7 @@ export const semanticSearch = onCall(async (request) => {
     const embedResult = await aiProvider.generateEmbedding(queryText);
 
     // Strict owner retrieval: searches only index records belonging to this user
-    const results = await searchOwnerIndex(uid, embedResult.embedding, 15);
+    const results = await searchOwnerIndex(uid, embedResult.embedding, 15, 0.38);
 
     // Record usage
     await recordUsageEvent({

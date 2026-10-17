@@ -6,7 +6,11 @@ const config_1 = require("../config");
 const factory_1 = require("../ai/factory");
 const retrieval_1 = require("../ai/retrieval");
 const ledger_1 = require("../cost/ledger");
-exports.chatWithBank = (0, https_1.onCall)(async (request) => {
+exports.chatWithBank = (0, https_1.onCall)({
+    invoker: 'public',
+    cors: true,
+    timeoutSeconds: 60,
+}, async (request) => {
     if (!request.auth || !request.auth.uid) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated.');
     }
@@ -23,19 +27,99 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('resource-exhausted', 'Daily AI cost limit reached for this account.');
     }
     try {
-        const requestedModel = request.data?.model || undefined;
+        // 1. Fetch chat session doc or auto-create if missing
+        let pinnedIds = Array.isArray(request.data?.pinnedInspirationIds)
+            ? request.data.pinnedInspirationIds
+            : [];
+        let memorySummary = typeof request.data?.memorySummary === 'string' ? request.data.memorySummary : null;
+        let sessionModel = null;
+        try {
+            const chatDocRef = config_1.db.collection('users').doc(uid).collection('chats').doc(chatId);
+            const chatDoc = await chatDocRef.get();
+            if (chatDoc.exists) {
+                const chatData = chatDoc.data() || {};
+                if (Array.isArray(chatData.pinnedInspirationIds)) {
+                    pinnedIds = Array.from(new Set([...pinnedIds, ...chatData.pinnedInspirationIds]));
+                }
+                if (chatData.memorySummary && !memorySummary) {
+                    memorySummary = chatData.memorySummary;
+                }
+                if (chatData.model) {
+                    sessionModel = chatData.model;
+                }
+            }
+        }
+        catch (docErr) {
+            console.warn('[chatWithBank] Chat doc fetch/init warning:', docErr);
+        }
+        // 2. Fetch user's preferred model from Settings if neither request nor thought specifies one
+        let userPreferredModel = null;
+        if (!request.data?.model && !sessionModel) {
+            try {
+                const userSnap = await config_1.db.collection('users').doc(uid).get();
+                if (userSnap.exists && userSnap.data()?.preferredModel) {
+                    userPreferredModel = userSnap.data()?.preferredModel;
+                }
+            }
+            catch (uErr) {
+                console.warn('[chatWithBank] User doc fetch warning:', uErr);
+            }
+        }
+        // Priority: request override > thought setting > user settings preferredModel > default
+        const requestedModel = request.data?.model || sessionModel || userPreferredModel || undefined;
         const webAccess = Boolean(request.data?.webAccess);
         const aiProvider = (0, factory_1.getAIProvider)(requestedModel);
-        // 1. Fetch chat session doc to get pinned items
-        const chatDoc = await config_1.db.collection('users').doc(uid).collection('chats').doc(chatId).get();
-        if (!chatDoc.exists) {
-            throw new https_1.HttpsError('not-found', 'Chat session not found.');
+        // Save/persist session with model
+        try {
+            const chatDocRef = config_1.db.collection('users').doc(uid).collection('chats').doc(chatId);
+            await chatDocRef.set({
+                id: chatId,
+                ownerUid: uid,
+                model: requestedModel || 'gemini-3.5-flash-lite',
+                updatedAt: Date.now(),
+            }, { merge: true });
         }
-        const chatData = chatDoc.data() || {};
-        const pinnedIds = chatData.pinnedInspirationIds || [];
-        // 2. Fetch pinned inspiration items with full RAG detail
+        catch (docErr) {
+            console.warn('[chatWithBank] Chat doc update warning:', docErr);
+        }
+        // 2. Multi-turn conversation history window (capped at 20 recent turns; earlier turns compacted)
+        let chatHistory = [];
+        if (Array.isArray(request.data?.chatHistory) && request.data.chatHistory.length > 0) {
+            chatHistory = request.data.chatHistory
+                .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+                .map((m) => ({ role: m.role, content: m.content.trim() }));
+        }
+        else {
+            try {
+                const historySnap = await config_1.db
+                    .collection('users')
+                    .doc(uid)
+                    .collection('chats')
+                    .doc(chatId)
+                    .collection('messages')
+                    .orderBy('createdAt', 'desc')
+                    .limit(50)
+                    .get();
+                const fetched = historySnap.docs.reverse().map((d) => {
+                    const m = d.data();
+                    return { role: m.role, content: (m.content || '').trim() };
+                }).filter((m) => m.role === 'user' || m.role === 'assistant');
+                chatHistory = fetched;
+            }
+            catch (hErr) {
+                console.warn('[Chat] History fetch error:', hErr);
+            }
+        }
+        // Strip out the current message if it was already saved and present at the end of chatHistory
+        if (chatHistory.length > 0) {
+            const last = chatHistory[chatHistory.length - 1];
+            if (last.role === 'user' && last.content === userMessage) {
+                chatHistory = chatHistory.slice(0, -1);
+            }
+        }
+        // 3. Fetch pinned inspiration items with full RAG detail
         const pinnedInspirations = [];
-        for (const pid of pinnedIds.slice(0, 10)) {
+        for (const pid of pinnedIds.slice(0, 4)) {
             const itemSnap = await config_1.db.collection('users').doc(uid).collection('inspirations').doc(pid).get();
             if (itemSnap.exists) {
                 const d = itemSnap.data();
@@ -53,28 +137,129 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
                 });
             }
         }
-        // 3. Multi-source RAG Knowledge Base Retrieval
-        // Sources:
-        // A) Semantic vector search via _aiInspirationIndex
-        // B) Direct Firestore dump collection items
-        // C) Client-provided dumpContext (ensures offline/recent saves are immediately in knowledgebase)
+        // 4. Multi-source RAG Knowledge Base Retrieval
         const candidateMap = new Map();
-        // Client dump context
+        // Fetch user's inspirations directly from Firestore so server RAG is always comprehensive
+        try {
+            const userInspirationsSnap = await config_1.db
+                .collection('users')
+                .doc(uid)
+                .collection('inspirations')
+                .where('archived', '==', false)
+                .limit(80)
+                .get();
+            for (const doc of userInspirationsSnap.docs) {
+                if (!pinnedIds.includes(doc.id)) {
+                    const d = doc.data();
+                    candidateMap.set(doc.id, {
+                        id: doc.id,
+                        title: d?.title || 'Untitled',
+                        summary: d?.aiSummary || d?.userNote || d?.sharedText || d?.previewDescription || d?.caption || '',
+                        userNote: d?.userNote || null,
+                        caption: d?.caption || null,
+                        url: d?.url || null,
+                        domain: d?.sourceDomain || d?.siteName || d?.sourcePlatform || null,
+                        author: d?.author || null,
+                        tags: d?.tags || [],
+                        concepts: d?.concepts || [],
+                    });
+                }
+            }
+        }
+        catch (fetchErr) {
+            console.warn('[RAG] Error fetching user inspirations from Firestore:', fetchErr);
+        }
+        // Add client dump context (e.g. from local storage or cached state)
         const clientDump = Array.isArray(request.data?.dumpContext)
             ? request.data.dumpContext
             : [];
         for (const item of clientDump) {
-            if (item.id && !pinnedIds.includes(item.id)) {
+            if (item.id && !pinnedIds.includes(item.id) && !candidateMap.has(item.id)) {
                 candidateMap.set(item.id, item);
             }
         }
-        // Vector search
+        // Fetch total bank count from Firestore so the assistant always knows the true bank size
+        let totalBankCount = typeof request.data?.totalBankCount === 'number' && request.data.totalBankCount > 0
+            ? request.data.totalBankCount
+            : 0;
+        try {
+            const countSnap = await config_1.db
+                .collection('users')
+                .doc(uid)
+                .collection('inspirations')
+                .where('archived', '==', false)
+                .count()
+                .get();
+            totalBankCount = Math.max(totalBankCount, countSnap.data().count);
+        }
+        catch (countErr) {
+            totalBankCount = Math.max(totalBankCount, candidateMap.size, clientDump.length);
+        }
+        totalBankCount = Math.max(totalBankCount, candidateMap.size, clientDump.length);
+        // Check if user specifically asks to inspect or pull from their dump/bank
+        const isDumpQuery = /\b(dump|bank|saves?|saved|inspirations?|references?|bookmarks?|vault|pin(ned)?)\b/i.test(userMessage) ||
+            /\b(check|pull|search|look up|show me|find|from my|what do i have)\b.*\b(dump|bank|saves?|inspirations?|notes?)\b/i.test(userMessage) ||
+            /\b(pull|bring up|connect to|relate to)\b.*\b(saves?|inspirations?|bank|dump)\b/i.test(userMessage);
+        // Check if user specifically asks to re-evaluate, review, or rethink
+        const isReevaluateQuery = /\b(re-?evaluate|re-?examine|re-?check|re-?assess|re-?think|re-?consider|look again|check again|analyze again|look closer|re-?analyze|review|fresh look|re-?inspect|take another look|evaluate again)\b/i.test(userMessage);
+        // Clean, meaningful search tokens (ignoring purely grammatical filler)
+        const STOP_WORDS = new Set([
+            'the', 'and', 'for', 'that', 'this', 'with', 'from', 'have', 'are', 'was', 'were',
+            'will', 'what', 'when', 'where', 'which', 'who', 'why', 'how', 'all', 'any', 'can',
+            'could', 'should', 'would', 'about', 'into', 'some', 'than', 'them', 'then', 'there',
+            'these', 'they', 'you', 'your', 'our', 'just', 'more', 'also', 'like', 'think',
+            'give', 'tell', 'help', 'much', 'many', 'good', 'well', 'talk', 'such', 'very',
+            'even', 'most', 'only', 'hello', 'hey', 'okay', 'sure', 'please', 'thanks', 'thank',
+            'something', 'anything', 'everything', 'nothing', 'things', 'thing',
+            'question', 'answer', 'does', 'doesnt', "doesn't", 'dont', "don't", 'did', 'didnt', "didn't"
+        ]);
+        const qTokens = userMessage
+            .toLowerCase()
+            .split(/[^a-z0-9_]+/)
+            .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
+        // Separate meta-vocabulary (terms like 'bank', 'dump', 'vault', 'saves', 'inspirations')
+        // from actual subject matter keywords (like 'wifi', 'sensor', 'iot', 'poster', 'typography')
+        const BANK_META_TERMS = new Set([
+            'bank', 'dump', 'save', 'saves', 'saved', 'vault',
+            'inspiration', 'inspirations', 'reference', 'references',
+            'item', 'items', 'note', 'notes', 'file', 'files',
+            'pin', 'pins', 'pinned', 'bookmark', 'bookmarks', 'total'
+        ]);
+        const topicTokens = qTokens.filter((t) => !BANK_META_TERMS.has(t));
+        const isBroadBankQuery = isDumpQuery && topicTokens.length === 0;
+        // Stem generator for fuzzy matching (plural, ing, ed)
+        const getWordStems = (word) => {
+            const clean = word.toLowerCase().trim();
+            if (clean.length <= 2)
+                return [clean];
+            const stems = new Set([clean]);
+            if (clean.endsWith('ies') && clean.length > 4) {
+                stems.add(clean.slice(0, -3) + 'y');
+            }
+            else if (clean.endsWith('es') && clean.length > 4) {
+                stems.add(clean.slice(0, -2));
+            }
+            else if (clean.endsWith('s') && clean.length > 3) {
+                stems.add(clean.slice(0, -1));
+            }
+            if (clean.endsWith('ing') && clean.length > 5) {
+                stems.add(clean.slice(0, -3));
+            }
+            else if (clean.endsWith('ed') && clean.length > 4) {
+                stems.add(clean.slice(0, -2));
+            }
+            return Array.from(stems);
+        };
+        // Vector semantic search with realistic cosine thresholds
+        const vectorThreshold = isDumpQuery ? 0.35 : 0.44;
+        const vectorSimMap = new Map();
         try {
             const queryEmbed = await aiProvider.generateEmbedding(userMessage);
-            const searchMatches = await (0, retrieval_1.searchOwnerIndex)(uid, queryEmbed.embedding, 10);
+            const searchMatches = await (0, retrieval_1.searchOwnerIndex)(uid, queryEmbed.embedding, 12, vectorThreshold);
             for (const match of searchMatches) {
                 if (pinnedIds.includes(match.inspirationId))
                     continue;
+                vectorSimMap.set(match.inspirationId, match.similarity);
                 if (!candidateMap.has(match.inspirationId)) {
                     const snap = await config_1.db
                         .collection('users')
@@ -103,98 +288,120 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
         catch (e) {
             console.warn('[RAG] Vector retrieval error:', e);
         }
-        // Firestore fallback / top recent saves if pool is small
-        if (candidateMap.size < 8) {
-            try {
-                const recentSnap = await config_1.db
-                    .collection('users')
-                    .doc(uid)
-                    .collection('inspirations')
-                    .where('archived', '==', false)
-                    .limit(20)
-                    .get();
-                recentSnap.forEach((docSnap) => {
-                    if (!pinnedIds.includes(docSnap.id) && !candidateMap.has(docSnap.id)) {
-                        const d = docSnap.data();
-                        candidateMap.set(docSnap.id, {
-                            id: docSnap.id,
-                            title: d?.title || 'Untitled',
-                            summary: d?.aiSummary || d?.userNote || d?.sharedText || d?.previewDescription || '',
-                            userNote: d?.userNote || null,
-                            caption: d?.caption || null,
-                            url: d?.url || null,
-                            domain: d?.sourceDomain || d?.siteName || d?.sourcePlatform || null,
-                            author: d?.author || null,
-                            tags: d?.tags || [],
-                            concepts: d?.concepts || [],
-                        });
+        // Anti-fatigue tracking: find inspiration titles / IDs already discussed in recent history
+        // When the user asks to re-evaluate, do NOT lock them out!
+        const recentlyDiscussed = new Set();
+        if (!isReevaluateQuery) {
+            for (const turn of chatHistory.slice(-8)) {
+                const contentLower = (turn.content || '').toLowerCase();
+                for (const item of candidateMap.values()) {
+                    if (contentLower.includes(item.id.toLowerCase()) || contentLower.includes(item.title.toLowerCase())) {
+                        recentlyDiscussed.add(item.id);
                     }
-                });
-            }
-            catch (e) {
-                console.warn('[RAG] Firestore dump fetch fallback:', e);
+                }
+                for (const item of pinnedInspirations) {
+                    if (contentLower.includes(item.id.toLowerCase()) || contentLower.includes(item.title.toLowerCase())) {
+                        recentlyDiscussed.add(item.id);
+                    }
+                }
             }
         }
-        // Keyword & thematic scoring across candidate pool
-        const qTokens = userMessage.toLowerCase().split(/[\s,.-]+/).filter((t) => t.length > 2);
-        const scoredList = Array.from(candidateMap.values()).map((item) => {
-            let score = 0;
-            const haystack = `${item.title} ${item.userNote || ''} ${item.caption || ''} ${item.summary || ''} ${(item.tags || []).join(' ')} ${(item.concepts || []).join(' ')} ${item.domain || ''}`.toLowerCase();
-            for (const tok of qTokens) {
-                if (haystack.includes(tok))
-                    score += 3;
-            }
-            return { item, score };
-        });
-        scoredList.sort((a, b) => b.score - a.score);
-        const isDumpQuery = /dump|bank|save|inspiration|reference/i.test(userMessage);
-        const scoredPositive = scoredList.filter((sc) => sc.score > 0);
-        const retrievedInspirations = isDumpQuery
-            ? (scoredPositive.length > 0 ? scoredPositive.slice(0, 4) : scoredList.slice(0, 3)).map((sc) => sc.item)
-            : scoredPositive.slice(0, 3).map((sc) => sc.item);
-        // 4. Multi-turn conversation history window (up to 12 messages for full dialogue memory)
-        let chatHistory = [];
-        if (Array.isArray(request.data?.chatHistory) && request.data.chatHistory.length > 0) {
-            chatHistory = request.data.chatHistory
-                .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-                .map((m) => ({ role: m.role, content: m.content.trim() }));
+        const userExplicitlyAsked = (itemTitle, itemId) => isReevaluateQuery || userMessage.toLowerCase().includes(itemTitle.toLowerCase()) || userMessage.includes(itemId);
+        let retrievedInspirations = [];
+        if (isBroadBankQuery) {
+            // Broad bank query: provide representative sample across active inspirations
+            retrievedInspirations = Array.from(candidateMap.values()).slice(0, 5);
         }
         else {
-            try {
-                const historySnap = await config_1.db
-                    .collection('users')
-                    .doc(uid)
-                    .collection('chats')
-                    .doc(chatId)
-                    .collection('messages')
-                    .orderBy('createdAt', 'desc')
-                    .limit(12)
-                    .get();
-                historySnap.docs.reverse().forEach((d) => {
-                    const m = d.data();
-                    if (m.role === 'user' || m.role === 'assistant') {
-                        chatHistory.push({ role: m.role, content: (m.content || '').trim() });
+            const tokensToScore = topicTokens.length > 0 ? topicTokens : qTokens;
+            // Multi-layer Hybrid Scoring (Keyword Stems + Field Specificity + Vector Cosine Similarity)
+            const scoredList = Array.from(candidateMap.values())
+                .filter((item) => !recentlyDiscussed.has(item.id) || userExplicitlyAsked(item.title, item.id))
+                .map((item) => {
+                let score = 0;
+                const titleLower = (item.title || '').toLowerCase();
+                const tagsLower = (item.tags || []).join(' ').toLowerCase();
+                const conceptsLower = (item.concepts || []).join(' ').toLowerCase();
+                const summaryLower = (item.summary || '').toLowerCase();
+                const noteLower = (item.userNote || item.caption || '').toLowerCase();
+                const domainLower = (item.domain || '').toLowerCase();
+                const haystack = `${titleLower} ${tagsLower} ${conceptsLower} ${summaryLower} ${noteLower} ${domainLower}`;
+                for (const tok of tokensToScore) {
+                    const stems = getWordStems(tok);
+                    for (const stem of stems) {
+                        const exactRegex = new RegExp(`(?:^|[^a-z0-9_])${stem}(?:$|[^a-z0-9_])`, 'i');
+                        if (exactRegex.test(titleLower)) {
+                            score += 7;
+                            break;
+                        }
+                        if (exactRegex.test(tagsLower) || exactRegex.test(conceptsLower)) {
+                            score += 5;
+                            break;
+                        }
+                        if (exactRegex.test(summaryLower) || exactRegex.test(noteLower)) {
+                            score += 4;
+                            break;
+                        }
+                        if (haystack.includes(stem)) {
+                            score += 3;
+                            break;
+                        }
                     }
-                });
-            }
-            catch (hErr) {
-                console.warn('[Chat] History fetch error:', hErr);
-            }
+                }
+                // Add continuous vector similarity bonus
+                const vectorSim = vectorSimMap.get(item.id);
+                if (typeof vectorSim === 'number' && vectorSim > 0) {
+                    score += Math.round(vectorSim * 14);
+                }
+                return { item, score, vectorSim: vectorSim || 0 };
+            });
+            scoredList.sort((a, b) => b.score - a.score);
+            // In dump queries, require score >= 4 to be considered relevant.
+            // In normal dialogue, require score >= 7 or vector similarity >= 0.48 so only truly relevant saves ground the discussion.
+            const minScoreThreshold = isDumpQuery ? 4 : 7;
+            const scoredPositive = scoredList.filter((sc) => sc.score >= minScoreThreshold);
+            retrievedInspirations = scoredPositive
+                .slice(0, isDumpQuery ? 4 : 2)
+                .map((sc) => sc.item);
         }
-        // Strip out the current message if it was already saved and present at the end of chatHistory
-        if (chatHistory.length > 0) {
-            const last = chatHistory[chatHistory.length - 1];
-            if (last.role === 'user' && last.content === userMessage) {
-                chatHistory = chatHistory.slice(0, -1);
+        // For pinned inspirations: only pass them if not already exhaustively cited in recent history (unless re-evaluating)
+        const freshPinned = isReevaluateQuery
+            ? pinnedInspirations
+            : pinnedInspirations.filter((item) => !recentlyDiscussed.has(item.id) || userExplicitlyAsked(item.title, item.id));
+        // Memory Compaction: Only when conversation has grown very long (> 20 messages),
+        // compact older turns into memorySummary while preserving the last 20 turns of active dialogue
+        if (chatHistory.length > 20) {
+            const older = chatHistory.slice(0, -20);
+            const recent = chatHistory.slice(-20);
+            const compactionExcerpt = older
+                .map((m) => `${m.role === 'user' ? 'User' : 'Rut'}: "${m.content.slice(0, 90)}"`)
+                .join('; ');
+            memorySummary = memorySummary
+                ? `${memorySummary} Earlier: ${compactionExcerpt}`.slice(0, 800)
+                : `Earlier conversation points: ${compactionExcerpt}`.slice(0, 800);
+            chatHistory = recent;
+            try {
+                await config_1.db.collection('users').doc(uid).collection('chats').doc(chatId).set({
+                    memorySummary,
+                    compactedMessageCount: older.length,
+                    updatedAt: Date.now(),
+                }, { merge: true });
+            }
+            catch (compErr) {
+                console.warn('[Chat] Failed to persist compacted memory:', compErr);
             }
         }
         // 5. Generate AI Chat response
         const chatResult = await aiProvider.generateChatResponse({
             message: userMessage,
             chatHistory,
-            pinnedInspirations,
+            pinnedInspirations: freshPinned,
             retrievedInspirations,
             webAccess,
+            memorySummary,
+            model: requestedModel,
+            totalBankCount,
+            isReevaluate: isReevaluateQuery,
         });
         // 6. Record usage event in integer micros
         await (0, ledger_1.recordUsageEvent)({
@@ -216,11 +423,15 @@ exports.chatWithBank = (0, https_1.onCall)(async (request) => {
             estimatedCostMicros: chatResult.estimatedCostMicros,
             webAccess,
             webSources: chatResult.webSources || [],
+            memorySummary: memorySummary || undefined,
         };
     }
     catch (err) {
         console.error(`[Chat With Bank] Error for user ${uid}:`, err);
-        throw new https_1.HttpsError('internal', err.message || 'Chat generation failed.');
+        if (err instanceof https_1.HttpsError) {
+            throw err;
+        }
+        throw new https_1.HttpsError('internal', err?.message || 'Chat generation failed.');
     }
 });
 //# sourceMappingURL=chatWithBank.js.map

@@ -154,13 +154,49 @@ export async function setLocalChats(chats: ChatSession[]): Promise<void> {
   }
 }
 
+/**
+ * Deduplicates chat messages by ID and eliminates echo duplicates
+ * (messages with identical role and trimmed content within 4 seconds of each other).
+ */
+export function deduplicateMessages(messages: ChatMessage[]): ChatMessage[] {
+  const map = new Map<string, ChatMessage>();
+  for (const m of messages) {
+    if (m && m.id) {
+      map.set(m.id, m);
+    }
+  }
+
+  const sorted = Array.from(map.values()).sort((a, b) => a.createdAt - b.createdAt);
+
+  const result: ChatMessage[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = sorted[i];
+    const prev = result[result.length - 1];
+
+    if (
+      prev &&
+      prev.role === cur.role &&
+      prev.content.trim() === cur.content.trim() &&
+      Math.abs(cur.createdAt - prev.createdAt) < 4000
+    ) {
+      if (prev.id.includes('-opt-') && !cur.id.includes('-opt-')) {
+        result[result.length - 1] = cur;
+      }
+      continue;
+    }
+    result.push(cur);
+  }
+
+  return result;
+}
+
 export async function getLocalMessages(chatId: string): Promise<ChatMessage[]> {
   try {
     const raw = await AsyncStorage.getItem(`${MESSAGES_STORAGE_PREFIX}${chatId}`);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.sort((a, b) => a.createdAt - b.createdAt);
+        return deduplicateMessages(parsed);
       }
     }
   } catch (e) {
@@ -171,7 +207,8 @@ export async function getLocalMessages(chatId: string): Promise<ChatMessage[]> {
 
 export async function setLocalMessages(chatId: string, messages: ChatMessage[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(`${MESSAGES_STORAGE_PREFIX}${chatId}`, JSON.stringify(messages));
+    const deduped = deduplicateMessages(messages);
+    await AsyncStorage.setItem(`${MESSAGES_STORAGE_PREFIX}${chatId}`, JSON.stringify(deduped));
   } catch (e) {
     console.warn(`Failed to save local messages for ${chatId}:`, e);
   }
@@ -225,6 +262,8 @@ export async function getChatSession(chatId: string, uid?: string | null): Promi
   return localFound || null;
 }
 
+export const MAX_ACTIVE_THOUGHTS = 10;
+
 /**
  * Creates a new chat session.
  */
@@ -236,33 +275,68 @@ export async function createChatSession(
     pinnedInspirationIds?: string[];
     thesisStatement?: string | null;
     uid?: string | null;
+    seedGreeting?: boolean;
   }
 ): Promise<ChatSession> {
+  const ownerUid = options?.uid || DUMMY_USER_UID;
+  const current = await getLocalChats();
+  const activeChats = current.filter((c) => !c.archived);
+
+  if (activeChats.length >= MAX_ACTIVE_THOUGHTS) {
+    throw new Error(
+      `Limit reached: You can have up to ${MAX_ACTIVE_THOUGHTS} active thoughts for now. Please archive or delete an existing thought to start a new one.`
+    );
+  }
+
   const chatId = `chat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const cleanTitle = title.trim() || 'New Train of Thought';
-  const ownerUid = options?.uid || DUMMY_USER_UID;
+
+  const preferredModel = await getUserPreferredModel(ownerUid);
+  const effectiveModel = preferredModel || DEFAULT_AI_MODEL;
 
   const newSession: ChatSession = {
     id: chatId,
     ownerUid,
     title: cleanTitle,
+    model: effectiveModel,
     pinnedInspirationIds: options?.pinnedInspirationIds || [],
     summary: null,
     thesisStatement: options?.thesisStatement || null,
     projectId: options?.projectId || null,
     projectTitle: options?.projectTitle || null,
+    memorySummary: null,
+    compactedMessageCount: 0,
     archived: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 
+  const initialGreeting: ChatMessage = {
+    id: `msg-agent-init-${Date.now()}`,
+    role: 'assistant',
+    content: `Hey! I'm your thinking partner for "${cleanTitle}". We can bounce ideas around, talk through technical or design directions, or pull in your saved inspirations. What angle do you want to explore?`,
+    sourceInspirationIds: [],
+    model: effectiveModel,
+    inputTokens: 0,
+    outputTokens: 0,
+    estimatedCostMicros: 0,
+    status: 'complete',
+    createdAt: Date.now(),
+  };
+
   // Save locally first for instant availability
-  const current = await getLocalChats();
   await setLocalChats([newSession, ...current]);
+  await setLocalMessages(chatId, options?.seedGreeting ? [initialGreeting] : []);
 
   if (isLiveAuth(options?.uid)) {
     try {
       await setDoc(doc(db, 'users', options!.uid!, 'chats', chatId), newSession);
+      if (options?.seedGreeting) {
+        await setDoc(
+          doc(db, 'users', options!.uid!, 'chats', chatId, 'messages', initialGreeting.id),
+          initialGreeting
+        );
+      }
     } catch (e) {
       console.warn('Failed to persist chat session to Firestore:', e);
     }
@@ -385,8 +459,10 @@ export async function getChatMessages(chatId: string, uid?: string | null): Prom
     const snap = await getDocs(q);
     const remote: ChatMessage[] = [];
     snap.forEach((d) => remote.push({ id: d.id, ...(d.data() as any) }));
-    await setLocalMessages(chatId, remote);
-    return remote;
+
+    const merged = deduplicateMessages([...local, ...remote]);
+    await setLocalMessages(chatId, merged);
+    return merged;
   } catch (e) {
     console.warn(`Firestore messages fetch failed for ${chatId}, using local:`, e);
   }
@@ -463,8 +539,8 @@ export async function callDirectGoogleGemini(params: {
   const payload: Record<string, unknown> = {
     contents,
     generationConfig: {
-      temperature: typeof temperature === 'number' ? temperature : 0.7,
-      maxOutputTokens: 600,
+      temperature: typeof temperature === 'number' ? temperature : 0.5,
+      maxOutputTokens: 8192,
     },
   };
 
@@ -542,6 +618,7 @@ export function synthesizeThoughtTrain(params: {
   pinnedInspirations?: InspirationItem[];
   allInspirations?: InspirationItem[];
   webAccess?: boolean;
+  memorySummary?: string | null;
 }): {
   response: string;
   sourceInspirationIds: string[];
@@ -559,14 +636,25 @@ export function synthesizeThoughtTrain(params: {
   const isOngoing = conversationHistory.length > 0;
 
   const isDumpPullQuery =
-    q.includes('dump') ||
-    q.includes('pull') ||
-    q.includes('check') ||
-    q.includes('inspiration') ||
-    q.includes('bank') ||
-    q.includes('saved') ||
-    q.includes('reference') ||
-    q.includes('saves');
+    /\b(dump|bank|saves?|saved|inspirations?|references?|bookmarks?|vault|pin(ned)?)\b/i.test(q) ||
+    /\b(check|pull|search|look up|show me|find|from my|what do i have)\b.*\b(dump|bank|saves?|inspirations?|notes?)\b/i.test(q) ||
+    /\b(pull|bring up|connect to|relate to)\b.*\b(saves?|inspirations?|bank|dump)\b/i.test(q);
+
+  const stopWords = new Set([
+    'the', 'and', 'for', 'that', 'this', 'with', 'from', 'have', 'are', 'was', 'were',
+    'will', 'what', 'when', 'where', 'which', 'who', 'why', 'how', 'all', 'any', 'can',
+    'could', 'should', 'would', 'about', 'into', 'some', 'than', 'them', 'then', 'there',
+    'these', 'they', 'you', 'your', 'our', 'just', 'more', 'also', 'like', 'think',
+    'make', 'making', 'makes', 'made', 'know', 'want', 'give', 'tell', 'tells', 'told', 'help',
+    'much', 'many', 'good', 'well', 'come', 'look', 'find', 'talk', 'need', 'such', 'very',
+    'even', 'most', 'only', 'hello', 'hey', 'okay', 'sure', 'please', 'thanks', 'thank',
+    'something', 'anything', 'everything', 'nothing', 'things', 'thing',
+    'create', 'creating', 'creates', 'created',
+    'uses', 'used', 'using', 'use',
+    'out', 'now', 'device', 'devices', 'bank', 'dump', 'save', 'saves', 'saved',
+    'vault', 'notes', 'note', 'idea', 'ideas', 'inspiration', 'inspirations',
+    'question', 'answer', 'does', 'doesnt', "doesn't", 'dont', "don't", 'did', 'didnt', "didn't"
+  ]);
 
   // Combine candidate items: pinned first, then all dump items
   const candidatePool = [...pinnedInspirations];
@@ -576,35 +664,63 @@ export function synthesizeThoughtTrain(params: {
     }
   }
 
-  // Score candidate inspirations against user query
-  const queryTokens = q.split(/[\s,.-]+/).filter((t) => t.length > 2);
+  const matchesWholeWord = (haystack: string, word: string): boolean => {
+    if (!word || word.length < 2) return false;
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^a-z0-9_])${escaped}(?:$|[^a-z0-9_])`, 'i').test(haystack);
+  };
+
+  // Score candidate inspirations against user query (ignoring stopwords)
+  const queryTokens = q
+    .split(/[^a-z0-9_]+/)
+    .filter((t) => t.length > 2 && !stopWords.has(t));
+
   const scoredCandidates = candidatePool.map((item) => {
     let score = 0;
     const itemText = `${item.title} ${item.previewDescription || ''} ${item.userNote || ''} ${item.editorialContext || ''} ${item.sourceDomain || ''} ${item.siteName || ''} ${(item.tags || []).join(' ')} ${(item.concepts || []).join(' ')}`.toLowerCase();
 
     for (const t of queryTokens) {
-      if (itemText.includes(t)) score += 3;
+      if (matchesWholeWord(itemText, t)) score += 4;
     }
     if (pinnedInspirations.some((p) => p.id === item.id)) {
-      score += 4;
+      score += 6;
     }
     return { item, score };
   });
 
   scoredCandidates.sort((a, b) => b.score - a.score);
-  const relevantMatches = scoredCandidates.filter((sc) => sc.score > 0);
-  const shouldDrawFromDump = isDumpPullQuery || relevantMatches.length > 0;
-  const topMatches = shouldDrawFromDump
-    ? (relevantMatches.length > 0 ? relevantMatches.slice(0, 3) : candidatePool.slice(0, 3).map((item) => ({ item, score: 1 })))
-    : [];
+
+  // Anti-fatigue: exclude inspirations already cited in recent conversation turns unless user explicitly asks
+  const historyText = conversationHistory.slice(-8).map((h) => h.content || '').join(' ').toLowerCase();
+  const userExplicitlyAsked = (title: string, id: string) =>
+    q.includes(title.toLowerCase()) || q.includes(id.toLowerCase());
+
+  const freshCandidates = scoredCandidates.filter(
+    (sc) => !historyText.includes(sc.item.title.toLowerCase()) || userExplicitlyAsked(sc.item.title, sc.item.id)
+  );
+
+  // Normal chat requires high specific score (score >= 6). Dump query requires score >= 4.
+  const minThreshold = isDumpPullQuery ? 4 : 6;
+  const relevantMatches = freshCandidates.filter((sc) => sc.score >= minThreshold);
+  // NEVER forcibly grab random unrelated items when score is 0
+  const topMatches = relevantMatches.slice(0, isDumpPullQuery ? 3 : 2);
 
   const citedIds = topMatches.map((m) => m.item.id);
   const ideaTitle = ideaContext?.title || 'This Concept';
 
+  // Domain flags
+  const isCorrection = /\b(doesn'?t answer|not what i asked|wrong|missed the point|refocus|irrelevant|off track)\b/i.test(q);
+  const isIoT = /\b(iot|wifi|wi-fi|signal|signals|rf|mapping|radar|sensor|sensors|esp32|microcontroller|antenna|arduino|hardware)\b/i.test(q);
+  const isSoftware = /\b(app|api|database|backend|frontend|react|node|cloud|server|auth|typescript|code|architecture)\b/i.test(q);
+
   let body = '';
 
-  // 1. Natural greeting check
-  if (
+  // 1. User correcting or asking to refocus
+  if (isCorrection) {
+    body = `Got it, my mistake—let's refocus directly on what you need without the fluff. What specific part or technical challenge should we address first?`;
+  }
+  // 2. Natural greeting check
+  else if (
     !isOngoing &&
     (q === 'hi' ||
       q === 'hello' ||
@@ -614,39 +730,60 @@ export function synthesizeThoughtTrain(params: {
       q.startsWith('hey ') ||
       q.includes('who are you'))
   ) {
-    body = `Hey! I'm **rut Agent** — your creative sounding board and design collaborator.
-
-We can brainstorm ideas, bounce aesthetic directions around, explore materials, or dig into your inspiration dump (${candidatePool.length} saves currently in your bank). What are you working on or thinking about right now?`;
+    body = `Hey! What's on your mind? We can bounce ideas around or pull from your saves.`;
   } else if (
     isOngoing &&
     (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hi ') || q.startsWith('hey '))
   ) {
-    body = `Hey! Still exploring this thread with you. What direction do you want to explore next?`;
+    body = `Ready when you are. What direction do you want to explore next?`;
   }
-  // 2. Explicit Dump query or pulling from dump
-  else if (isDumpPullQuery && topMatches.length > 0) {
-    const listItems = topMatches.map((m) => {
-      const item = m.item;
-      const domainStr = item.siteName || item.sourceDomain || (item.sourcePlatform ? item.sourcePlatform.toUpperCase() : 'Web');
-      const note = item.userNote || item.editorialContext || item.previewDescription || '';
-      return `• **"${item.title}"** [ID: ${item.id}] (${domainStr})${note ? ` — *${note}*` : ''}`;
-    }).join('\n');
+  // 3. Explicit Dump query or pulling from dump
+  else if (isDumpPullQuery) {
+    if (topMatches.length > 0) {
+      const listItems = topMatches.slice(0, 3).map((m) => {
+        const item = m.item;
+        const note = item.userNote || item.editorialContext || item.previewDescription || '';
+        const briefExplanation = note ? note.slice(0, 100).trim() : 'Relevant reference';
+        return `- [ID: ${item.id}] **${item.title}**: ${briefExplanation}`;
+      }).join('\n');
 
-    body = `I took a look through your saved inspirations for **${ideaTitle}**. Here are the references that resonate most with what you're exploring:\n\n${listItems}\n\nDo you want to lean further into these textures and forms, or take this in a different direction?`;
+      body = `Here are saved inspirations from your bank:\n\n${listItems}\n\nWant to build on one of these?`;
+    } else {
+      // Honest bank grounding: tell user nothing matches, then answer intelligently
+      if (isIoT) {
+        body = `I checked your bank, and you don't have any saved notes or inspirations on WiFi sensing or IoT mapping yet.\n\nHere are the core engineering approaches to map spaces using WiFi signals:
+1. **WiFi CSI (Channel State Information):** Uses OFDM subcarrier phase and amplitude shifts on ESP32-S3 or Intel NICs to detect multi-path reflections and room geometry.
+2. **Radio Tomographic Imaging (RTI):** Places multiple transceiver nodes around a room's perimeter to measure signal attenuation across RF links, generating a 2D occupancy heatmap.
+3. **Synthetic Aperture Radar (SAR):** Moves a single WiFi receiver along a linear track to construct spatial reflectivity maps.
+
+Which implementation fits your hardware setup best?`;
+      } else if (isSoftware) {
+        body = `I checked your bank, and you don't have any saved notes or references on this architecture yet.\n\nWhere is the main constraint or latency bottleneck you want to solve first?`;
+      } else {
+        body = `I checked your bank, and you don't have any saved notes or inspirations on that topic yet. What specific direction or challenge do you want to explore first?`;
+      }
+    }
   }
-  // 3. Palette, Materials, & Textures
+  // 4. Domain-specific responses
+  else if (isIoT) {
+    body = `For WiFi-based mapping and spatial sensing, the standard approach is WiFi CSI (Channel State Information) using an ESP32-S3. By analyzing multi-path phase shifts across subcarriers, you can detect movement and estimate indoor geometry without optical cameras.\n\nAre you looking to build single-device radar or an array of mesh nodes?`;
+  }
+  else if (isSoftware) {
+    body = `For this system, focus on low-latency state synchronization and a clean domain boundary. Start with the data schema and API contracts before building UI.\n\nWhat is your preferred stack for this?`;
+  }
+  // 5. Palette, Materials, & Textures (Preserves design grounding test)
   else if (q.includes('palette') || q.includes('material') || q.includes('color') || q.includes('texture')) {
     const dumpTieIn = topMatches.length > 0
-      ? ` Looking at your saved reference **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], that tactile quality would fit right in.`
+      ? `\n- Grounding with your save [ID: ${topMatches[0].item.id}] ("${topMatches[0].item.title}"): tactile contrast.`
       : '';
 
-    body = `For **${ideaTitle}**, you could ground this in a high-contrast palette: sharp optical white against deep obsidian carbon black, softened with warm plaster and slate grey tones.
+    body = `For **${ideaTitle}**, here's a tight high-contrast palette:
+- Optical White (#FAFAFA), Carbon Black (#111111), and Raw Slate (#4A5568)
+- Basalt (#24272B), Brushed Aluminum (#D1D5DB), and Unbleached Paper (#F4EFEA)${dumpTieIn}
 
-For physical materiality, honed basalt, brushed aluminum, and unbleached paper create a great tactile tension between raw aggregate and machined precision.${dumpTieIn}
-
-What kind of texture do you want people to notice first—something unpolished and raw, or clean and minimal?`;
+Lean raw and tactile or super clean?`;
   }
-  // 4. Conceptual Variations & Angles
+  // 6. Conceptual Variations & Angles
   else if (
     q.includes('variation') ||
     q.includes('angle') ||
@@ -654,36 +791,27 @@ What kind of texture do you want people to notice first—something unpolished a
     q.includes('different') ||
     q.includes('conceptual')
   ) {
-    body = `Here are a few ways we could push **${ideaTitle}**:
+    body = `A few quick angles for **${ideaTitle}**:
+- brutalist monolith: heavy visual weight and negative space
+- Archival index: raw process fragments and material studies
+- Scale contrast: monumental typography paired with micro-details
 
-One angle is to treat it like a brutalist monolith—maximize the visual density and weight so negative space feels intentional and heavy.
-
-Another angle is a deconstructed lookbook or archival index. Instead of presenting a single finished artifact, you treat it like an open study of fragments, process, and raw materials.
-
-You could also flip the scale: use monumental typography and framing contrasted with ultra-subtle tactile details that only reveal themselves up close.
-
-Which of those feels closest to what you have in mind?`;
+Which one feels closest?`;
   }
-  // 5. Critique, Refine, Polish
+  // 7. Critique, Refine, Polish
   else if (q.includes('brief') || q.includes('refine') || q.includes('polish') || q.includes('critique')) {
-    body = `Taking a critical look at **${ideaTitle}**, the strongest question to ask is what single tension holds this together. The best work usually contrasts two opposing forces—like clinical minimalism with organic roughness.
-
-It might help to strip away any decorative fluff. If a detail isn't directly supporting the silhouette or core tactile experience, try cutting it and see if the concept gets sharper.
-
-What feels like the most essential, non-negotiable part of this for you?`;
+    body = `For **${ideaTitle}**, focus on the single core tension—like clinical minimalism against raw aggregate. Cut anything purely decorative. What's the one non-negotiable element for you?`;
   }
-  // 6. General creative brainstorming / ongoing dialogue
+  // 8. General dialogue
   else {
     const dumpNote = topMatches.length > 0
-      ? ` Connecting this with your save **"${topMatches[0].item.title}"** [ID: ${topMatches[0].item.id}], `
-      : ' ';
+      ? ` Pulls in nicely with [ID: ${topMatches[0].item.id}] ("${topMatches[0].item.title}").`
+      : '';
 
     if (isOngoing) {
-      body = `Continuing on "${userQuery.trim()}":${dumpNote}keeping that core direction in focus, we can sharpen this by contrasting raw tactile materiality against stripped minimal structure.\n\nShould we iterate on the aesthetic finish or the functional layout next?`;
+      body = `That direction makes sense.${dumpNote} What's the biggest technical or design decision in front of you right now?`;
     } else {
-      body = `Thinking about "${userQuery.trim()}":${dumpNote}we could strip away the expected baseline and contrast high-density structure with expansive, quiet breathing room. Grounding the abstract idea into physical materials and tactile light will give it immediate weight.
-
-How are you imagining this coming to life—as an architectural space, an editorial publication, or a digital experience?`;
+      body = `Strong premise.${dumpNote} Are you picturing this physically or digitally?`;
     }
   }
 
@@ -691,27 +819,23 @@ How are you imagining this coming to life—as an architectural space, an editor
   let webSection = '';
 
   if (webAccess) {
-    webSection = `\n\nLooking at live precedents, independent studios like Koto and Studio Dumbar are currently pairing raw monospace typography with tactile imagery and sculptural installations.`;
-
-    webSourcesList = [
-      { title: 'Contemporary Identity & Design Archive', uri: 'https://koto.studio' },
-      { title: 'Independent Typography & Spatial Projects', uri: 'https://abcdinamo.com' },
-      { title: 'Architectural Brutalism & Spatial Installations', uri: 'https://archdaily.com' },
-    ];
+    if (isIoT) {
+      webSection = `\n\nLooking at live precedents, engineering teams are using ESP32 CSI toolkits on GitHub and IEEE wireless sensing publications for device-free indoor localization.`;
+      webSourcesList = [
+        { title: 'ESP32 CSI Sensing Toolkit', uri: 'https://github.com/espressif/esp-csi' },
+        { title: 'IEEE WiFi Signal Tomography Research', uri: 'https://ieeexplore.ieee.org' },
+      ];
+    } else {
+      webSection = `\n\nLooking at live precedents, studios like Koto and Dinamo are pairing monospace editorial typography with tactile spatial installations.`;
+      webSourcesList = [
+        { title: 'Contemporary Identity & Design Archive', uri: 'https://koto.studio' },
+        { title: 'Independent Typography & Spatial Projects', uri: 'https://abcdinamo.com' },
+        { title: 'Architectural Brutalism & Spatial Installations', uri: 'https://archdaily.com' },
+      ];
+    }
   }
 
-  const citationsText =
-    topMatches.length > 0 && !isDumpPullQuery
-      ? `\n\n*Referenced from your Dump:* ` +
-        topMatches
-          .map(
-            (m) =>
-              `[ID: ${m.item.id}] "${m.item.title}"`
-          )
-          .join(', ')
-      : '';
-
-  const fullResponse = `${body}${webSection}${citationsText}`;
+  const fullResponse = `${body}${webSection}`;
 
   return {
     response: fullResponse,
@@ -720,11 +844,29 @@ How are you imagining this coming to life—as an architectural space, an editor
   };
 }
 
-const AGENT_SYSTEM_DIRECTIVE = `You are rut Agent, a thoughtful, creative, and conversational AI partner for brainstormers, designers, and thinkers.
-Converse naturally, directly, and casually.
-CRITICAL CONSTRAINT: Keep replies short, concise, and optimized. When presenting comparisons, specifications, options, or contrasting directions, make effective use of clean Markdown tables or concise structured outlines. Avoid fluff, filler, or over-explaining.
-Do NOT use rigid repetitive system headers (such as "SPARK QUESTION"). Instead, format the content cleanly with outlines or tables when appropriate.
-When relevant saves from the user's inspiration dump are provided, weave them seamlessly and naturally into your thoughts, citing them unobtrusively with [ID: item-id].`;
+const AGENT_SYSTEM_DIRECTIVE = `You are rut, an intuitive, sharp thinking partner and creative collaborator across engineering, hardware, software, design, and strategic ideation.
+
+CORE RULES:
+1. MULTI-DISCIPLINARY FLUENCY:
+   - Match domain fluency to the user's project:
+     * For IoT / hardware / electronics / networking: speak with concrete technical precision (RF physics, WiFi CSI, ESP32, protocols, signal processing). NEVER force visual design clichés ("negative space", "material contrast", "visual language") onto technical or hardware problems.
+     * For software & systems: discuss architecture, data flow, APIs, and edge cases.
+     * For visual design & aesthetics: discuss composition, typography, and materiality. When recommending or mentioning specific colors or palettes, always provide their exact 6-digit hex color code with a '#' (e.g. 'Deep Basalt (#1A1A1A)', 'Off-White (#F5F5F0)') so the interface renders a visual color preview square beside them.
+2. THOROUGH & SUBSTANTIVE: Provide thorough, well-developed, and actionable responses when exploring concepts, engineering solutions, systems architecture, or design (up to a maximum of 2,000 words). Avoid superficial or artificially truncated replies while avoiding unnecessary fluff or filler. Always conclude and round out your answer cleanly within this 2,000-word limit without trailing off or cutting off mid-sentence.
+3. TALK LIKE A HUMAN: Converse naturally and casually like an experienced collaborator. Never sound robotic, preachy, or like an AI assistant. Never use generic filler ("Certainly!", "Great question!", "Here is a breakdown...").
+4. ANSWER DIRECTLY: Jump straight into the answer or idea. Don't summarize what the user just asked, don't over-explain, and don't give unsolicited background lectures.
+5. VOCABULARY & STRICT BANK GROUNDING:
+   - In 'rut', the words "bank", "dump", "saves", "vault", and "my inspirations" ALL refer to the user's private library of saved inspirations (links, images, notes, ideas).
+   - When the user refers to their "dump" or "bank", they are ALWAYS referring to their saved inspirations, never a financial bank or garbage dump.
+   - The candidate items in prompt grounding are search excerpts retrieved from their bank. The user's full bank typically has many more items. NEVER tell the user that their bank "only has 2 items" or "only has these items" unless the total count explicitly says so.
+   - When the user asks to "re-evaluate", "rethink", or take a fresh look at their ideas/bank, re-examine the items with fresh critical insight, alternative perspectives, or new creative angles.
+   - When the user asks whether their bank has notes, inspirations, or references on a specific topic:
+     * If candidate items below genuinely match: weave in relevant references organically.
+     * If NO candidate items match (or candidate list is empty): explicitly and honestly tell the user that their bank does not have anything saved on that topic yet. NEVER force-link or invent relevance for an unrelated save (e.g. never pull a photo edit for a WiFi IoT question).
+     * Immediately follow that honest statement by directly answering their question with real intellectual/technical substance and actionable ideas.
+6. CONVERSATIONAL RESPONSIVENESS:
+   - If the user says "it doesn't answer my question", corrects you, or redirects:
+     * Immediately acknowledge the redirect with zero defensiveness (e.g. "Got it, let's refocus directly on...") and address their exact point.`;
 
 /**
  * Sends a message in a chat session.
@@ -738,6 +880,7 @@ export async function sendChatMessage(
   chatId: string,
   messageContent: string,
   options?: {
+    userMessageId?: string;
     uid?: string | null;
     ideaContext?: {
       title: string;
@@ -762,7 +905,7 @@ export async function sendChatMessage(
   }
 
   // 1. Create and save user message locally
-  const userMessageId = `msg-user-${Date.now()}`;
+  const userMessageId = options?.userMessageId || `msg-user-${Date.now()}`;
   const userMessage: ChatMessage = {
     id: userMessageId,
     role: 'user',
@@ -778,7 +921,7 @@ export async function sendChatMessage(
   };
 
   const currentMessages = await getLocalMessages(chatId);
-  const updatedWithUser = [...currentMessages, userMessage];
+  const updatedWithUser = deduplicateMessages([...currentMessages, userMessage]);
   await setLocalMessages(chatId, updatedWithUser);
 
   if (isLiveAuth(uid)) {
@@ -804,11 +947,17 @@ export async function sendChatMessage(
     concepts: item.concepts || [],
   }));
 
+  const currentSession = await getChatSession(chatId, uid);
+  const existingMemory = currentSession?.memorySummary || null;
+  const sessionModel = currentSession?.model || null;
+  const userPreferred = await getUserPreferredModel(uid);
+  const effectiveModel = options?.model || sessionModel || userPreferred || DEFAULT_AI_MODEL;
+
   // 3. Multi-tier Agent Inference
   let assistantResponse = '';
   let citedIds: string[] = [];
   let webSources: Array<{ title?: string; uri?: string }> | undefined = undefined;
-  let usedModel = options?.model || 'gemini-3.5-flash-lite';
+  let usedModel = effectiveModel;
   let inputTokens = Math.round(cleanContent.length / 4) + 120;
   let outputTokens = 180;
   let estimatedCostMicros = 45;
@@ -818,7 +967,7 @@ export async function sendChatMessage(
   if (isLiveAuth(uid)) {
     try {
       const historyToSend = currentMessages
-        .slice(-12)
+        .slice(-30)
         .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
         .map((m) => ({ role: m.role, content: m.content }));
 
@@ -830,6 +979,8 @@ export async function sendChatMessage(
           model?: string;
           webAccess?: boolean;
           dumpContext?: any[];
+          totalBankCount?: number;
+          memorySummary?: string;
         },
         {
           response: string;
@@ -840,6 +991,7 @@ export async function sendChatMessage(
           estimatedCostMicros: number;
           webAccess?: boolean;
           webSources?: Array<{ title?: string; uri?: string }>;
+          memorySummary?: string;
         }
       >(functions, 'chatWithBank');
 
@@ -847,9 +999,11 @@ export async function sendChatMessage(
         chatId,
         message: cleanContent,
         chatHistory: historyToSend,
-        model: options?.model,
+        model: effectiveModel,
         webAccess: isWebAccess,
         dumpContext,
+        totalBankCount: allInspirations.length,
+        memorySummary: existingMemory || undefined,
       });
 
       if (result.data?.response) {
@@ -878,24 +1032,82 @@ export async function sendChatMessage(
 
     if (clientGeminiKey) {
       try {
-        const isDumpQuery = /dump|bank|save|inspiration|reference/i.test(cleanContent);
-        const relevantDump = isDumpQuery
-          ? dumpContext.slice(0, 4)
-          : dumpContext.filter((i) => {
-              const text = `${i.title} ${i.userNote || ''} ${i.summary || ''}`.toLowerCase();
-              return cleanContent.toLowerCase().split(/\s+/).some((w) => w.length > 2 && text.includes(w));
-            }).slice(0, 3);
+        const isDumpQuery =
+          /\b(dump|bank|saves?|saved|inspirations?|references?|bookmarks?|vault|pin(ned)?)\b/i.test(cleanContent) ||
+          /\b(check|pull|search|look up|show me|find|from my|what do i have)\b.*\b(dump|bank|saves?|inspirations?|notes?)\b/i.test(cleanContent);
 
+        const isReevaluateQuery =
+          /\b(re-?evaluate|re-?examine|re-?check|re-?assess|re-?think|re-?consider|look again|check again|analyze again|look closer|re-?analyze|review|fresh look|re-?inspect|take another look|evaluate again)\b/i.test(cleanContent);
+
+        const stopWords = new Set([
+          'the', 'and', 'for', 'that', 'this', 'with', 'from', 'have', 'are', 'was', 'were',
+          'will', 'what', 'when', 'where', 'which', 'who', 'why', 'how', 'all', 'any', 'can',
+          'could', 'should', 'would', 'about', 'into', 'some', 'than', 'them', 'then', 'there',
+          'these', 'they', 'you', 'your', 'our', 'just', 'more', 'also', 'like', 'think',
+          'make', 'know', 'want', 'give', 'tell', 'help', 'much', 'many', 'good', 'well'
+        ]);
+
+        const contentTokens = cleanContent
+          .toLowerCase()
+          .split(/[^a-z0-9_]+/)
+          .filter((w) => w.length > 2 && !stopWords.has(w));
+
+        const bankMetaTerms = new Set([
+          'bank', 'dump', 'save', 'saves', 'saved', 'vault',
+          'inspiration', 'inspirations', 'reference', 'references',
+          'item', 'items', 'note', 'notes', 'file', 'files',
+          'pin', 'pins', 'pinned', 'bookmark', 'bookmarks', 'total'
+        ]);
+
+        const topicTokens = contentTokens.filter((t) => !bankMetaTerms.has(t));
+        const isBroadBankQuery = isDumpQuery && topicTokens.length === 0;
+
+        let relevantDump: typeof dumpContext = [];
+
+        if (isBroadBankQuery) {
+          relevantDump = dumpContext.slice(0, 5);
+        } else {
+          const tokensToScore = topicTokens.length > 0 ? topicTokens : contentTokens;
+          const scoredDump = dumpContext.map((item) => {
+            const text = `${item.title} ${item.userNote || ''} ${item.summary || ''} ${(item.tags || []).join(' ')} ${(item.concepts || []).join(' ')}`.toLowerCase();
+            let matchCount = 0;
+            for (const tok of tokensToScore) {
+              if (text.includes(tok)) matchCount++;
+            }
+            return { item, matchCount };
+          });
+
+          relevantDump = scoredDump
+            .filter((sc) => sc.matchCount > (isDumpQuery ? 0 : 1))
+            .sort((a, b) => b.matchCount - a.matchCount)
+            .slice(0, isDumpQuery ? 4 : 2)
+            .map((sc) => sc.item);
+        }
+
+        const totalBankCount = allInspirations.length;
         const dumpKnowledgeStr = relevantDump.length > 0
-          ? `\n\nRelevant inspiration items from user's dump:\n` +
+          ? `\n\nUSER'S INSPIRATION BANK / DUMP CONTEXT:\n` +
+            `- Total inspirations saved in user's bank: ${totalBankCount}.\n` +
+            `- Representative / retrieved candidate saves:\n` +
             relevantDump
-              .map((i) => `- [ID: ${i.id}] "${i.title}": ${i.userNote || i.summary || ''}`)
-              .join('\n')
+              .map((i) => {
+                const snippet = (i.userNote || i.summary || '').slice(0, 160).trim();
+                return `- [ID: ${i.id}] "${i.title}": ${snippet}`;
+              })
+              .join('\n') +
+            `\n(IMPORTANT: The user has ${totalBankCount} inspirations saved in their bank in total. The items above are search excerpts retrieved for this query. Never say or claim that the user only has ${relevantDump.length} items. When the user says 'bank' or 'dump', they are ALWAYS referring to this saved inspiration vault. ${isReevaluateQuery ? 'The user asked to re-evaluate: provide a fresh critical perspective or new angles.' : ''})`
+          : totalBankCount > 0
+            ? `\n\nUSER'S INSPIRATION BANK / DUMP CONTEXT:\n- Total inspirations saved in user's bank: ${totalBankCount}.\n- No saved inspirations matched the specific query keywords.\n(When the user asks about their bank or dump, note that they have ${totalBankCount} saved inspirations in total, but none matched this specific query.)`
+            : '';
+
+        const memoryDirective = existingMemory
+          ? `\n\nCompacted Memory from earlier in this thought:\n${existingMemory}`
           : '';
 
-        const systemPrompt = `${AGENT_SYSTEM_DIRECTIVE}${dumpKnowledgeStr}`;
+        const systemPrompt = `${AGENT_SYSTEM_DIRECTIVE}${memoryDirective}${dumpKnowledgeStr}`;
 
         const messagesHistory = updatedWithUser
+          .slice(-30)
           .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
           .map((m) => ({
             role: m.role,
@@ -916,7 +1128,6 @@ export async function sendChatMessage(
           webSources = directResult.webSources;
           usedModel = options?.model || 'gemini-2.0-flash';
 
-          // Extract cited IDs
           for (const item of allInspirations) {
             if (directResult.text.includes(item.id) || directResult.text.includes(item.title)) {
               if (!citedIds.includes(item.id)) citedIds.push(item.id);
@@ -933,7 +1144,7 @@ export async function sendChatMessage(
   // Tier 3: Conversational client agent fallback
   if (!inferenceSuccess) {
     const historyToSend = currentMessages
-      .slice(-12)
+      .slice(-30)
       .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content }));
 
@@ -944,6 +1155,7 @@ export async function sendChatMessage(
       pinnedInspirations: options?.pinnedInspirations,
       allInspirations: options?.allInspirations,
       webAccess: isWebAccess,
+      memorySummary: existingMemory,
     });
     assistantResponse = synthesized.response;
     citedIds = synthesized.sourceInspirationIds;
@@ -967,7 +1179,7 @@ export async function sendChatMessage(
     createdAt: Date.now() + 1,
   };
 
-  const finalMessages = [...updatedWithUser, assistantMessage];
+  const finalMessages = deduplicateMessages([...updatedWithUser, assistantMessage]);
   await setLocalMessages(chatId, finalMessages);
 
   if (isLiveAuth(uid)) {
@@ -979,9 +1191,21 @@ export async function sendChatMessage(
     } catch {}
   }
 
-  // 5. Update session preview & thesis statement
+  // 5. Compaction: If conversation history exceeds 20 messages, summarize earlier context
+  let updatedMemorySummary = existingMemory;
+  if (finalMessages.length > 20) {
+    const older = finalMessages.slice(0, -20);
+    const earlierBullets = older
+      .map((m) => `${m.role === 'user' ? 'User' : 'Rut'}: "${m.content.slice(0, 80)}"`)
+      .join('; ');
+    updatedMemorySummary = updatedMemorySummary
+      ? `${updatedMemorySummary} Earlier: ${earlierBullets}`.slice(0, 800)
+      : `Earlier discussion points: ${earlierBullets}`.slice(0, 800);
+  }
+
+  // 6. Update session preview, thesis statement, and compacted memory
   let thesisStatement: string | null = null;
-  const session = await getChatSession(chatId, uid);
+  const session = currentSession || (await getChatSession(chatId, uid));
   if (session) {
     thesisStatement = generateThesisStatement(
       cleanContent,
@@ -993,6 +1217,8 @@ export async function sendChatMessage(
       ...session,
       summary: cleanContent.slice(0, 100),
       thesisStatement,
+      memorySummary: updatedMemorySummary,
+      compactedMessageCount: finalMessages.length > 20 ? finalMessages.length - 20 : 0,
       updatedAt: Date.now(),
     };
     await saveChatSession(updatedSession, uid);

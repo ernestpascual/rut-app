@@ -6,7 +6,7 @@ const factory_1 = require("../ai/factory");
 const retrieval_1 = require("../ai/retrieval");
 const ledger_1 = require("../cost/ledger");
 const config_1 = require("../config");
-exports.semanticSearch = (0, https_1.onCall)(async (request) => {
+exports.semanticSearch = (0, https_1.onCall)({ invoker: 'public', cors: true }, async (request) => {
     if (!request.auth || !request.auth.uid) {
         throw new https_1.HttpsError('unauthenticated', 'User must be signed in to perform search.');
     }
@@ -25,7 +25,7 @@ exports.semanticSearch = (0, https_1.onCall)(async (request) => {
         const aiProvider = (0, factory_1.getAIProvider)();
         const embedResult = await aiProvider.generateEmbedding(queryText);
         // Strict owner retrieval: searches only index records belonging to this user
-        const results = await (0, retrieval_1.searchOwnerIndex)(uid, embedResult.embedding, 15);
+        const results = await (0, retrieval_1.searchOwnerIndex)(uid, embedResult.embedding, 15, 0.38);
         // Record usage
         await (0, ledger_1.recordUsageEvent)({
             uid,

@@ -1,16 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Platform, ScrollView, Linking } from 'react-native';
 import { typography, spacing, rounded } from '../../design/tokens';
 import { useTheme } from '../../design/ThemeContext';
 
-interface MarkdownRendererProps {
+export interface MarkdownRendererProps {
   content: string;
   isUser?: boolean;
 }
 
-interface Block {
-  type: 'h1' | 'h2' | 'h3' | 'blockquote' | 'codeblock' | 'ul' | 'ol' | 'paragraph' | 'table';
+export interface Block {
+  type: 'h1' | 'h2' | 'h3' | 'h4' | 'blockquote' | 'codeblock' | 'ul' | 'ol' | 'paragraph' | 'table' | 'hr';
   content: string;
+  lang?: string;
   orderNumber?: string;
   tableHeaders?: string[];
   tableRows?: string[][];
@@ -19,25 +20,40 @@ interface Block {
 /**
  * Parses raw markdown text into structural blocks (headers, code blocks, lists, quotes, paragraphs).
  */
-function parseBlocks(raw: string): Block[] {
+export function parseBlocks(raw: string): Block[] {
+  if (!raw) return [];
   const lines = raw.replace(/\r\n/g, '\n').split('\n');
   const blocks: Block[] = [];
   let inCodeBlock = false;
   let codeBlockLang = '';
   let codeBlockLines: string[] = [];
+  let paragraphLines: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraphLines.length > 0) {
+      blocks.push({
+        type: 'paragraph',
+        content: paragraphLines.join(' ').trim(),
+      });
+      paragraphLines = [];
+    }
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Code block open/close
     if (line.trim().startsWith('```')) {
+      flushParagraph();
       if (inCodeBlock) {
         blocks.push({
           type: 'codeblock',
+          lang: codeBlockLang,
           content: codeBlockLines.join('\n'),
         });
         codeBlockLines = [];
         inCodeBlock = false;
+        codeBlockLang = '';
       } else {
         inCodeBlock = true;
         codeBlockLang = line.trim().slice(3).trim();
@@ -51,42 +67,76 @@ function parseBlocks(raw: string): Block[] {
     }
 
     const trimmed = line.trim();
+
+    // Blank line -> separates paragraphs
     if (!trimmed) {
+      flushParagraph();
+      continue;
+    }
+
+    // Horizontal Rule: ---, ***, ___ (at least 3 characters)
+    if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushParagraph();
+      blocks.push({ type: 'hr', content: '' });
       continue;
     }
 
     // Headings
+    if (trimmed.startsWith('#### ')) {
+      flushParagraph();
+      blocks.push({ type: 'h4', content: trimmed.slice(5).trim() });
+      continue;
+    }
     if (trimmed.startsWith('### ')) {
+      flushParagraph();
       blocks.push({ type: 'h3', content: trimmed.slice(4).trim() });
-    } else if (trimmed.startsWith('## ')) {
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      flushParagraph();
       blocks.push({ type: 'h2', content: trimmed.slice(3).trim() });
-    } else if (trimmed.startsWith('# ')) {
+      continue;
+    }
+    if (trimmed.startsWith('# ')) {
+      flushParagraph();
       blocks.push({ type: 'h1', content: trimmed.slice(2).trim() });
+      continue;
     }
-    // Blockquote
-    else if (trimmed.startsWith('> ')) {
-      blocks.push({ type: 'blockquote', content: trimmed.slice(2).trim() });
+
+    // Blockquote (> )
+    if (trimmed.startsWith('> ') || trimmed === '>') {
+      flushParagraph();
+      const quoteText = trimmed.startsWith('> ') ? trimmed.slice(2).trim() : '';
+      if (blocks.length > 0 && blocks[blocks.length - 1].type === 'blockquote') {
+        blocks[blocks.length - 1].content += `\n${quoteText}`;
+      } else {
+        blocks.push({ type: 'blockquote', content: quoteText });
+      }
+      continue;
     }
-    // Unordered list
-    else if (
-      trimmed.startsWith('• ') ||
-      trimmed.startsWith('- ') ||
-      trimmed.startsWith('* ')
-    ) {
+
+    // Unordered list item (- item, * item, • item)
+    if (/^[•\-*]\s+/.test(trimmed)) {
+      flushParagraph();
       blocks.push({
         type: 'ul',
-        content: trimmed.replace(/^([•\-*]\s+)/, '').trim(),
+        content: trimmed.replace(/^[•\-*]\s+/, '').trim(),
       });
+      continue;
     }
-    // Ordered list
-    else if (/^\d+\.\s+/.test(trimmed)) {
+
+    // Ordered list item (1. item)
+    if (/^\d+\.\s+/.test(trimmed)) {
+      flushParagraph();
       const match = trimmed.match(/^(\d+)\.\s+(.*)/);
       blocks.push({
         type: 'ol',
         orderNumber: match ? match[1] : '1',
-        content: match ? match[2] : trimmed,
+        content: match ? match[2].trim() : trimmed,
       });
+      continue;
     }
+
     // Markdown Table check
     if (
       trimmed.startsWith('|') &&
@@ -94,6 +144,7 @@ function parseBlocks(raw: string): Block[] {
       i + 1 < lines.length &&
       /^[|\s-:]+$/.test(lines[i + 1].trim())
     ) {
+      flushParagraph();
       const headers = trimmed
         .slice(1, -1)
         .split('|')
@@ -122,14 +173,17 @@ function parseBlocks(raw: string): Block[] {
       continue;
     }
 
-    // Standard paragraph
-    blocks.push({ type: 'paragraph', content: trimmed });
+    // Standard paragraph line (join consecutive lines into one paragraph)
+    paragraphLines.push(trimmed);
   }
+
+  flushParagraph();
 
   // Handle unclosed code block if any
   if (inCodeBlock && codeBlockLines.length > 0) {
     blocks.push({
       type: 'codeblock',
+      lang: codeBlockLang,
       content: codeBlockLines.join('\n'),
     });
   }
@@ -138,57 +192,165 @@ function parseBlocks(raw: string): Block[] {
 }
 
 /**
- * Renders inline markdown: **bold**, *italic*, `code`, and [ID: ...] source citations.
+ * Universally safe regex for inline formatting (bold, italic, code, links, citations, strikethrough).
+ * Note: Tested in order of specificity to avoid lookbehinds.
  */
-function renderInlineFormatted(
+const INLINE_REGEX = /(\[ID:\s*[^\]]+\]|\[[^\]]+\]\([^\)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|~~[^~]+~~)/g;
+
+/**
+ * Renders text containing hex colors (#RGB, #RRGGBB, #RRGGBBAA) with a miniature color preview square.
+ */
+export function renderTextWithHexColors(
+  content: string,
+  style: any,
+  keyPrefix: string
+): React.ReactNode {
+  if (!content) return null;
+
+  // Fast path: if no '#' is present, return single Text node
+  if (!content.includes('#')) {
+    return (
+      <Text key={keyPrefix} style={style}>
+        {content}
+      </Text>
+    );
+  }
+
+  // Matches #RGB, #RRGGBB, #RRGGBBAA where # is preceded by start of string or non-word/non-& character
+  // and followed by a non-hex character
+  const regex = /(^|[^\w&])(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3}))(?![0-9a-fA-F])/g;
+  let match: RegExpExecArray | null = null;
+  let lastIndex = 0;
+  let matchCount = 0;
+  const elements: React.ReactNode[] = [];
+
+  while ((match = regex.exec(content)) !== null) {
+    const fullMatch = match[0];
+    const prefix = match[1];
+    const hex = match[2];
+    const matchIndex = match.index;
+
+    const textBefore = content.substring(lastIndex, matchIndex) + prefix;
+    if (textBefore) {
+      elements.push(
+        <Text key={`${keyPrefix}-tb-${matchCount}`} style={style}>
+          {textBefore}
+        </Text>
+      );
+    }
+
+    elements.push(
+      <View
+        key={`${keyPrefix}-swatch-${matchCount}`}
+        style={[styles.colorSwatchSquare, { backgroundColor: hex }]}
+        accessibilityRole="image"
+        accessibilityLabel={`Color preview: ${hex}`}
+      />
+    );
+
+    elements.push(
+      <Text key={`${keyPrefix}-hex-${matchCount}`} style={style}>
+        {hex}
+      </Text>
+    );
+
+    lastIndex = matchIndex + fullMatch.length;
+    matchCount++;
+  }
+
+  if (matchCount === 0) {
+    return (
+      <Text key={keyPrefix} style={style}>
+        {content}
+      </Text>
+    );
+  }
+
+  const trailingText = content.substring(lastIndex);
+  if (trailingText) {
+    elements.push(
+      <Text key={`${keyPrefix}-tail`} style={style}>
+        {trailingText}
+      </Text>
+    );
+  }
+
+  return elements;
+}
+
+/**
+ * Renders inline markdown tokens: **bold**, *italic*, `code`, [link](url), and [ID: ...] citations.
+ */
+export function renderInlineFormatted(
   text: string,
   baseStyle: any,
   textColor: string,
   secondaryColor: string,
   isUser: boolean
 ): React.ReactNode {
-  // Regex pattern for **bold**, *italic*, `inline code`, and [ID: ...]
-  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[ID:\s*[^\]]+\])/g;
-  const parts = text.split(regex);
+  if (!text) return null;
+  const parts = text.split(INLINE_REGEX);
 
   return parts.map((part, idx) => {
     if (!part) return null;
 
-    // Bold: **text**
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return (
-        <Text key={`b-${idx}`} style={[baseStyle, { fontWeight: '700' }]}>
-          {part.slice(2, -2)}
-        </Text>
+    // Bold Italic: ***text***
+    if (part.startsWith('***') && part.endsWith('***') && part.length >= 6) {
+      return renderTextWithHexColors(
+        part.slice(3, -3),
+        [baseStyle, { fontWeight: '700', fontStyle: 'italic' }],
+        `bi-${idx}`
       );
     }
 
-    // Italic: *text*
-    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
-      return (
-        <Text key={`i-${idx}`} style={[baseStyle, { fontStyle: 'italic' }]}>
-          {part.slice(1, -1)}
-        </Text>
+    // Bold: **text** or __text__
+    if (
+      (part.startsWith('**') && part.endsWith('**') && part.length >= 4) ||
+      (part.startsWith('__') && part.endsWith('__') && part.length >= 4)
+    ) {
+      return renderTextWithHexColors(
+        part.slice(2, -2),
+        [baseStyle, { fontWeight: '700' }],
+        `b-${idx}`
+      );
+    }
+
+    // Italic: *text* or _text_
+    if (
+      (part.startsWith('*') && part.endsWith('*') && part.length >= 2) ||
+      (part.startsWith('_') && part.endsWith('_') && part.length >= 2)
+    ) {
+      return renderTextWithHexColors(
+        part.slice(1, -1),
+        [baseStyle, { fontStyle: 'italic' }],
+        `i-${idx}`
       );
     }
 
     // Inline Code: `code`
     if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-      return (
-        <Text
-          key={`c-${idx}`}
-          style={[
-            baseStyle,
-            {
-              fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-              fontSize: (baseStyle.fontSize || 14) * 0.9,
-              backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
-              paddingHorizontal: 4,
-            },
-          ]}
-        >
-          {part.slice(1, -1)}
-        </Text>
+      return renderTextWithHexColors(
+        part.slice(1, -1),
+        [
+          baseStyle,
+          {
+            fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+            fontSize: Math.round((baseStyle.fontSize || 14) * 0.92),
+            backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
+            paddingHorizontal: 5,
+            paddingVertical: 1,
+          },
+        ],
+        `c-${idx}`
+      );
+    }
+
+    // Strikethrough: ~~text~~
+    if (part.startsWith('~~') && part.endsWith('~~') && part.length >= 4) {
+      return renderTextWithHexColors(
+        part.slice(2, -2),
+        [baseStyle, { textDecorationLine: 'line-through' }],
+        `s-${idx}`
       );
     }
 
@@ -200,9 +362,12 @@ function renderInlineFormatted(
           style={[
             baseStyle,
             {
+              fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
               fontSize: 11,
               fontWeight: '700',
               color: isUser ? '#ffffff' : secondaryColor,
+              backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
+              paddingHorizontal: 4,
               letterSpacing: 0.5,
             },
           ]}
@@ -212,12 +377,47 @@ function renderInlineFormatted(
       );
     }
 
+    // Markdown Link: [label](url)
+    if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
+      const splitIdx = part.indexOf('](');
+      const label = part.slice(1, splitIdx);
+      const url = part.slice(splitIdx + 2, -1);
+      return (
+        <Text
+          key={`l-${idx}`}
+          style={[
+            baseStyle,
+            {
+              textDecorationLine: 'underline',
+              fontWeight: '600',
+              color: isUser ? '#ffffff' : textColor,
+            },
+          ]}
+          onPress={() => {
+            if (url) {
+              Linking.openURL(url).catch((e) => console.warn('Could not open link:', e));
+            }
+          }}
+          accessibilityRole="link"
+        >
+          {renderTextWithHexColors(
+            label,
+            [
+              baseStyle,
+              {
+                textDecorationLine: 'underline',
+                fontWeight: '600',
+                color: isUser ? '#ffffff' : textColor,
+              },
+            ],
+            `l-t-${idx}`
+          )}
+        </Text>
+      );
+    }
+
     // Plain text chunk
-    return (
-      <Text key={`t-${idx}`} style={baseStyle}>
-        {part}
-      </Text>
-    );
+    return renderTextWithHexColors(part, baseStyle, `t-${idx}`);
   });
 }
 
@@ -234,7 +434,8 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
   const baseTextStyle = {
     ...typography.bodyMd,
     color: textColor,
-    lineHeight: 22,
+    lineHeight: 23,
+    fontSize: 14,
   };
 
   return (
@@ -286,6 +487,21 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
               </View>
             );
 
+          case 'h4':
+            return (
+              <View key={`b-${idx}`} style={styles.h4Container}>
+                <Text style={[styles.h4Text, { color: textColor }]}>
+                  {renderInlineFormatted(
+                    block.content,
+                    styles.h4Text,
+                    textColor,
+                    secondaryColor,
+                    isUser
+                  )}
+                </Text>
+              </View>
+            );
+
           case 'blockquote':
             return (
               <View
@@ -326,18 +542,39 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.codeblockText,
-                    {
-                      color: textColor,
-                      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-                    },
-                  ]}
-                  selectable
-                >
-                  {block.content}
-                </Text>
+                {block.lang ? (
+                  <View
+                    style={[
+                      styles.codeblockHeader,
+                      {
+                        borderBottomColor: isUser ? 'rgba(255,255,255,0.15)' : colors.hairline,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.codeblockLangText,
+                        { color: secondaryColor },
+                      ]}
+                    >
+                      {block.lang.toUpperCase()}
+                    </Text>
+                  </View>
+                ) : null}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <Text
+                    style={[
+                      styles.codeblockText,
+                      {
+                        color: textColor,
+                        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                      },
+                    ]}
+                    selectable
+                  >
+                    {block.content}
+                  </Text>
+                </ScrollView>
               </View>
             );
 
@@ -373,6 +610,19 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                   )}
                 </Text>
               </View>
+            );
+
+          case 'hr':
+            return (
+              <View
+                key={`b-${idx}`}
+                style={[
+                  styles.hrLine,
+                  {
+                    backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : colors.gradeDivider,
+                  },
+                ]}
+              />
             );
 
           case 'table':
@@ -503,10 +753,23 @@ const styles = StyleSheet.create({
   },
   h3Text: {
     ...typography.captionCap,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  h4Container: {
+    marginTop: spacing.xxs,
+    marginBottom: spacing.xxs,
+  },
+  h4Text: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+    fontWeight: '700',
+  },
+  hrLine: {
+    height: 1,
+    marginVertical: spacing.sm,
+    width: '100%',
   },
   blockquoteContainer: {
     borderLeftWidth: 3,
@@ -516,13 +779,24 @@ const styles = StyleSheet.create({
   },
   codeblockContainer: {
     borderWidth: 1,
-    padding: spacing.sm,
     borderRadius: rounded.none,
     marginBottom: spacing.xs,
+    overflow: 'hidden',
+  },
+  codeblockHeader: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+  },
+  codeblockLangText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   codeblockText: {
     fontSize: 12,
     lineHeight: 18,
+    padding: spacing.sm,
   },
   listItemRow: {
     flexDirection: 'row',
@@ -531,7 +805,7 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   bulletPoint: {
-    fontSize: 16,
+    fontSize: 14,
     lineHeight: 22,
     marginRight: 8,
     fontWeight: '700',
@@ -572,5 +846,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  colorSwatchSquare: {
+    width: 11,
+    height: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.45)',
+    borderRadius: 1,
+    marginRight: 4,
+    marginLeft: 2,
+    ...(Platform.OS === 'web'
+      ? {
+          display: 'inline-block' as any,
+          verticalAlign: 'middle',
+          position: 'relative' as any,
+          top: -1,
+        }
+      : {
+          alignSelf: 'center',
+        }),
   },
 });

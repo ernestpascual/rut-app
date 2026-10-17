@@ -50,6 +50,7 @@ import {
   setUserPreferredModel,
   getWebAccessPreference,
   setWebAccessPreference,
+  deduplicateMessages,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
@@ -70,15 +71,12 @@ export default function ChatWorkspaceScreen() {
   const [showModelModal, setShowModelModal] = useState(false);
   const [webAccessEnabled, setWebAccessEnabled] = useState(false);
 
-  // Load default model and web access preference
+  // Load web access preference
   useEffect(() => {
-    getUserPreferredModel(user?.uid).then((pref) => {
-      if (pref) setSelectedModel(pref);
-    });
     getWebAccessPreference().then((pref) => {
       setWebAccessEnabled(pref);
     });
-  }, [user?.uid]);
+  }, []);
 
   const handleToggleWebAccess = async () => {
     const next = !webAccessEnabled;
@@ -120,9 +118,11 @@ export default function ChatWorkspaceScreen() {
     let isMounted = true;
 
     const loadLocalInitial = async () => {
+      const pref = await getUserPreferredModel(user?.uid);
       const sess = await getChatSession(id, user?.uid);
       if (sess && isMounted) {
         setSession(sess);
+        setSelectedModel(sess.model || pref || DEFAULT_AI_MODEL);
         const msgs = await getChatMessages(id, user?.uid);
         if (isMounted) {
           setMessages(msgs);
@@ -133,12 +133,14 @@ export default function ChatWorkspaceScreen() {
         const found = localList.find((c) => c.id === id);
         if (found && isMounted) {
           setSession(found);
+          setSelectedModel(found.model || pref || DEFAULT_AI_MODEL);
           const msgs = await getChatMessages(id, user?.uid);
           if (isMounted) {
             setMessages(msgs);
             setLoading(false);
           }
         } else if (isMounted) {
+          if (pref) setSelectedModel(pref);
           setLoading(false);
         }
       }
@@ -154,11 +156,19 @@ export default function ChatWorkspaceScreen() {
 
     try {
       const sessionRef = doc(db, 'users', user.uid, 'chats', id);
-      const unsubSession = onSnapshot(sessionRef, (snap) => {
+      const unsubSession = onSnapshot(sessionRef, async (snap) => {
         if (!isMounted) return;
         if (snap.exists()) {
           const data = { id: snap.id, ...(snap.data() as any) } as ChatSession;
           setSession(data);
+          if (data.model) {
+            setSelectedModel(data.model);
+          } else {
+            const pref = await getUserPreferredModel(user?.uid);
+            if (isMounted) {
+              setSelectedModel(pref || DEFAULT_AI_MODEL);
+            }
+          }
         }
       });
 
@@ -166,14 +176,20 @@ export default function ChatWorkspaceScreen() {
         collection(db, 'users', user.uid, 'chats', id, 'messages'),
         orderBy('createdAt', 'asc')
       );
-      const unsubMessages = onSnapshot(messagesQuery, (snap) => {
-        if (!isMounted) return;
-        if (!snap.empty) {
-          const msgs: ChatMessage[] = [];
-          snap.forEach((d) => msgs.push({ id: d.id, ...(d.data() as any) }));
-          setMessages(msgs);
+      const unsubMessages = onSnapshot(
+        messagesQuery,
+        (snap) => {
+          if (!isMounted) return;
+          const remoteMsgs: ChatMessage[] = [];
+          snap.forEach((d) => remoteMsgs.push({ id: d.id, ...(d.data() as any) }));
+          if (remoteMsgs.length > 0) {
+            setMessages((prev) => deduplicateMessages([...prev, ...remoteMsgs]));
+          }
+        },
+        (err) => {
+          console.warn('[thought] messages listener warning:', err);
         }
-      });
+      );
 
       return () => {
         isMounted = false;
@@ -228,6 +244,23 @@ export default function ChatWorkspaceScreen() {
     setInputHeight(44);
     setSending(true);
 
+    const userMessageId = `msg-user-${Date.now()}`;
+    const optimisticUserMessage: ChatMessage = {
+      id: userMessageId,
+      role: 'user',
+      content: textToSend,
+      sourceInspirationIds: [],
+      model: null,
+      inputTokens: null,
+      outputTokens: null,
+      estimatedCostMicros: null,
+      status: 'complete',
+      webAccess: webAccessEnabled,
+      createdAt: Date.now(),
+    };
+
+    setMessages((prev) => deduplicateMessages([...prev, optimisticUserMessage]));
+
     try {
       const pinnedItems = (session?.pinnedInspirationIds || [])
         .map((pid) => pinnedMap[pid])
@@ -241,6 +274,7 @@ export default function ChatWorkspaceScreen() {
         : null;
 
       const result = await sendChatMessage(id, textToSend, {
+        userMessageId,
         uid: user?.uid,
         ideaContext,
         pinnedInspirations: pinnedItems,
@@ -249,13 +283,10 @@ export default function ChatWorkspaceScreen() {
         webAccess: webAccessEnabled,
       });
 
-      // Update state immediately
-      setMessages((prev) => {
-        const withoutDups = prev.filter(
-          (m) => m.id !== result.userMessage.id && m.id !== result.assistantMessage.id
-        );
-        return [...withoutDups, result.userMessage, result.assistantMessage];
-      });
+      // Update state immediately with final assistant message and confirmed user message
+      setMessages((prev) =>
+        deduplicateMessages([...prev, result.userMessage, result.assistantMessage])
+      );
 
       // Update session summary and thesis statement in local state
       if (session) {
@@ -365,11 +396,11 @@ export default function ChatWorkspaceScreen() {
       setDeleteModalOpen(false);
       setMenuModalOpen(false);
       router.replace({
-        pathname: '/(app)/(tabs)/chats',
-        params: { deleted: '1', title: session?.title || 'Train of thought' },
+        pathname: '/(app)/(tabs)/thoughts',
+        params: { deleted: '1', title: session?.title || 'Thought' },
       });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete chat.');
+      Alert.alert('Error', err.message || 'Failed to delete thought.');
       setDeletingChat(false);
     }
   };
@@ -379,15 +410,15 @@ export default function ChatWorkspaceScreen() {
       <SafeAreaView style={styles.container}>
         <TopNav
           title="rut"
-          subtitle="Loading train of thought..."
+          subtitle="Loading thought..."
           onBack={() => {
             if (router.canGoBack()) {
               router.back();
             } else {
-              router.replace('/(app)/(tabs)/chats');
+              router.replace('/(app)/(tabs)/thoughts');
             }
           }}
-          backTitle="CHATS"
+          backTitle="THOUGHTS"
         />
         <View style={styles.centerBox}>
           <ActivityIndicator color={colors.ink} size="small" />
@@ -396,7 +427,7 @@ export default function ChatWorkspaceScreen() {
     );
   }
 
-  const activeTitle = session?.title || 'Train of Thought';
+  const activeTitle = session?.title || 'Thought';
   const pinnedItems = (session?.pinnedInspirationIds || [])
     .map((pid) => pinnedMap[pid])
     .filter(Boolean);
@@ -410,10 +441,10 @@ export default function ChatWorkspaceScreen() {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/(app)/(tabs)/chats');
+            router.replace('/(app)/(tabs)/thoughts');
           }
         }}
-        backTitle="CHATS"
+        backTitle="THOUGHTS"
         rightAction={
           <Pressable
             onPress={() => setMenuModalOpen(true)}
@@ -473,7 +504,7 @@ export default function ChatWorkspaceScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>START A TRAIN OF THOUGHT</Text>
+              <Text style={styles.emptyTitle}>START A THOUGHT</Text>
               <Text style={styles.emptySubtitle}>
                 Pose a creative query, hypothesize, or tap the ☰ menu to pull inspirations and toggle live web search.
               </Text>
@@ -494,7 +525,7 @@ export default function ChatWorkspaceScreen() {
                       item.role === 'user' ? styles.userRoleLabel : styles.assistantRoleLabel,
                     ]}
                   >
-                    {item.role === 'user' ? 'YOU' : `RUT AGENT (${item.model || selectedModel})`}
+                    {item.role === 'user' ? 'YOU' : 'RUT'}
                   </Text>
                   {item.webAccess ? (
                     <Badge label="🌐 LIVE WEB" variant="grade" style={{ marginLeft: 6 }} />
@@ -512,8 +543,8 @@ export default function ChatWorkspaceScreen() {
                 isUser={item.role === 'user'}
               />
 
-              {/* Clickable Source Cards for Assistant citations (Collapsible) */}
-              {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
+              {/* All sources used by answer (Collapsible) */}
+              {item.role === 'assistant' && ((item.sourceInspirationIds?.length || 0) + (item.webSources?.length || 0)) > 0 ? (
                 <View style={styles.sourcesContainer}>
                   <Pressable
                     onPress={() => {
@@ -525,11 +556,11 @@ export default function ChatWorkspaceScreen() {
                     style={styles.sourcesCollapsibleHeader}
                     hitSlop={8}
                     accessibilityRole="button"
-                    accessibilityLabel="Toggle Dump Citations"
+                    accessibilityLabel="Toggle Sources"
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                       <Text style={styles.sourcesHeader}>
-                        📚 DUMP KNOWLEDGE BASE CITATIONS ({item.sourceInspirationIds.length})
+                        SOURCES ({(item.sourceInspirationIds?.length || 0) + (item.webSources?.length || 0)})
                       </Text>
                       <Text style={styles.sourcesToggleIndicator}>
                         {expandedCitations[item.id] ? '▲ COLLAPSE' : '▼ EXPAND'}
@@ -538,23 +569,76 @@ export default function ChatWorkspaceScreen() {
                   </Pressable>
 
                   {expandedCitations[item.id] ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.xs }}>
-                      {item.sourceInspirationIds.map((sid: string) => {
-                        const sourceItem = pinnedMap[sid];
-                        if (!sourceItem) return null;
-                        return (
-                          <SourceCard
-                            key={sid}
-                            id={sid}
-                            title={sourceItem.title}
-                            domain={sourceItem.sourceDomain}
-                            platform={sourceItem.sourcePlatform}
-                            snippet={sourceItem.aiSummary || sourceItem.userNote}
-                            onPress={() => router.push(`/(app)/inspiration/${sid}`)}
-                          />
-                        );
-                      })}
-                    </ScrollView>
+                    <View style={{ marginTop: spacing.xs }}>
+                      {/* Bank Inspiration Sources */}
+                      {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
+                        <View style={{ marginBottom: item.webSources && item.webSources.length > 0 ? spacing.xs : 0 }}>
+                          {item.webSources && item.webSources.length > 0 ? (
+                            <Text style={styles.sourceCategoryLabel}>BANK INSPIRATIONS ({item.sourceInspirationIds.length})</Text>
+                          ) : null}
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 2 }}>
+                            {item.sourceInspirationIds.map((sid: string) => {
+                              const sourceItem = pinnedMap[sid] || bankItems.find((b) => b.id === sid);
+                              return (
+                                <SourceCard
+                                  key={sid}
+                                  id={sid}
+                                  title={sourceItem?.title || `Inspiration [${sid.slice(-4)}]`}
+                                  domain={sourceItem?.sourceDomain || null}
+                                  platform={sourceItem?.sourcePlatform || 'BANK'}
+                                  snippet={sourceItem?.aiSummary || sourceItem?.userNote || null}
+                                  onPress={() => router.push(`/(app)/inspiration/${sid}`)}
+                                />
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      ) : null}
+
+                      {/* Live Web Sources */}
+                      {item.webSources && item.webSources.length > 0 ? (
+                        <View style={{ marginTop: item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? spacing.xs : 0 }}>
+                          {item.sourceInspirationIds && item.sourceInspirationIds.length > 0 ? (
+                            <Text style={styles.sourceCategoryLabel}>WEB SOURCES ({item.webSources.length})</Text>
+                          ) : null}
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 2 }}>
+                            {item.webSources.map((ws: { title?: string; uri?: string }, wIdx: number) => {
+                              const domain = ws.uri ? ws.uri.replace(/^https?:\/\//, '').split('/')[0] : '';
+                              return (
+                                <Pressable
+                                  key={`web-${wIdx}`}
+                                  style={styles.webSourceCard}
+                                  onPress={() => {
+                                    if (ws.uri) {
+                                      WebBrowser.openBrowserAsync(ws.uri).catch(() => {});
+                                    }
+                                  }}
+                                  accessibilityRole="link"
+                                  accessibilityLabel={`Open web source: ${ws.title || ws.uri}`}
+                                >
+                                  <View style={styles.webSourceHeaderRow}>
+                                    <View style={[styles.webPillTag, { backgroundColor: colors.ink }]}>
+                                      <Text style={[styles.webPillText, { color: colors.onInk }]}>WEB</Text>
+                                    </View>
+                                    {domain ? (
+                                      <Text style={[styles.webDomainText, { color: colors.inkSoft }]} numberOfLines={1}>
+                                        {domain}
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                  <Text style={[styles.webTitleText, { color: colors.ink }]} numberOfLines={1}>
+                                    {ws.title || ws.uri}
+                                  </Text>
+                                  <Text style={[styles.webLinkAction, { color: colors.inkSoft }]}>
+                                    VISIT ↗
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
               ) : null}
@@ -578,8 +662,8 @@ export default function ChatWorkspaceScreen() {
             <ActivityIndicator size="small" color={colors.ink} />
             <Text style={styles.generatingText}>
               {webAccessEnabled
-                ? 'RESEARCHING LIVE WEB & DEVELOPING THOUGHT TRAIN...'
-                : 'DEVELOPING TRAIN OF THOUGHT...'}
+                ? 'RESEARCHING LIVE WEB & DEVELOPING THOUGHT...'
+                : 'DEVELOPING THOUGHT...'}
             </Text>
           </View>
         ) : null}
@@ -644,16 +728,21 @@ export default function ChatWorkspaceScreen() {
             />
             <ScrollView style={{ padding: spacing.base }}>
               <Text style={styles.modalSubhead}>
-                Select the model used for Train of Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
+                Select the model used for Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
               </Text>
               {AVAILABLE_MODELS.map((m) => {
                 const isSelected = selectedModel === m.id;
                 return (
                   <Card
                     key={m.id}
-                    onPress={() => {
+                    onPress={async () => {
                       setSelectedModel(m.id);
-                      setUserPreferredModel(m.id, user?.uid);
+                      if (session) {
+                        const updated = { ...session, model: m.id };
+                        setSession(updated);
+                        await saveChatSession(updated, user?.uid);
+                      }
+                      await setUserPreferredModel(m.id, user?.uid);
                       setShowModelModal(false);
                     }}
                     style={[
@@ -706,7 +795,7 @@ export default function ChatWorkspaceScreen() {
             />
             <ScrollView style={{ padding: spacing.base }}>
               <Text style={styles.modalSubhead}>
-                Pinned inspirations are actively injected into the AI context for every prompt in this train of thought.
+                Pinned inspirations are actively injected into the AI context for every prompt in this thought.
               </Text>
               {bankItems.length === 0 ? (
                 <Text style={styles.emptySubtitle}>No inspirations saved in your Bank yet.</Text>
@@ -757,7 +846,7 @@ export default function ChatWorkspaceScreen() {
             />
             <ScrollView style={{ padding: spacing.base }}>
               <Text style={styles.modalSubhead}>
-                Save this train of thought insight as a standalone Idea with matching inspiration references.
+                Save this thought insight as a standalone Idea with matching inspiration references.
               </Text>
               <Input
                 label="IDEA TITLE"
@@ -808,7 +897,7 @@ export default function ChatWorkspaceScreen() {
             </View>
             <ScrollView style={{ padding: spacing.base }}>
               <Text style={styles.modalSubhead}>
-                Tap &ldquo;ASK AI ABOUT THIS&rdquo; to immediately inspect any dump item in this train of thought, or &ldquo;+ PIN CONTEXT&rdquo; to inject it into every prompt.
+                Tap &ldquo;ASK AI ABOUT THIS&rdquo; to immediately inspect any dump item in this thought, or &ldquo;+ PIN CONTEXT&rdquo; to inject it into every prompt.
               </Text>
               {bankItems
                 .filter((item) => {
@@ -903,7 +992,7 @@ export default function ChatWorkspaceScreen() {
             <View style={styles.menuModalHeader}>
               <View>
                 <Text style={styles.menuModalBrand}>RUT // OPTIONS</Text>
-                <Text style={styles.menuModalTitle}>Train of Thought Menu</Text>
+                <Text style={styles.menuModalTitle}>Thought Menu</Text>
               </View>
               <Pressable
                 onPress={() => setMenuModalOpen(false)}
@@ -987,9 +1076,9 @@ export default function ChatWorkspaceScreen() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.menuItemSection, styles.dangerText]}>DANGER ZONE</Text>
-                  <Text style={[styles.menuItemTitle, styles.dangerText]}>Delete Train of Thought</Text>
+                  <Text style={[styles.menuItemTitle, styles.dangerText]}>Delete Thought</Text>
                   <Text style={[styles.menuItemDesc, styles.dangerDesc]}>
-                    Permanently delete this chat session and its full history
+                    Permanently delete this thought session and its full history
                   </Text>
                 </View>
                 <Badge label="DELETE" variant="inverse" style={styles.dangerBadge} />
@@ -1003,9 +1092,9 @@ export default function ChatWorkspaceScreen() {
       <Modal visible={deleteModalOpen} animationType="fade" transparent>
         <View style={styles.confirmModalOverlay}>
           <View style={[styles.confirmModalCard, styles.confirmModalCardDanger]}>
-            <Text style={[styles.confirmModalTitle, styles.dangerTitle]}>DELETE TRAIN OF THOUGHT?</Text>
+            <Text style={[styles.confirmModalTitle, styles.dangerTitle]}>DELETE THOUGHT?</Text>
             <Text style={styles.confirmModalText}>
-              Are you sure you want to delete this chat session? All messages and synthesized insights will be permanently erased. This cannot be undone.
+              Are you sure you want to delete this thought session? All messages and synthesized insights will be permanently erased. This cannot be undone.
             </Text>
             <View style={styles.confirmModalActions}>
               <Button
@@ -1365,6 +1454,57 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 9,
     color: colors.ink,
     fontWeight: '600',
+  },
+  sourceCategoryLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  webSourceCard: {
+    width: 220,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    padding: spacing.sm,
+    marginRight: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  webSourceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  webPillTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: rounded.none,
+  },
+  webPillText: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  webDomainText: {
+    ...typography.captionSm,
+    fontSize: 10,
+    flex: 1,
+  },
+  webTitleText: {
+    ...typography.captionSm,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  webLinkAction: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 2,
   },
   promptChipActive: {
     backgroundColor: colors.ink,

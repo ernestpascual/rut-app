@@ -49,7 +49,8 @@ export async function deleteIndexRecord(ownerUid: string, inspirationId: string)
 export async function searchOwnerIndex(
   ownerUid: string,
   queryEmbedding: number[],
-  limit: number = 10
+  limit: number = 10,
+  minSimilarity: number = 0.38
 ): Promise<Array<{ inspirationId: string; similarity: number }>> {
   // Query only records belonging to the authenticated user
   const snapshot = await db
@@ -63,10 +64,12 @@ export async function searchOwnerIndex(
     const data = docSnap.data() as IndexRecord;
     if (data.embedding && data.inspirationId) {
       const sim = cosineSimilarity(queryEmbedding, data.embedding);
-      scored.push({
-        inspirationId: data.inspirationId,
-        similarity: sim,
-      });
+      if (sim >= minSimilarity) {
+        scored.push({
+          inspirationId: data.inspirationId,
+          similarity: sim,
+        });
+      }
     }
   });
 

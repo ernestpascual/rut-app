@@ -25,16 +25,17 @@ export default function NewChatScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    const cleanTitle = title.trim() || 'New Train of Thought';
+    const cleanTitle = title.trim() || 'New Thought';
     setLoading(true);
     try {
       const session = await createChatSession(cleanTitle, {
         uid: user?.uid,
+        seedGreeting: true,
       });
 
-      router.replace(`/(app)/chat/${session.id}`);
+      router.replace(`/(app)/thought/${session.id}`);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not start chat session.');
+      Alert.alert('Error', err.message || 'Could not start thought session.');
       setLoading(false);
     }
   };
@@ -43,15 +44,15 @@ export default function NewChatScreen() {
     <SafeAreaView style={styles.container}>
       <TopNav
         title="rut"
-        subtitle="New Train of Thought"
+        subtitle="New Thought"
         onBack={() => {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/(app)/(tabs)/chats');
+            router.replace('/(app)/(tabs)/thoughts');
           }
         }}
-        backTitle="CHATS"
+        backTitle="THOUGHTS"
         rightAction={
           <Button
             title="✕ CLOSE"
@@ -60,7 +61,7 @@ export default function NewChatScreen() {
               if (router.canGoBack()) {
                 router.back();
               } else {
-                router.replace('/(app)/(tabs)/chats');
+                router.replace('/(app)/(tabs)/thoughts');
               }
             }}
           />
@@ -69,11 +70,11 @@ export default function NewChatScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.promptText}>
-          Give your train of thought a focus or topic. Each chat has isolated memory and draws context from your inspiration bank.
+          Give your thought a focus or topic. Each thought exploration has isolated memory and draws context from your inspiration bank.
         </Text>
 
         <Input
-          label="THOUGHT TRAIN TITLE"
+          label="THOUGHT TITLE"
           value={title}
           onChangeText={setTitle}
           placeholder="e.g. Minimalist Packaging Explorations"
@@ -81,7 +82,7 @@ export default function NewChatScreen() {
         />
 
         <Button
-          title={loading ? 'STARTING...' : 'START TRAIN OF THOUGHT'}
+          title={loading ? 'STARTING...' : 'START THOUGHT'}
           onPress={handleCreate}
           loading={loading}
           style={{ marginTop: spacing.base }}

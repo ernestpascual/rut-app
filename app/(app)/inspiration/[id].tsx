@@ -17,7 +17,12 @@ import {
   doc,
   getDoc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  collection,
+  query,
+  where,
+  limit,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client';
 import { useAuth, DUMMY_USER_UID } from '../../../src/features/auth/AuthContext';
@@ -31,6 +36,9 @@ import { rounded, typography, spacing, ThemeColors } from '../../../src/design/t
 import { InspirationItem } from '../../../src/types';
 import { getDumpInspirations, setDumpInspirations, deleteInspiration } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
+import { enrichUrlMetadata, PINTEREST_SVG } from '../../../src/utils/urlMetadata';
+import { extractUrlFromText } from '../../../src/utils/url';
+import { openExternalUrl } from '../../../src/utils/linking';
 
 export default function InspirationDetailScreen() {
   const router = useRouter();
@@ -48,17 +56,28 @@ export default function InspirationDetailScreen() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [showImage, setShowImage] = useState(true);
+  const [refetchingMetadata, setRefetchingMetadata] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     const fetchDoc = async () => {
       if (user) {
         try {
-          const snap = await getDoc(doc(db, 'users', user.uid, 'inspirations', id));
+          let snap = await getDoc(doc(db, 'users', user.uid, 'inspirations', id));
+          if (!snap.exists()) {
+            const q = query(
+              collection(db, 'users', user.uid, 'inspirations'),
+              where('id', '==', id),
+              limit(1)
+            );
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+              snap = querySnap.docs[0];
+            }
+          }
           if (snap.exists()) {
-            const data = { id: snap.id, ...(snap.data() as any) } as InspirationItem;
+            const data = { ...(snap.data() as any), id: snap.id } as InspirationItem;
             setItem(data);
             setEditTitle(data.title);
             setEditNote(data.userNote || '');
@@ -142,49 +161,32 @@ export default function InspirationDetailScreen() {
       const local = await getDumpInspirations();
       await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
       setItem(updated);
-    } catch {
-      const local = await getDumpInspirations();
-      await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
-      setItem(updated);
-    }
-  };
 
-  const handleDelete = async () => {
-    if (!item) return;
-
-    const performDelete = async () => {
-      setDeleting(true);
-      try {
-        await deleteInspiration(item.id, user?.uid);
+      if (nextArchived) {
+        const msg = 'Moved to Trash. You can restore or permanently delete this item in Settings.';
+        if (Platform.OS === 'web') {
+          window.alert(msg);
+        } else {
+          Alert.alert('Moved to Trash', msg);
+        }
         if (router.canGoBack()) {
           router.back();
         } else {
           router.replace('/(app)/(tabs)/bank');
         }
-      } catch (err: any) {
-        Alert.alert('Delete Failed', err.message);
-        setDeleting(false);
+      } else {
+        const msg = 'Restored back to your active Bank.';
+        if (Platform.OS === 'web') {
+          window.alert(msg);
+        } else {
+          Alert.alert('Restored', msg);
+        }
       }
-    };
-
-    const confirmMessage = `Are you sure you want to permanently remove "${item.title}" from your bank?`;
-
-    if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' && window.confirm(`Delete Inspiration\n\n${confirmMessage}`);
-      if (confirmed) {
-        await performDelete();
-      }
-      return;
+    } catch {
+      const local = await getDumpInspirations();
+      await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+      setItem(updated);
     }
-
-    Alert.alert('Delete Inspiration', confirmMessage, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
   };
 
   const handleDeleteAiInsight = () => {
@@ -224,11 +226,119 @@ export default function InspirationDetailScreen() {
     ]);
   };
 
+  const handleOpenSource = async () => {
+    if (!item?.url) return;
+    const opened = await openExternalUrl(item.url);
+    if (!opened) {
+      const msg = 'Unable to open source link. Please check your browser or pop-up settings.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Notice', msg);
+      }
+    }
+  };
+
   const handleAddTag = () => {
     const trimmed = tagInput.trim().toLowerCase();
     if (trimmed && !editTags.includes(trimmed) && editTags.length < 30) {
       setEditTags([...editTags, trimmed]);
       setTagInput('');
+    }
+  };
+
+  const handleRefetchMetadata = async () => {
+    if (!item) return;
+    const resolvedUrl = item.url || (item.sharedText ? extractUrlFromText(item.sharedText) : null);
+    if (!resolvedUrl) {
+      const msg = 'No source URL found on this item to refetch metadata from.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Notice', msg);
+      }
+      return;
+    }
+
+    setRefetchingMetadata(true);
+    try {
+      const meta = await enrichUrlMetadata(
+        resolvedUrl,
+        undefined,
+        item.userNote || undefined,
+        item.sharedText || undefined
+      );
+
+      const mergedTags = Array.from(
+        new Set([...(item.tags || []), ...(meta.autoTags || [])])
+      );
+      const mergedConcepts = Array.from(
+        new Set([...(item.concepts || []), ...(meta.concepts || [])])
+      );
+
+      let previewImg = meta.previewImageUrl || item.remotePreviewImageUrl;
+      if (previewImg && /s\.pinimg\.com\/webapp\/logo|favicon/i.test(previewImg)) {
+        previewImg = item.sourcePlatform === 'pinterest' ? PINTEREST_SVG : null;
+      }
+
+      const updated: InspirationItem = {
+        ...item,
+        url: resolvedUrl,
+        title: meta.title || item.title,
+        previewDescription: meta.description || item.previewDescription,
+        remotePreviewImageUrl: previewImg,
+        author: meta.author || item.author,
+        caption: meta.caption || item.caption,
+        siteName: meta.siteName || item.siteName,
+        sourceDomain: meta.domain || item.sourceDomain,
+        sourcePlatform: meta.platform || item.sourcePlatform,
+        editorialContext: meta.editorialContext || item.editorialContext,
+        tags: mergedTags,
+        concepts: mergedConcepts,
+        processingStatus: 'pending',
+        updatedAt: Date.now(),
+      };
+
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid, 'inspirations', item.id), {
+          url: updated.url,
+          title: updated.title,
+          previewDescription: updated.previewDescription,
+          remotePreviewImageUrl: updated.remotePreviewImageUrl,
+          author: updated.author,
+          caption: updated.caption,
+          siteName: updated.siteName,
+          sourceDomain: updated.sourceDomain,
+          sourcePlatform: updated.sourcePlatform,
+          editorialContext: updated.editorialContext,
+          tags: updated.tags,
+          concepts: updated.concepts,
+          processingStatus: 'pending',
+          updatedAt: updated.updatedAt,
+        });
+      }
+
+      const local = await getDumpInspirations();
+      await setDumpInspirations(local.map((i) => (i.id === item.id ? updated : i)));
+      setItem(updated);
+      setEditTitle(updated.title);
+      setEditTags(updated.tags);
+
+      const successMsg = '✓ Metadata refetched successfully and queued for AI indexing.';
+      if (Platform.OS === 'web') {
+        window.alert(successMsg);
+      } else {
+        Alert.alert('Refetched', successMsg);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || 'Failed to refetch metadata.';
+      if (Platform.OS === 'web') {
+        window.alert(errMsg);
+      } else {
+        Alert.alert('Error', errMsg);
+      }
+    } finally {
+      setRefetchingMetadata(false);
     }
   };
 
@@ -253,6 +363,8 @@ export default function InspirationDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const targetUrl = item?.url || (item?.sharedText ? extractUrlFromText(item.sharedText) : null);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -353,6 +465,13 @@ export default function InspirationDetailScreen() {
                 label={`STATUS: ${item.processingStatus.toUpperCase()}`}
                 variant={item.processingStatus === 'ready' ? 'outline' : 'grade'}
               />
+              {item.archived ? (
+                <Badge
+                  label="IN TRASH"
+                  variant="outline"
+                  style={{ borderColor: colors.statusErrorBorder, marginLeft: 4 }}
+                />
+              ) : null}
             </View>
 
             {item.remotePreviewImageUrl ? (
@@ -369,11 +488,17 @@ export default function InspirationDetailScreen() {
                   </Pressable>
                 </View>
                 {showImage ? (
-                  <Image
-                    source={{ uri: item.remotePreviewImageUrl }}
-                    style={styles.detailImage}
-                    resizeMode="cover"
-                  />
+                  <Pressable onPress={handleOpenSource} accessibilityRole="link" accessibilityLabel="Visit source website">
+                    <Image
+                      source={{
+                        uri: item.remotePreviewImageUrl?.includes('s.pinimg.com/webapp/logo')
+                          ? PINTEREST_SVG
+                          : item.remotePreviewImageUrl,
+                      }}
+                      style={styles.detailImage}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
                 ) : null}
               </View>
             ) : null}
@@ -388,14 +513,25 @@ export default function InspirationDetailScreen() {
             ) : null}
 
             {item.url ? (
-              <Pressable
-                onPress={() => Linking.openURL(item.url!)}
-                style={styles.linkContainer}
-              >
-                <Text style={styles.linkText} numberOfLines={2}>
-                  ↗ Visit Source: {item.url}
-                </Text>
-              </Pressable>
+              <View style={{ marginBottom: spacing.base }}>
+                <Pressable
+                  onPress={handleOpenSource}
+                  style={[styles.linkContainer, { marginBottom: 0 }]}
+                  accessibilityRole="link"
+                >
+                  <Text style={styles.linkText} numberOfLines={2}>
+                    ↗ Visit Source: {item.url}
+                  </Text>
+                </Pressable>
+                <View style={{ marginTop: 8 }}>
+                  <Button
+                    title="↗ VISIT SOURCE"
+                    variant="secondary"
+                    onPress={handleOpenSource}
+                    style={{ height: 36 }}
+                  />
+                </View>
+              </View>
             ) : null}
 
             {item.aiSummary ? (
@@ -449,18 +585,30 @@ export default function InspirationDetailScreen() {
 
             {/* Actions */}
             <View style={styles.actionSection}>
+              {targetUrl ? (
+                <Button
+                  title={refetchingMetadata ? 'REFETCHING METADATA...' : 'REFETCH METADATA'}
+                  variant="secondary"
+                  onPress={handleRefetchMetadata}
+                  disabled={refetchingMetadata || saving}
+                  loading={refetchingMetadata}
+                  style={{ marginBottom: spacing.sm }}
+                />
+              ) : null}
               <Button
-                title={item.archived ? 'UNARCHIVE ITEM' : 'ARCHIVE ITEM'}
+                title={item.archived ? 'RESTORE FROM TRASH' : 'MOVE TO TRASH'}
                 variant="secondary"
                 onPress={handleToggleArchive}
-                style={{ marginBottom: spacing.sm }}
-              />
-              <Button
-                title={deleting ? 'DELETING...' : 'DELETE FROM BANK'}
-                variant="secondary"
-                disabled={deleting || saving}
-                loading={deleting}
-                onPress={handleDelete}
+                style={{
+                  marginBottom: spacing.sm,
+                  backgroundColor: '#FFFFFF',
+                  borderColor: '#FFFFFF',
+                  borderWidth: 1,
+                }}
+                textStyle={{
+                  color: '#000000',
+                  fontWeight: '700',
+                }}
               />
             </View>
           </View>

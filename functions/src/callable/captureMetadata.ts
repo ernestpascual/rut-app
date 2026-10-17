@@ -7,6 +7,8 @@ import { captureMetadataAction } from '../metadata/fetcher';
  */
 export const captureMetadata = onCall(
   {
+    invoker: 'public',
+    cors: true,
     maxInstances: 10,
     timeoutSeconds: 30,
     memory: '256MiB',

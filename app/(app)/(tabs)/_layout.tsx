@@ -1,23 +1,22 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
-import { useTheme } from '../../../src/design/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Tabs } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../../src/design/ThemeContext";
 
 function QuickMenuBar({ state, descriptors, navigation, insets }: any) {
   const { colors, isDark } = useTheme();
   const bottomInset = Math.max(insets?.bottom ?? 0, 8);
 
-  const activeColor = isDark ? '#ffffff' : '#000000';
-  const inactiveColor = isDark ? '#777777' : '#888888';
-  const borderColor = isDark ? '#262626' : '#e5e5e5';
+  const activeColor = isDark ? "#ffffff" : "#000000";
+  const inactiveColor = isDark ? "#777777" : "#888888";
+  const borderColor = isDark ? "#262626" : "#e5e5e5";
 
   return (
     <View
       style={[
         styles.barContainer,
         {
-          backgroundColor: isDark ? '#000000' : '#ffffff',
+          backgroundColor: isDark ? "#000000" : "#ffffff",
           borderTopColor: borderColor,
           height: 52 + bottomInset,
           paddingBottom: bottomInset,
@@ -30,14 +29,14 @@ function QuickMenuBar({ state, descriptors, navigation, insets }: any) {
           options.tabBarLabel !== undefined
             ? options.tabBarLabel
             : options.title !== undefined
-            ? options.title
-            : route.name;
+              ? options.title
+              : route.name;
 
         const isFocused = state.index === index;
 
         const onPress = () => {
           const event = navigation.emit({
-            type: 'tabPress',
+            type: "tabPress",
             target: route.key,
             canPreventDefault: true,
           });
@@ -49,7 +48,7 @@ function QuickMenuBar({ state, descriptors, navigation, insets }: any) {
 
         const onLongPress = () => {
           navigation.emit({
-            type: 'tabLongPress',
+            type: "tabLongPress",
             target: route.key,
           });
         };
@@ -66,18 +65,23 @@ function QuickMenuBar({ state, descriptors, navigation, insets }: any) {
             style={styles.tabButton}
           >
             {isFocused ? (
-              <View style={[styles.activeIndicator, { backgroundColor: activeColor }]} />
+              <View
+                style={[
+                  styles.activeIndicator,
+                  { backgroundColor: activeColor },
+                ]}
+              />
             ) : null}
             <Text
               style={[
                 styles.tabLabel,
                 {
                   color: isFocused ? activeColor : inactiveColor,
-                  fontWeight: isFocused ? '800' : '600',
+                  fontWeight: isFocused ? "800" : "600",
                 },
               ]}
             >
-              {typeof label === 'string' ? label : route.name}
+              {typeof label === "string" ? label : route.name}
             </Text>
           </Pressable>
         );
@@ -99,29 +103,29 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="bank/index"
         options={{
-          title: 'DUMP',
-          tabBarLabel: 'DUMP',
+          title: "DUMP",
+          tabBarLabel: "DUMP",
         }}
       />
       <Tabs.Screen
-        name="chats/index"
+        name="thoughts/index"
         options={{
-          title: 'CHATS',
-          tabBarLabel: 'CHATS',
+          title: "THOUGHTS",
+          tabBarLabel: "THOUGHTS",
         }}
       />
       <Tabs.Screen
-        name="projects/index"
+        name="ideas/index"
         options={{
-          title: 'IDEAS',
-          tabBarLabel: 'IDEAS',
+          title: "IDEAS",
+          tabBarLabel: "IDEAS",
         }}
       />
       <Tabs.Screen
         name="settings/index"
         options={{
-          title: 'SETTINGS',
-          tabBarLabel: 'SETTINGS',
+          title: "SETTINGS",
+          tabBarLabel: "SETTINGS",
         }}
       />
     </Tabs>
@@ -130,20 +134,20 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   barContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderTopWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabButton: {
     flex: 1,
     height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
   },
   activeIndicator: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     width: 28,
     height: 2,
@@ -151,8 +155,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 11,
     letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    textAlign: 'center',
+    textTransform: "uppercase",
+    textAlign: "center",
     includeFontPadding: false,
   },
 });

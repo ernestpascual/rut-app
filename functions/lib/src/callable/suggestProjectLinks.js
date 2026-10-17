@@ -5,7 +5,7 @@ const https_1 = require("firebase-functions/v2/https");
 const config_1 = require("../config");
 const factory_1 = require("../ai/factory");
 const ledger_1 = require("../cost/ledger");
-exports.suggestProjectLinks = (0, https_1.onCall)(async (request) => {
+exports.suggestProjectLinks = (0, https_1.onCall)({ invoker: 'public', cors: true }, async (request) => {
     if (!request.auth || !request.auth.uid) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated.');
     }

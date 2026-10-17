@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAIProvider = getAIProvider;
-const mock_provider_1 = require("./mock-provider");
 const gemini_provider_1 = require("./gemini-provider");
 const config_1 = require("../config");
 function getAIProvider(modelName) {
@@ -9,9 +8,6 @@ function getAIProvider(modelName) {
     if (apiKey) {
         return new gemini_provider_1.GeminiAIProvider(apiKey, modelName);
     }
-    else {
-        console.log('[AI Factory] GEMINI_API_KEY not configured. Falling back to MockAIProvider.');
-        return new mock_provider_1.MockAIProvider();
-    }
+    throw new Error('GEMINI_API_KEY is not configured on the server. AI operations require a valid Gemini API key.');
 }
 //# sourceMappingURL=factory.js.map

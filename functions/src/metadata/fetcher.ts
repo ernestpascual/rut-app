@@ -263,9 +263,16 @@ function getHtmlPreview(html: string, pageUrl: string): PreviewMetadata {
 
 function scorePreview(preview: Partial<PreviewMetadata>): number {
   let score = 0;
-  if (preview.thumbnail && !preview.thumbnail.includes('svg')) score += 5;
+  if (
+    preview.thumbnail &&
+    !preview.thumbnail.includes('svg') &&
+    !preview.thumbnail.includes('s.pinimg.com/webapp/logo') &&
+    !preview.thumbnail.includes('favicon')
+  ) {
+    score += 5;
+  }
   if (preview.title) {
-    if (/login|log in|page not found|sign up/i.test(preview.title)) {
+    if (/login|log in|page not found|sign up|video::cue|[{}]/i.test(preview.title)) {
       score -= 20;
     } else {
       score += 2;
@@ -436,6 +443,72 @@ async function fetchThreadsOEmbed(requestedUrl: URL): Promise<PreviewMetadata | 
   }
 }
 
+async function fetchPinterestOEmbed(requestedUrl: URL): Promise<PreviewMetadata | null> {
+  try {
+    let pinUrl = requestedUrl.href;
+    // If it's a shortlink like pin.it, resolve redirect to get the canonical pinterest.com/pin/... URL
+    if (requestedUrl.hostname.includes('pin.it')) {
+      try {
+        const headRes = await fetch(requestedUrl.href, {
+          method: 'HEAD',
+          redirect: 'follow',
+          signal: AbortSignal.timeout(6_000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          }
+        });
+        if (headRes.url && headRes.url.includes('pinterest.com')) {
+          pinUrl = headRes.url;
+        }
+      } catch {}
+    }
+
+    const oembedUrl = `https://www.pinterest.com/oembed.json?url=${encodeURIComponent(pinUrl)}`;
+    const response = await fetch(oembedUrl, {
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json() as Record<string, unknown>;
+    if (!data || data.error) return null;
+
+    let thumbnail = asString(data.thumbnail_url);
+    if (thumbnail) {
+      // Upgrade 236x thumbnail to 736x for rich high-resolution visuals
+      thumbnail = thumbnail.replace('/236x/', '/736x/');
+    }
+
+    const author = asString(data.author_name);
+    let title = asString(data.title);
+    if (title) {
+      title = cleanMetadata(title);
+      // Eliminate empty, whitespace or CSS artifact titles
+      if (/video::cue|[{};]|font-family/i.test(title) || !title.trim()) {
+        title = undefined;
+      }
+    }
+
+    const cleanTitle = title || (author ? `Pinterest Pin by ${author}` : "Pinterest Visual Pin");
+
+    return {
+      title: cleanTitle,
+      description: title || (author ? `Pinned by ${author} on Pinterest.` : `Visual inspiration pin reference.`),
+      thumbnail: thumbnail && !/s\.pinimg\.com\/webapp\/logo|favicon/i.test(thumbnail) ? thumbnail : undefined,
+      favicon: 'https://s.pinimg.com/webapp/favicon_48x48-7470a30d.png',
+      author: author || undefined,
+      caption: title || undefined,
+      resolvedUrl: pinUrl,
+      source: 'oembed'
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Server-side action that fetches rich metadata from target URLs (bypassing client-side CORS issues).
  * Uses multi-strategy scraping with specialized Instagram embed/oEmbed extractors and fallback vector SVGs.
@@ -476,7 +549,8 @@ export async function captureMetadataAction(url: string): Promise<MetadataResult
     const previews = await Promise.allSettled([
       ...userAgents.map((userAgent) => fetchHtmlPreview(requestedUrl, userAgent)),
       ...(isInstagram ? [fetchInstagramOEmbed(requestedUrl), fetchInstagramEmbedPage(requestedUrl)] : []),
-      ...(isThreads ? [fetchThreadsOEmbed(requestedUrl)] : [])
+      ...(isThreads ? [fetchThreadsOEmbed(requestedUrl)] : []),
+      ...(isPinterest ? [fetchPinterestOEmbed(requestedUrl)] : [])
     ]);
 
     const bestPreview = previews
@@ -502,7 +576,7 @@ export async function captureMetadataAction(url: string): Promise<MetadataResult
     }
 
     let extractedTitle = bestPreview.title;
-    if (!extractedTitle || /login|log in|page not found|sign up/i.test(extractedTitle) || extractedTitle === 'Instagram') {
+    if (!extractedTitle || /login|log in|page not found|sign up|video::cue|[{}]/i.test(extractedTitle) || extractedTitle === 'Instagram') {
       extractedTitle = isReel
         ? "Instagram Reel"
         : isPost
@@ -521,7 +595,7 @@ export async function captureMetadataAction(url: string): Promise<MetadataResult
     const fallbackDescription = `Reference from ${pageHost}${page.pathname === '/' ? '' : page.pathname}.`;
 
     let thumbnail = bestPreview.thumbnail;
-    if (thumbnail && /rsrc\.php|logging|login/i.test(thumbnail)) {
+    if (thumbnail && /rsrc\.php|logging|login|s\.pinimg\.com\/webapp\/logo|favicon/i.test(thumbnail)) {
       thumbnail = undefined;
     }
 
@@ -543,8 +617,8 @@ export async function captureMetadataAction(url: string): Promise<MetadataResult
       }
     }
 
-    let finalThumbnail = thumbnail || bestPreview.favicon;
-    if (!finalThumbnail || /rsrc\.php|logging|login/i.test(finalThumbnail)) {
+    let finalThumbnail = thumbnail;
+    if (!finalThumbnail || /rsrc\.php|logging|login|s\.pinimg\.com\/webapp\/logo|favicon/i.test(finalThumbnail)) {
       finalThumbnail = platform === 'pinterest' 
         ? PINTEREST_SVG 
         : platform === 'instagram' 

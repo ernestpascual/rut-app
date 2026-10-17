@@ -23,6 +23,10 @@ export interface ChatRequest {
   retrievedInspirations: InspirationContextItem[];
   pinnedInspirations: InspirationContextItem[];
   webAccess?: boolean;
+  memorySummary?: string | null;
+  model?: string;
+  totalBankCount?: number;
+  isReevaluate?: boolean;
 }
 
 export interface ChatResult {

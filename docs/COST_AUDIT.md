@@ -124,6 +124,6 @@ To reactivate: set `killSwitchEnabled: false`.
 ---
 
 ## 8. Related Documentation
-- For current per-user unit economics and scaling projections, see **[COST_ESTIMATE_20261017_165100.md](COST_ESTIMATE_20261017_165100.md)**.
+- For current per-user unit economics and scaling projections, see **[COST_ESTIMATE_20261018_010900.md](COST_ESTIMATE_20261018_010900.md)**.
 - For operational procedures on configuring guardrails and daily quotas, see **[COST_SAFETY_GUARDRAILS.md](COST_SAFETY_GUARDRAILS.md)**.
 

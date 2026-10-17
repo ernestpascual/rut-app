@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const mock_provider_1 = require("../src/ai/mock-provider");
+const mock_provider_1 = require("./mocks/mock-provider");
 describe('Mock AI Provider', () => {
     const provider = new mock_provider_1.MockAIProvider();
     test('generates normalized embeddings with 64 dimensions', async () => {

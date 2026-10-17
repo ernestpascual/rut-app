@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAccountData = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const config_1 = require("../config");
-exports.deleteAccountData = (0, https_1.onCall)(async (request) => {
+exports.deleteAccountData = (0, https_1.onCall)({ invoker: 'public', cors: true }, async (request) => {
     if (!request.auth || !request.auth.uid) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated.');
     }

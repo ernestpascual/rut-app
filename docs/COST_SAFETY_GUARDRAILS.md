@@ -177,7 +177,7 @@ Every AI interaction writes to Firestore under the user's isolated subcollection
 ---
 
 ## 6. Related Documentation
-- **[COST_ESTIMATE_20261017_165100.md](COST_ESTIMATE_20261017_165100.md)**: Unit economics, per-user monthly estimates, and fleet scale projections.
+- **[COST_ESTIMATE_20261018_010900.md](COST_ESTIMATE_20261018_010900.md)**: Unit economics, per-user monthly estimates, and fleet scale projections.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: High-level system architecture and integer micros accounting pillar.
 - **[GOOGLE_USAGE.md](GOOGLE_USAGE.md)**: Google AI and Firebase service utilization guide.
 

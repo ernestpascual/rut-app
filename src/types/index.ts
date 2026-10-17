@@ -71,12 +71,15 @@ export interface ChatSession {
   id: string;
   ownerUid: string;
   title: string;
+  model?: string | null;
   pinnedInspirationIds: string[];
   summary: string | null;
   thesisStatement?: string | null;
   projectId?: string | null;
   projectTitle?: string | null;
   webAccessEnabled?: boolean;
+  memorySummary?: string | null;
+  compactedMessageCount?: number;
   archived: boolean;
   createdAt: number;
   updatedAt: number;

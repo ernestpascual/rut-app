@@ -38,7 +38,7 @@ async function deleteIndexRecord(ownerUid, inspirationId) {
  * Performs owner-isolated semantic retrieval.
  * Returns only inspiration IDs and similarity score. Never returns raw embeddings.
  */
-async function searchOwnerIndex(ownerUid, queryEmbedding, limit = 10) {
+async function searchOwnerIndex(ownerUid, queryEmbedding, limit = 10, minSimilarity = 0.38) {
     // Query only records belonging to the authenticated user
     const snapshot = await config_1.db
         .collection('_aiInspirationIndex')
@@ -49,10 +49,12 @@ async function searchOwnerIndex(ownerUid, queryEmbedding, limit = 10) {
         const data = docSnap.data();
         if (data.embedding && data.inspirationId) {
             const sim = cosineSimilarity(queryEmbedding, data.embedding);
-            scored.push({
-                inspirationId: data.inspirationId,
-                similarity: sim,
-            });
+            if (sim >= minSimilarity) {
+                scored.push({
+                    inspirationId: data.inspirationId,
+                    similarity: sim,
+                });
+            }
         }
     });
     // Sort descending by similarity

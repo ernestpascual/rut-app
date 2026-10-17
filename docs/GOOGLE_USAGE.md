@@ -167,6 +167,6 @@ All AI operations in `rut` run server-side via the `@google/generative-ai` SDK (
 
 ## 7. Related Documentation
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Overall system architecture and technical pillars.
-- **[COST_ESTIMATE_20261017_165100.md](COST_ESTIMATE_20261017_165100.md)**: Detailed resource pricing and per-user cost models.
+- **[COST_ESTIMATE_20261018_010900.md](COST_ESTIMATE_20261018_010900.md)**: Detailed resource pricing and per-user cost models.
 - **[SECURITY_SCAN_20261017_165100.md](SECURITY_SCAN_20261017_165100.md)**: Security vulnerability scan and Firestore rules assessment.
 

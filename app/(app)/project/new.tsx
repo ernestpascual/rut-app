@@ -129,7 +129,7 @@ export default function NewProjectScreen() {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/(app)/(tabs)/projects');
+            router.replace('/(app)/(tabs)/ideas');
           }
         }}
         backTitle="IDEAS"
@@ -141,7 +141,7 @@ export default function NewProjectScreen() {
               if (router.canGoBack()) {
                 router.back();
               } else {
-                router.replace('/(app)/(tabs)/projects');
+                router.replace('/(app)/(tabs)/ideas');
               }
             }}
           />

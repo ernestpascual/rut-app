@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
+  StyleProp,
   Pressable
 } from 'react-native';
 import { rounded, typography, spacing } from '../../design/tokens';
@@ -16,8 +17,8 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'text';
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 export const Button: React.FC<ButtonProps> = ({

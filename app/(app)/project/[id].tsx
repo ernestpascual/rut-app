@@ -60,6 +60,7 @@ import {
   getUserPreferredModel,
   setUserPreferredModel,
 } from '../../../src/features/chat/chatService';
+import { openExternalUrl } from '../../../src/utils/linking';
 import {
   copyIdeaAsMarkdown,
   exportIdeaAsPDF,
@@ -111,6 +112,7 @@ export default function ProjectDetailScreen() {
   // Train of Thought Chat state
   const [ideaChat, setIdeaChat] = useState<ChatSession | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
   const [chatInputText, setChatInputText] = useState('');
   const [sendingThought, setSendingThought] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
@@ -163,7 +165,7 @@ export default function ProjectDetailScreen() {
           setEditNotes(found.notes || '');
           setEditTags(found.tags || []);
         } else {
-          router.replace('/(app)/(tabs)/projects');
+          router.replace('/(app)/(tabs)/ideas');
         }
 
         const localLinks = await getProjectLinks(id);
@@ -197,7 +199,7 @@ export default function ProjectDetailScreen() {
               setEditNotes(found.notes || '');
               setEditTags(found.tags || []);
             } else {
-              router.replace('/(app)/(tabs)/projects');
+              router.replace('/(app)/(tabs)/ideas');
             }
           }
           setLoading(false);
@@ -575,7 +577,7 @@ export default function ProjectDetailScreen() {
   // Open the full dedicated chat interface for this thought / idea
   const handleOpenFullChat = async () => {
     if (ideaChat) {
-      router.push(`/(app)/chat/${ideaChat.id}`);
+      router.push(`/(app)/thought/${ideaChat.id}`);
       return;
     }
     if (!project) return;
@@ -585,10 +587,10 @@ export default function ProjectDetailScreen() {
         .filter(Boolean) as InspirationItem[];
       const chat = await getOrCreateIdeaChat(project, attachedItems, user?.uid);
       setIdeaChat(chat);
-      router.push(`/(app)/chat/${chat.id}`);
+      router.push(`/(app)/thought/${chat.id}`);
     } catch {
       // Fallback
-      router.push('/(app)/(tabs)/chats');
+      router.push('/(app)/(tabs)/thoughts');
     }
   };
 
@@ -789,7 +791,7 @@ export default function ProjectDetailScreen() {
       setShowLinkChatModal(false);
       Alert.alert(
         'Chat Linked',
-        `"${selectedChat.title}" is now the active Train of Thought for this idea.`
+        `"${selectedChat.title}" is now the active Thought for this idea.`
       );
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to link chat.');
@@ -807,7 +809,7 @@ export default function ProjectDetailScreen() {
         .map((l) => bankMap[l.inspirationId])
         .filter(Boolean) as InspirationItem[];
 
-      const newSession = await createChatSession(`${project.title} — Train of Thought`, {
+      const newSession = await createChatSession(`${project.title} — Thought`, {
         projectId: project.id,
         projectTitle: project.title,
         pinnedInspirationIds: attachedItems.map((a) => a.id),
@@ -833,7 +835,7 @@ export default function ProjectDetailScreen() {
       setChatMessages([]);
       setShowLinkChatModal(false);
       Alert.alert(
-        'New Train of Thought Created',
+        'New Thought Created',
         'A fresh dedicated thought stream has been linked to this idea.'
       );
     } catch (e: any) {
@@ -898,28 +900,6 @@ export default function ProjectDetailScreen() {
     }
   };
 
-  if (loading || !project) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <TopNav
-          title="rut"
-          subtitle="Loading Idea..."
-          onBack={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(app)/(tabs)/projects');
-            }
-          }}
-          backTitle="IDEAS"
-        />
-        <View style={styles.centerBox}>
-          <ActivityIndicator color={colors.ink} size="small" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   const unattachedDumpItems = allDumpItems.filter(
     (item) => !item.archived && !links.some((l) => l.inspirationId === item.id)
   );
@@ -950,6 +930,28 @@ export default function ProjectDetailScreen() {
       );
     });
   }, [unattachedDumpItems, pickerSearchQuery]);
+
+  if (loading || !project) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <TopNav
+          title="rut"
+          subtitle="Loading Idea..."
+          onBack={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(app)/(tabs)/ideas');
+            }
+          }}
+          backTitle="IDEAS"
+        />
+        <View style={styles.centerBox}>
+          <ActivityIndicator color={colors.ink} size="small" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // FULL HEIGHT EDIT SCREEN FOR EXTENSIVE NOTES & SPECIFICATIONS
   if (editing) {
@@ -1087,7 +1089,7 @@ export default function ProjectDetailScreen() {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/(app)/(tabs)/projects');
+            router.replace('/(app)/(tabs)/ideas');
           }
         }}
         backTitle="IDEAS"
@@ -1242,7 +1244,7 @@ export default function ProjectDetailScreen() {
                     style={styles.overviewNavCard}
                     onPress={() => setActiveTab('thoughts')}
                   >
-                    <Text style={styles.overviewNavLabel}>TRAIN OF THOUGHT</Text>
+                    <Text style={styles.overviewNavLabel}>THOUGHTS</Text>
                     <Text style={styles.overviewNavCount}>{chatMessages.length} Messages</Text>
                     <Text style={styles.overviewNavHint}>BRAINSTORM →</Text>
                   </Pressable>
@@ -1410,7 +1412,7 @@ export default function ProjectDetailScreen() {
 
                               {/* URL Link */}
                               {item.url ? (
-                                <Pressable onPress={() => Linking.openURL(item.url!)} style={{ marginTop: 4 }}>
+                                <Pressable onPress={() => openExternalUrl(item.url!)} style={{ marginTop: 4 }} accessibilityRole="link">
                                   <Text style={styles.pickerUrlText} numberOfLines={1}>
                                     ↗ {item.url}
                                   </Text>
@@ -1481,7 +1483,7 @@ export default function ProjectDetailScreen() {
                           <Text style={styles.matchedReason}>💡 {result.reason}</Text>
 
                           {item.url ? (
-                            <Pressable onPress={() => Linking.openURL(item.url!)}>
+                            <Pressable onPress={() => openExternalUrl(item.url!)} accessibilityRole="link">
                               <Text style={styles.urlLink} numberOfLines={1}>
                                 ↗ {item.url}
                               </Text>
@@ -1645,7 +1647,7 @@ export default function ProjectDetailScreen() {
                         </View>
 
                         {item?.url ? (
-                          <Pressable onPress={() => Linking.openURL(item.url!)}>
+                          <Pressable onPress={() => openExternalUrl(item.url!)} accessibilityRole="link">
                             <Text style={styles.urlLink} numberOfLines={1}>
                               ↗ {item.url}
                             </Text>
@@ -1823,29 +1825,77 @@ export default function ProjectDetailScreen() {
                                     <MarkdownRenderer content={msg.content} />
                                   )}
 
-                                  {/* Cited references */}
-                                  {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
+                                  {/* ALL SOURCES USED BY ANSWER (COLLAPSIBLE) */}
+                                  {!isUser && ((msg.sourceInspirationIds?.length || 0) + (msg.webSources?.length || 0)) > 0 && (
                                     <View style={styles.chatCitationsBox}>
-                                      <Text style={styles.chatCitationsTitle}>CITED REFERENCES:</Text>
-                                      <View style={styles.chatCitationsRow}>
-                                        {msg.sourceInspirationIds.map((sid) => {
-                                          const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
-                                          return (
-                                            <Pressable
-                                              key={sid}
-                                              style={styles.citationPill}
-                                              onPress={(e) => {
-                                                e.stopPropagation?.();
-                                                router.push(`/(app)/inspiration/${sid}`);
-                                              }}
-                                            >
-                                              <Text style={styles.citationPillText} numberOfLines={1}>
-                                                🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
-                                              </Text>
-                                            </Pressable>
-                                          );
-                                        })}
-                                      </View>
+                                      <Pressable
+                                        style={styles.chatCitationsHeader}
+                                        onPress={() => {
+                                          setExpandedCitations((prev) => ({
+                                            ...prev,
+                                            [msg.id]: !prev[msg.id],
+                                          }));
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Toggle Sources"
+                                      >
+                                        <Text style={styles.chatCitationsTitle}>
+                                          SOURCES ({((msg.sourceInspirationIds?.length || 0) + (msg.webSources?.length || 0))})
+                                        </Text>
+                                        <Text style={styles.chatCitationsToggle}>
+                                          {expandedCitations[msg.id] ? '▲ COLLAPSE' : '▼ EXPAND'}
+                                        </Text>
+                                      </Pressable>
+
+                                      {expandedCitations[msg.id] && (
+                                        <View style={{ marginTop: 6, gap: 6 }}>
+                                          {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
+                                            <View style={styles.chatCitationsRow}>
+                                              {msg.sourceInspirationIds.map((sid) => {
+                                                const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
+                                                return (
+                                                  <Pressable
+                                                    key={sid}
+                                                    style={styles.citationPill}
+                                                    onPress={(e) => {
+                                                      e.stopPropagation?.();
+                                                      router.push(`/(app)/inspiration/${sid}`);
+                                                    }}
+                                                  >
+                                                    <Text style={styles.citationPillText} numberOfLines={1}>
+                                                      🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
+                                                    </Text>
+                                                  </Pressable>
+                                                );
+                                              })}
+                                            </View>
+                                          )}
+
+                                          {msg.webSources && msg.webSources.length > 0 && (
+                                            <View style={styles.chatCitationsRow}>
+                                              {msg.webSources.map((ws, wIdx) => {
+                                                const domain = ws.uri ? ws.uri.replace(/^https?:\/\//, '').split('/')[0] : '';
+                                                return (
+                                                  <Pressable
+                                                    key={`web-${wIdx}`}
+                                                    style={[styles.citationPill, { backgroundColor: colors.ink }]}
+                                                    onPress={(e) => {
+                                                      e.stopPropagation?.();
+                                                      if (ws.uri) {
+                                                        Linking.openURL(ws.uri).catch(() => {});
+                                                      }
+                                                    }}
+                                                  >
+                                                    <Text style={[styles.citationPillText, { color: colors.onInk }]} numberOfLines={1}>
+                                                      🌐 {ws.title || domain || 'Web source'} ↗
+                                                    </Text>
+                                                  </Pressable>
+                                                );
+                                              })}
+                                            </View>
+                                          )}
+                                        </View>
+                                      )}
                                     </View>
                                   )}
                                   {/* ACTION ROW: ADD THOUGHT TO IDEA NOTES / BRIEF */}
@@ -1894,7 +1944,7 @@ export default function ProjectDetailScreen() {
                           style={styles.emptyThoughtBox}
                           onPress={handleOpenFullChat}
                         >
-                          <Text style={styles.emptyThoughtHeading}>START THE TRAIN OF THOUGHT</Text>
+                          <Text style={styles.emptyThoughtHeading}>START A THOUGHT</Text>
                           <Text style={styles.emptyThoughtText}>
                             Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open chat.
                           </Text>
@@ -1912,7 +1962,7 @@ export default function ProjectDetailScreen() {
                       <View style={styles.thinkingIndicator}>
                         <ActivityIndicator size="small" color={colors.ink} />
                         <Text style={styles.thinkingText}>
-                          DEVELOPING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                          DEVELOPING THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
                         </Text>
                       </View>
                     ) : null}
@@ -1926,7 +1976,7 @@ export default function ProjectDetailScreen() {
                 <View style={styles.modalContent}>
                   <TopNav
                     title="rut"
-                    subtitle="Link Train of Thought"
+                    subtitle="Link Thought"
                     rightAction={
                       <Button
                         title="DONE"
@@ -1937,7 +1987,7 @@ export default function ProjectDetailScreen() {
                   />
                   <ScrollView style={{ padding: spacing.base }}>
                     <Text style={styles.modalSubhead}>
-                      Attach any of your existing train of thought brainstorms to &ldquo;{project.title}&rdquo;, or spin up a new dedicated stream.
+                      Attach any of your existing thoughts to &ldquo;{project.title}&rdquo;, or spin up a new dedicated stream.
                     </Text>
 
                     <Card style={styles.newChatCard}>
@@ -1959,7 +2009,7 @@ export default function ProjectDetailScreen() {
                     </Card>
 
                     <Text style={[styles.sectionHeading, { marginTop: spacing.base, marginBottom: spacing.xs }]}>
-                      YOUR EXISTING TRAIN OF THOUGHT CHATS ({availableChats.length})
+                      YOUR EXISTING THOUGHTS ({availableChats.length})
                     </Text>
 
                     {loadingChats ? (
@@ -2014,7 +2064,7 @@ export default function ProjectDetailScreen() {
                                   variant="secondary"
                                   onPress={() => {
                                     setShowLinkChatModal(false);
-                                    router.push(`/(app)/chat/${c.id}`);
+                                    router.push(`/(app)/thought/${c.id}`);
                                   }}
                                   style={{ height: 30, paddingHorizontal: 10 }}
                                 />
@@ -2054,7 +2104,7 @@ export default function ProjectDetailScreen() {
                   />
                   <ScrollView style={{ padding: spacing.base }}>
                     <Text style={styles.modalSubhead}>
-                      Select the model used for Train of Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
+                      Select the model used for Thought synthesis and inspiration retrieval. Your choice is saved as your default model preference.
                     </Text>
                     {AVAILABLE_MODELS.map((m) => {
                       const isSelected = selectedModel === m.id;
@@ -2111,7 +2161,7 @@ export default function ProjectDetailScreen() {
                   />
                   <ScrollView style={{ padding: spacing.base }}>
                     <Text style={styles.modalSubhead}>
-                      Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and the full train of thought transcript.
+                      Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and the full thought transcript.
                     </Text>
 
                     {/* OPTION 1: COPY AS MARKDOWN */}
@@ -2787,11 +2837,24 @@ const getStyles = (colors: ThemeColors) =>
     borderTopWidth: 1,
     borderTopColor: colors.hairlineSoft,
   },
+  chatCitationsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+    marginBottom: 4,
+  },
   chatCitationsTitle: {
     ...typography.captionCap,
     fontSize: 8,
     color: colors.inkSoft,
-    marginBottom: 4,
+  },
+  chatCitationsToggle: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
   },
   chatCitationsRow: {
     flexDirection: 'row',

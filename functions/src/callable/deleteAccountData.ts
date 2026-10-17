@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { db } from '../config';
 
-export const deleteAccountData = onCall(async (request) => {
+export const deleteAccountData = onCall({ invoker: 'public', cors: true }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'User must be authenticated.');
   }

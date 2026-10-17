@@ -1,4 +1,4 @@
-import { MockAIProvider } from '../src/ai/mock-provider';
+import { MockAIProvider } from './mocks/mock-provider';
 
 describe('Mock AI Provider', () => {
   const provider = new MockAIProvider();
