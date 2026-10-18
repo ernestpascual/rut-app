@@ -414,7 +414,7 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     });
 
     test('synthesizes short conversational friend replies under 60 words', () => {
-      const friends = ['Kenji', 'Tala', 'Ingrid', 'Tariq', 'Priya', 'Mateo'];
+      const friends = ['Rei', 'Tala', 'Linh', 'Minji', 'Priya', 'Kamila', 'Kenji', 'Ingrid', 'Tariq', 'Mateo'];
 
       for (const friend of friends) {
         const result = synthesizeThoughtTrain({

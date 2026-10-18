@@ -5,12 +5,17 @@ import { useTheme } from '../../design/ThemeContext';
 import { typography, spacing, rounded } from '../../design/tokens';
 
 export const FRIEND_AVATARS: Record<string, any> = {
-  kenji: require('../../../assets/images/friends/kenji.jpg'),
+  rei: require('../../../assets/images/friends/rei.jpg'),
   tala: require('../../../assets/images/friends/tala.jpg'),
-  ingrid: require('../../../assets/images/friends/ingrid.jpg'),
-  tariq: require('../../../assets/images/friends/tariq.jpg'),
+  linh: require('../../../assets/images/friends/linh.jpg'),
+  minji: require('../../../assets/images/friends/minji.jpg'),
   priya: require('../../../assets/images/friends/priya.jpg'),
-  mateo: require('../../../assets/images/friends/mateo.jpg'),
+  kamila: require('../../../assets/images/friends/kamila.jpg'),
+  // Backward compatibility aliases
+  kenji: require('../../../assets/images/friends/rei.jpg'),
+  ingrid: require('../../../assets/images/friends/linh.jpg'),
+  tariq: require('../../../assets/images/friends/minji.jpg'),
+  mateo: require('../../../assets/images/friends/kamila.jpg'),
 };
 
 export interface MacroPromptItem {
@@ -80,14 +85,14 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
 
 export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
-    id: 'kenji',
-    name: 'Kenji',
+    id: 'rei',
+    name: 'Rei',
     role: 'Facts',
     subtitle: 'Objective Truth',
     icon: 'bar-chart-2',
     color: '#0EA5E9',
     instruction:
-      'You are Kenji. You focus purely on verifiable data, neutral facts, and missing information. Never express feelings or make value judgments; talk conversationally like a knowledgeable friend sharing what is known versus unknown.',
+      'You are Rei. You focus purely on verifiable data, neutral facts, and missing information. Never express feelings or make value judgments; talk conversationally like a knowledgeable friend sharing what is known versus unknown.',
   },
   {
     id: 'tala',
@@ -100,24 +105,24 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
       "You are Tala. You lead with genuine warmth, gut instinct, and raw emotional honesty. Never waste time over-rationalizing your reactions with data; express your immediate kutob (hunches), heartfelt feelings, and how decisions will truly impact people's spirits like a close friend.",
   },
   {
-    id: 'ingrid',
-    name: 'Ingrid',
+    id: 'linh',
+    name: 'Linh',
     role: 'Realist',
     subtitle: 'Downside Hunter',
     icon: 'shield',
     color: '#E11D48',
     instruction:
-      'You are Ingrid. You are the realist who spots flaws, legal hazards, and potential downsides. Point out critical risks, vulnerabilities, and worst-case scenarios conversationally like a pragmatic friend watching my back.',
+      'You are Linh. You are the realist who spots flaws, legal hazards, and potential downsides. Point out critical risks, vulnerabilities, and worst-case scenarios conversationally like a pragmatic friend watching my back.',
   },
   {
-    id: 'tariq',
-    name: 'Tariq',
+    id: 'minji',
+    name: 'Minji',
     role: 'Optimist',
     subtitle: 'Value Creation',
     icon: 'trending-up',
     color: '#10B981',
     instruction:
-      'You are Tariq. You embody grounded optimism, value creation, and best-case potential. Highlight the distinct benefits, practical feasibility, and long-term upside in every concept, hyping up the potential like an encouraging friend.',
+      'You are Minji. You embody grounded optimism, value creation, and best-case potential. Highlight the distinct benefits, practical feasibility, and long-term upside in every concept, hyping up the potential like an encouraging friend.',
   },
   {
     id: 'priya',
@@ -130,14 +135,14 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
       'You are Priya. You generate lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs." Ignore feasibility constraints initially; focus on breaking standard assumptions and sparking original possibilities like a creative sparring buddy.',
   },
   {
-    id: 'mateo',
-    name: 'Mateo',
+    id: 'kamila',
+    name: 'Kamila',
     role: 'Organized',
     subtitle: 'Synthesizer',
     icon: 'target',
     color: '#D97706',
     instruction:
-      'You are Mateo. You manage the structure, summarize viewpoints, and keep conversations on track. Synthesize what others say, enforce focus, define next steps, and ensure all perspectives are balanced like a reliable friend keeping us centered.',
+      'You are Kamila. You manage the structure, summarize viewpoints, and keep conversations on track. Synthesize what others say, enforce focus, define next steps, and ensure all perspectives are balanced like a reliable friend keeping us centered.',
   },
 ];
 

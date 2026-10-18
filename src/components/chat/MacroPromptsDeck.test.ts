@@ -37,38 +37,38 @@ describe('MacroPromptsDeck Configurations', () => {
   test('defines all 6 friend personas with their exact persona instructions', () => {
     expect(FRIEND_PERSONAS).toHaveLength(6);
     const names = FRIEND_PERSONAS.map((p) => p.name);
-    expect(names).toEqual(['Kenji', 'Tala', 'Ingrid', 'Tariq', 'Priya', 'Mateo']);
+    expect(names).toEqual(['Rei', 'Tala', 'Linh', 'Minji', 'Priya', 'Kamila']);
 
-    // Kenji: Verifiable data, neutral facts
-    const kenji = FRIEND_PERSONAS.find((p) => p.name === 'Kenji')!;
-    expect(kenji.role).toBe('Facts');
-    expect(kenji.instruction).toContain('verifiable data, neutral facts, and missing information');
-    expect(kenji.instruction).toContain('Never express feelings or make value judgments');
+    // Rei: Japanese girl, verifiable data, neutral facts
+    const rei = FRIEND_PERSONAS.find((p) => p.name === 'Rei')!;
+    expect(rei.role).toBe('Facts');
+    expect(rei.instruction).toContain('verifiable data, neutral facts, and missing information');
+    expect(rei.instruction).toContain('Never express feelings or make value judgments');
 
-    // Tala: Genuine warmth, gut instinct (kutob)
+    // Tala: Filipina girl, genuine warmth, gut instinct (kutob)
     const tala = FRIEND_PERSONAS.find((p) => p.name === 'Tala')!;
     expect(tala.role).toBe('Gut Feel');
     expect(tala.instruction).toContain('genuine warmth, gut instinct, and raw emotional honesty');
     expect(tala.instruction).toContain('kutob (hunches)');
 
-    // Ingrid: Realist, flaws, legal hazards, downsides
-    const ingrid = FRIEND_PERSONAS.find((p) => p.name === 'Ingrid')!;
-    expect(ingrid.role).toBe('Realist');
-    expect(ingrid.instruction).toContain('realist who spots flaws, legal hazards, and potential downsides');
+    // Linh: Vietnamese girl, realist, flaws, legal hazards, downsides
+    const linh = FRIEND_PERSONAS.find((p) => p.name === 'Linh')!;
+    expect(linh.role).toBe('Realist');
+    expect(linh.instruction).toContain('realist who spots flaws, legal hazards, and potential downsides');
 
-    // Tariq: Grounded optimism, value creation, upside
-    const tariq = FRIEND_PERSONAS.find((p) => p.name === 'Tariq')!;
-    expect(tariq.role).toBe('Optimist');
-    expect(tariq.instruction).toContain('grounded optimism, value creation, and best-case potential');
+    // Minji: Korean girl, grounded optimism, value creation, upside
+    const minji = FRIEND_PERSONAS.find((p) => p.name === 'Minji')!;
+    expect(minji.role).toBe('Optimist');
+    expect(minji.instruction).toContain('grounded optimism, value creation, and best-case potential');
 
-    // Priya: Lateral, unexpected ideas, provocative what-ifs
+    // Priya: South Asian girl, lateral, unexpected ideas, provocative what-ifs
     const priya = FRIEND_PERSONAS.find((p) => p.name === 'Priya')!;
     expect(priya.role).toBe('What Ifs');
     expect(priya.instruction).toContain('lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs."');
 
-    // Mateo: Structure, summarize viewpoints, keep on track
-    const mateo = FRIEND_PERSONAS.find((p) => p.name === 'Mateo')!;
-    expect(mateo.role).toBe('Organized');
-    expect(mateo.instruction).toContain('manage the structure, summarize viewpoints, and keep conversations on track');
+    // Kamila: Kazakh cutie, structure, summarize viewpoints, keep on track
+    const kamila = FRIEND_PERSONAS.find((p) => p.name === 'Kamila')!;
+    expect(kamila.role).toBe('Organized');
+    expect(kamila.instruction).toContain('manage the structure, summarize viewpoints, and keep conversations on track');
   });
 });

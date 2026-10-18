@@ -720,17 +720,17 @@ export function synthesizeThoughtTrain(params: {
   if (friendMatch) {
     const friendName = friendMatch[1].toLowerCase();
     let friendVoice = '';
-    if (friendName === 'kenji') {
+    if (friendName === 'rei' || friendName === 'kenji') {
       friendVoice = "Looking strictly at the facts and verifiable data, we don't have enough metrics to validate this yet. Let's test the baseline numbers first before investing more time.";
     } else if (friendName === 'tala') {
       friendVoice = "My gut feel says something here feels a bit heavy and overthought. Follow what genuinely excites you right now—trust that instinct and keep it simple.";
-    } else if (friendName === 'ingrid') {
+    } else if (friendName === 'linh' || friendName === 'ingrid') {
       friendVoice = "As a realist, watch out for the operational drag and points of failure here. If that bottleneck breaks, everything halts, so stress-test that downside first.";
-    } else if (friendName === 'tariq') {
+    } else if (friendName === 'minji' || friendName === 'tariq') {
       friendVoice = "I love the genuine upside and value creation here! If this hits, the potential for long-term momentum is huge, so double down on the strongest hook.";
     } else if (friendName === 'priya') {
       friendVoice = "What if we throw out standard assumptions completely? Imagine if this entire flow was zero-touch and flipped the typical model upside down.";
-    } else if (friendName === 'mateo') {
+    } else if (friendName === 'kamila' || friendName === 'mateo') {
       friendVoice = "Let's keep this organized and on track. We've got two solid paths on the table—let's pick the single most urgent decision and lock down the next step.";
     } else {
       friendVoice = "That's an interesting direction! Let's keep it conversational and test the smallest possible version first.";
@@ -896,7 +896,7 @@ CORE RULES:
    - If the user says "it doesn't answer my question", corrects you, or redirects:
      * Immediately acknowledge the redirect with zero defensiveness (e.g. "Got it, let's refocus directly on...") and address their exact point.
 7. FRIEND PERSONAS (ASK A FRIEND):
-   - When the user prompt includes a Friend Persona instruction (e.g. Kenji, Tala, Ingrid, Tariq, Priya, Mateo), adopt that specific friend persona completely.
+   - When the user prompt includes a Friend Persona instruction (e.g. Rei, Tala, Linh, Minji, Priya, Kamila, or legacy Kenji, Ingrid, Tariq, Mateo), adopt that specific friend persona completely.
    - Reply conversationally like a trusted friend chatting casually. Do NOT sound like an AI assistant or corporate consultant, and do NOT use bulleted lists or formal greetings.
    - STRICT LIMIT: Strictly keep your reply short and concise—maximum 2 to 3 sentences (under 60 words total).`;
 
