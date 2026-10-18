@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   },
   collapsibleWrapper: {
     width: '100%',
-    maxWidth: Platform.OS === 'web' ? 380 : undefined,
+    maxWidth: Platform.OS === 'web' ? 320 : undefined,
     alignSelf: Platform.OS === 'web' ? 'flex-start' : 'stretch',
   },
   toggleHeader: {
@@ -327,6 +327,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderWidth: 1,
     borderRadius: rounded.none,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
   },
   toggleTitleRow: {
     flexDirection: 'row',
@@ -357,8 +358,8 @@ const styles = StyleSheet.create({
   },
   streamDeckKey: {
     flex: 1,
-    maxWidth: Platform.OS === 'web' ? 95 : undefined,
-    maxHeight: Platform.OS === 'web' ? 95 : undefined,
+    maxWidth: Platform.OS === 'web' ? 76 : undefined,
+    maxHeight: Platform.OS === 'web' ? 76 : undefined,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
@@ -367,6 +368,7 @@ const styles = StyleSheet.create({
     padding: 4,
     position: 'relative',
     overflow: 'hidden',
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
   },
   friendsGridContainer: {
     flexDirection: 'row',
@@ -379,14 +381,15 @@ const styles = StyleSheet.create({
   },
   friendDeckKey: {
     width: '31.8%',
-    maxWidth: Platform.OS === 'web' ? 110 : undefined,
-    maxHeight: Platform.OS === 'web' ? 110 : undefined,
+    maxWidth: Platform.OS === 'web' ? 96 : undefined,
+    maxHeight: Platform.OS === 'web' ? 96 : undefined,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
     justifyContent: 'flex-end',
     position: 'relative',
     overflow: 'hidden',
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
   },
   friendKeyImage: {
     position: 'absolute',
