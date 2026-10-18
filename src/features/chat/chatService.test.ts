@@ -4,6 +4,9 @@ import {
   createChatSession,
   synthesizeThoughtTrain,
   getOrCreateIdeaChat,
+  getProjectChats,
+  linkChatToProject,
+  unlinkChatFromProject,
   sendChatMessage,
   deleteChatMessage,
   getChatMessages,
@@ -130,6 +133,56 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     // Subsequent retrieval returns the same linked chat
     const chatAgain = await getOrCreateIdeaChat(idea, references);
     expect(chatAgain.id).toBe(chat.id);
+  });
+
+  test('links and manages multiple thoughts for a single idea', async () => {
+    const testProject: Project = {
+      id: 'proj-multi',
+      ownerUid: 'user-1',
+      title: 'Modular Furniture System',
+      status: 'active',
+      brief: 'Flat-pack hardwood furniture with joinery',
+      notes: 'No metallic fasteners',
+      tags: ['furniture', 'wood'],
+      autoLinkEnabled: true,
+      autoLinkConfidenceThreshold: 0.8,
+      chatIds: [],
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
+
+    // Create two separate thoughts
+    const thought1 = await createChatSession('Joinery Mechanics Exploration');
+    const thought2 = await createChatSession('Hardwood Timber Finish Research');
+
+    // Link thought1
+    const res1 = await linkChatToProject(thought1.id, testProject);
+    expect(res1.chat.projectId).toBe('proj-multi');
+    expect(res1.chat.projectTitle).toBe('Modular Furniture System');
+    expect(res1.project.chatIds).toContain(thought1.id);
+
+    // Link thought2 - both thoughts must remain linked!
+    const res2 = await linkChatToProject(thought2.id, res1.project);
+    expect(res2.chat.projectId).toBe('proj-multi');
+    expect(res2.project.chatIds).toContain(thought1.id);
+    expect(res2.project.chatIds).toContain(thought2.id);
+
+    // Retrieve all linked thoughts for this idea
+    const linkedChats = await getProjectChats('proj-multi', res2.project.chatIds);
+    expect(linkedChats.length).toBe(2);
+    expect(linkedChats.map((c) => c.id)).toEqual(
+      expect.arrayContaining([thought1.id, thought2.id])
+    );
+
+    // Unlink thought1 - thought2 must remain linked
+    const unlinked = await unlinkChatFromProject(thought1.id, res2.project);
+    expect(unlinked.chat.projectId).toBeNull();
+    expect(unlinked.project.chatIds).not.toContain(thought1.id);
+    expect(unlinked.project.chatIds).toContain(thought2.id);
+
+    const remainingChats = await getProjectChats('proj-multi', unlinked.project.chatIds);
+    expect(remainingChats.length).toBe(1);
+    expect(remainingChats[0].id).toBe(thought2.id);
   });
 
   test('sends a chat message and returns user and assistant responses with citations', async () => {

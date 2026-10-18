@@ -50,6 +50,9 @@ import {
 import { matchIdeaWithDump, IdeaMatchResult } from '../../../src/features/ideas/ideaMatcher';
 import {
   getOrCreateIdeaChat,
+  getProjectChats,
+  linkChatToProject,
+  unlinkChatFromProject,
   getChatMessages,
   sendChatMessage,
   deleteChatMessage,
@@ -139,6 +142,8 @@ export default function ProjectDetailScreen() {
 
   // Train of Thought Chat state
   const [ideaChat, setIdeaChat] = useState<ChatSession | null>(null);
+  const [linkedChats, setLinkedChats] = useState<ChatSession[]>([]);
+  const [loadingLinkedChats, setLoadingLinkedChats] = useState<boolean>(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtSummary, setThoughtSummary] = useState<string>('');
   const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
@@ -611,7 +616,7 @@ export default function ProjectDetailScreen() {
     ]);
   };
 
-  // Synchronize dedicated Train of Thought for this Idea
+  // Synchronize dedicated and linked Trains of Thought for this Idea
   useEffect(() => {
     if (!project) return;
     let isMounted = true;
@@ -620,17 +625,38 @@ export default function ProjectDetailScreen() {
       .map((l) => bankMap[l.inspirationId])
       .filter(Boolean) as InspirationItem[];
 
-    getOrCreateIdeaChat(project, attachedItems, user?.uid).then(async (chat) => {
-      if (!isMounted) return;
-      setIdeaChat(chat);
-      if (chat.thesisStatement && !project.thesisStatement) {
-        setProject((p) => (p ? { ...p, thesisStatement: chat.thesisStatement } : p));
-      }
-      const msgs = await getChatMessages(chat.id, user?.uid);
-      if (isMounted) {
-        setChatMessages(msgs);
-      }
-    });
+    setLoadingLinkedChats(true);
+    getProjectChats(project.id, project.chatIds, user?.uid)
+      .then(async (chats) => {
+        if (!isMounted) return;
+        if (chats.length > 0) {
+          setLinkedChats(chats);
+          const active = chats.find((c) => c.id === project.chatId) || chats[0];
+          setIdeaChat(active);
+          if (active.thesisStatement && !project.thesisStatement) {
+            setProject((p) => (p ? { ...p, thesisStatement: active.thesisStatement } : p));
+          }
+          const msgs = await getChatMessages(active.id, user?.uid);
+          if (isMounted) setChatMessages(msgs);
+        } else {
+          // No chats linked yet: create/get initial dedicated thought
+          const chat = await getOrCreateIdeaChat(project, attachedItems, user?.uid);
+          if (!isMounted) return;
+          setLinkedChats([chat]);
+          setIdeaChat(chat);
+          if (chat.thesisStatement && !project.thesisStatement) {
+            setProject((p) => (p ? { ...p, thesisStatement: chat.thesisStatement } : p));
+          }
+          const msgs = await getChatMessages(chat.id, user?.uid);
+          if (isMounted) setChatMessages(msgs);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load project linked chats:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingLinkedChats(false);
+      });
 
     return () => {
       isMounted = false;
@@ -876,59 +902,93 @@ export default function ProjectDetailScreen() {
     }
   };
 
-  // Link selected chat to this idea
+  // Select a linked thought to make active in the studio viewer
+  const handleSelectActiveThought = async (selectedChat: ChatSession) => {
+    if (!project || ideaChat?.id === selectedChat.id) return;
+    setIdeaChat(selectedChat);
+    const msgs = await getChatMessages(selectedChat.id, user?.uid);
+    setChatMessages(msgs);
+
+    const updatedProj: Project = {
+      ...project,
+      chatId: selectedChat.id,
+      updatedAt: Date.now(),
+    };
+    setProject(updatedProj);
+    await saveProject(updatedProj, user?.uid || undefined).catch(() => {});
+  };
+
+  // Link selected chat to this idea (supports multiple thoughts)
   const handleLinkChat = async (selectedChat: ChatSession) => {
     if (!project) return;
     setLinkingChatId(selectedChat.id);
     try {
-      // 1. Detach old chats currently linked to this project
-      const allChats = await getChatSessions(user?.uid);
-      for (const c of allChats) {
-        if (c.id !== selectedChat.id && c.projectId === project.id) {
-          const detached: ChatSession = {
-            ...c,
-            projectId: null,
-            projectTitle: null,
-            updatedAt: Date.now(),
-          };
-          await saveChatSession(detached, user?.uid);
+      const { chat: updatedChat, project: updatedProj } = await linkChatToProject(
+        selectedChat.id,
+        project,
+        user?.uid
+      );
+
+      setProject(updatedProj);
+      setLinkedChats((prev) => {
+        const filtered = prev.filter((c) => c.id !== updatedChat.id);
+        return [...filtered, updatedChat];
+      });
+      setAvailableChats((prev) =>
+        prev.map((c) => (c.id === updatedChat.id ? updatedChat : c))
+      );
+
+      // If no active chat was selected, make this one active
+      if (!ideaChat) {
+        setIdeaChat(updatedChat);
+        const msgs = await getChatMessages(updatedChat.id, user?.uid);
+        setChatMessages(msgs);
+      }
+
+      setToastMessage(`LINKED "${selectedChat.title.toUpperCase()}"`);
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to link chat.');
+    } finally {
+      setLinkingChatId(null);
+    }
+  };
+
+  // Unlink a thought from this idea
+  const handleUnlinkChat = async (chatToUnlink: ChatSession) => {
+    if (!project) return;
+    setLinkingChatId(chatToUnlink.id);
+    try {
+      const { chat: updatedChat, project: updatedProj } = await unlinkChatFromProject(
+        chatToUnlink.id,
+        project,
+        user?.uid
+      );
+
+      setProject(updatedProj);
+      const remaining = linkedChats.filter((c) => c.id !== chatToUnlink.id);
+      setLinkedChats(remaining);
+      setAvailableChats((prev) =>
+        prev.map((c) => (c.id === updatedChat.id ? updatedChat : c))
+      );
+
+      // If active chat was unlinked, switch to another linked chat
+      if (ideaChat?.id === chatToUnlink.id) {
+        if (remaining.length > 0) {
+          setIdeaChat(remaining[0]);
+          const msgs = await getChatMessages(remaining[0].id, user?.uid);
+          setChatMessages(msgs);
+        } else {
+          setIdeaChat(null);
+          setChatMessages([]);
+          setThoughtSummary('');
         }
       }
 
-      // 2. Attach selected chat to this project
-      const updatedChat: ChatSession = {
-        ...selectedChat,
-        projectId: project.id,
-        projectTitle: project.title,
-        updatedAt: Date.now(),
-      };
-      await saveChatSession(updatedChat, user?.uid);
-
-      // 3. Update project document
-      const updatedProj: Project = {
-        ...project,
-        chatId: selectedChat.id,
-        updatedAt: Date.now(),
-      };
-      await saveProject(updatedProj);
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid, 'projects', project.id), {
-          chatId: selectedChat.id,
-          updatedAt: Date.now(),
-        }).catch(() => {});
-      }
-
-      setProject(updatedProj);
-      setIdeaChat(updatedChat);
-      const msgs = await getChatMessages(selectedChat.id, user?.uid);
-      setChatMessages(msgs);
-      setShowLinkChatModal(false);
-      Alert.alert(
-        'Chat Linked',
-        `"${selectedChat.title}" is now the active Thought for this idea.`
-      );
+      setToastMessage(`UNLINKED "${chatToUnlink.title.toUpperCase()}"`);
+      setTimeout(() => setToastMessage(null), 2500);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to link chat.');
+      Alert.alert('Error', e.message || 'Failed to unlink chat.');
     } finally {
       setLinkingChatId(null);
     }
@@ -943,7 +1003,8 @@ export default function ProjectDetailScreen() {
         .map((l) => bankMap[l.inspirationId])
         .filter(Boolean) as InspirationItem[];
 
-      const newSession = await createChatSession(`${project.title} — Thought`, {
+      const count = linkedChats.length + 1;
+      const newSession = await createChatSession(`${project.title} — Thought ${count}`, {
         projectId: project.id,
         projectTitle: project.title,
         pinnedInspirationIds: attachedItems.map((a) => a.id),
@@ -951,29 +1012,28 @@ export default function ProjectDetailScreen() {
         uid: user?.uid,
       });
 
+      const currentChatIds = new Set<string>(project.chatIds || []);
+      currentChatIds.add(newSession.id);
+      if (project.chatId) currentChatIds.add(project.chatId);
+
       const updatedProj: Project = {
         ...project,
         chatId: newSession.id,
+        chatIds: Array.from(currentChatIds),
         updatedAt: Date.now(),
       };
-      await saveProject(updatedProj);
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid, 'projects', project.id), {
-          chatId: newSession.id,
-          updatedAt: Date.now(),
-        }).catch(() => {});
-      }
+      await saveProject(updatedProj, user?.uid || undefined);
 
       setProject(updatedProj);
+      setLinkedChats((prev) => [...prev, newSession]);
       setIdeaChat(newSession);
       setChatMessages([]);
+      setThoughtSummary('');
       setShowLinkChatModal(false);
-      Alert.alert(
-        'New Thought Created',
-        'A fresh dedicated thought stream has been linked to this idea.'
-      );
+      setToastMessage('NEW THOUGHT STREAM CREATED & LINKED');
+      setTimeout(() => setToastMessage(null), 2500);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to create chat.');
+      Alert.alert('Error', e.message || 'Failed to create new thought.');
     } finally {
       setLinkingChatId(null);
     }
@@ -1006,8 +1066,23 @@ export default function ProjectDetailScreen() {
       seen.add(ideaChat.id);
     }
 
+    linkedChats.forEach((c) => {
+      if (!seen.has(c.id)) {
+        list.push({
+          id: c.id,
+          title: c.title,
+          summary: c.thoughtSummary || c.summary || null,
+          model: c.model || null,
+          messageCount: c.summaryMessageCount || 0,
+          updatedAt: c.updatedAt,
+          citedInspirationIds: c.pinnedInspirationIds || [],
+        });
+        seen.add(c.id);
+      }
+    });
+
     availableChats.forEach((c) => {
-      if (!seen.has(c.id) && project && (c.projectId === project.id || c.id === project.chatId)) {
+      if (!seen.has(c.id) && project && (c.projectId === project.id || (project.chatIds && project.chatIds.includes(c.id)))) {
         list.push({
           id: c.id,
           title: c.title,
@@ -1967,10 +2042,10 @@ export default function ProjectDetailScreen() {
                     style={styles.thoughtsEqualBtn}
                     onPress={handleOpenLinkChatModal}
                     accessibilityRole="button"
-                    accessibilityLabel="Link Chat"
+                    accessibilityLabel="Link Thoughts"
                   >
                     <Text style={styles.thoughtsEqualBtnText} numberOfLines={1}>
-                      LINK CHAT
+                      LINK THOUGHTS ({linkedChats.length})
                     </Text>
                   </Pressable>
 
@@ -1986,10 +2061,51 @@ export default function ProjectDetailScreen() {
                   </Pressable>
                 </View>
 
+                {/* MULTI-THOUGHT SELECTOR PILLS */}
+                {linkedChats.length > 1 && (
+                  <View style={styles.multiThoughtBar}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.multiThoughtScroll}>
+                      {linkedChats.map((lc) => {
+                        const isSelected = lc.id === ideaChat?.id;
+                        return (
+                          <Pressable
+                            key={lc.id}
+                            style={[
+                              styles.thoughtPill,
+                              isSelected && styles.thoughtPillActive,
+                            ]}
+                            onPress={() => handleSelectActiveThought(lc)}
+                          >
+                            <Text
+                              style={[
+                                styles.thoughtPillText,
+                                isSelected && styles.thoughtPillTextActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {isSelected ? '● ' : ''}{lc.title}
+                            </Text>
+                            <Badge
+                              label={`${lc.summaryMessageCount || 0}`}
+                              variant={isSelected ? 'inverse' : 'grade'}
+                              style={{ marginLeft: 4, paddingVertical: 0, paddingHorizontal: 4 }}
+                            />
+                          </Pressable>
+                        );
+                      })}
+                      <Pressable style={styles.thoughtPillAdd} onPress={handleOpenLinkChatModal}>
+                        <Text style={styles.thoughtPillAddText}>+ LINK MORE</Text>
+                      </Pressable>
+                    </ScrollView>
+                  </View>
+                )}
+
                 <Card style={styles.thoughtCard}>
                   <View style={styles.thoughtBannerRow}>
                     <View style={{ flex: 1, marginRight: spacing.xs }}>
-                      <Text style={styles.thoughtBannerLabel}>THOUGHT SUMMARY</Text>
+                      <Text style={styles.thoughtBannerLabel}>
+                        THOUGHT SUMMARY {linkedChats.length > 1 ? `(${linkedChats.findIndex((c) => c.id === ideaChat?.id) + 1} OF ${linkedChats.length})` : ''}
+                      </Text>
                       <Text style={styles.thoughtBannerText} numberOfLines={1} ellipsizeMode="tail">
                         &ldquo;{ideaChat?.title || project.title}&rdquo;
                       </Text>
@@ -2085,10 +2201,68 @@ export default function ProjectDetailScreen() {
                           style={styles.thoughtActionBtn}
                           textStyle={styles.thoughtActionBtnText}
                         />
+                        {linkedChats.length > 1 && ideaChat && (
+                          <Button
+                            title="UNLINK"
+                            variant="secondary"
+                            onPress={() => handleUnlinkChat(ideaChat)}
+                            style={styles.thoughtActionBtn}
+                            textStyle={[styles.thoughtActionBtnText, { color: colors.statusErrorText || '#E03131' }]}
+                          />
+                        )}
                       </View>
                     </View>
                   )}
                 </Card>
+
+                {/* OTHER LINKED THOUGHTS LIST */}
+                {linkedChats.length > 1 && (
+                  <View style={styles.otherThoughtsSection}>
+                    <Text style={[styles.sectionHeading, { marginBottom: spacing.xs }]}>
+                      ALL LINKED THOUGHTS ({linkedChats.length})
+                    </Text>
+                    {linkedChats.map((c) => {
+                      const isActive = c.id === ideaChat?.id;
+                      return (
+                        <Card key={`tab-linked-${c.id}`} style={styles.otherThoughtCard}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View style={{ flex: 1, marginRight: spacing.sm }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                                <Text style={{ ...typography.bodyMd, fontSize: 13, fontWeight: '600', color: colors.ink }} numberOfLines={1}>
+                                  {c.title}
+                                </Text>
+                                {isActive && (
+                                  <Badge label="ACTIVE" variant="inverse" style={{ marginLeft: 6 }} />
+                                )}
+                              </View>
+                              <Text style={{ ...typography.captionSm, fontSize: 10, color: colors.inkSoft }}>
+                                {c.summaryMessageCount || 0} messages • {c.thoughtSummary ? `${c.thoughtSummary.slice(0, 90)}...` : 'No summary yet.'}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              {!isActive && (
+                                <Button
+                                  title="VIEW"
+                                  variant="secondary"
+                                  onPress={() => handleSelectActiveThought(c)}
+                                  style={{ height: 28, paddingHorizontal: 8 }}
+                                  textStyle={{ fontSize: 10, fontWeight: '700' }}
+                                />
+                              )}
+                              <Button
+                                title="OPEN ↗"
+                                variant="secondary"
+                                onPress={() => router.push(`/(app)/thought/${c.id}`)}
+                                style={{ height: 28, paddingHorizontal: 8 }}
+                                textStyle={{ fontSize: 10, fontWeight: '700' }}
+                              />
+                            </View>
+                          </View>
+                        </Card>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
             )}
 
@@ -2098,7 +2272,7 @@ export default function ProjectDetailScreen() {
                 <View style={styles.modalContent}>
                   <TopNav
                     title="rut"
-                    subtitle="Link Thought"
+                    subtitle={`Link Thoughts (${linkedChats.length} Linked)`}
                     rightAction={
                       <Button
                         title="DONE"
@@ -2109,7 +2283,7 @@ export default function ProjectDetailScreen() {
                   />
                   <ScrollView style={{ padding: spacing.base }}>
                     <Text style={styles.modalSubhead}>
-                      Attach any of your existing thoughts to &ldquo;{project.title}&rdquo;, or spin up a new dedicated stream.
+                      Attach multiple thoughts to &ldquo;{project.title}&rdquo;, or spin up a new dedicated stream. All linked thoughts can be referenced, exported, and summarized together.
                     </Text>
 
                     <Card style={styles.newChatCard}>
@@ -2130,8 +2304,67 @@ export default function ProjectDetailScreen() {
                       </View>
                     </Card>
 
+                    {/* CURRENTLY LINKED SECTION */}
+                    {linkedChats.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionHeading, { marginTop: spacing.base, marginBottom: spacing.xs }]}>
+                          CURRENTLY LINKED ({linkedChats.length})
+                        </Text>
+                        {linkedChats.map((c) => {
+                          const isActive = ideaChat?.id === c.id;
+                          const isLinking = linkingChatId === c.id;
+                          return (
+                            <Card key={`modal-linked-${c.id}`} style={[styles.chatItemCard, styles.chatItemActiveCard]}>
+                              <View style={styles.chatItemRow}>
+                                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                                    <Text style={styles.chatItemTitle} numberOfLines={1}>
+                                      {c.title}
+                                    </Text>
+                                    <Badge label={isActive ? 'ACTIVE' : 'LINKED ✓'} variant="inverse" style={{ marginLeft: 6 }} />
+                                  </View>
+                                  <Text style={styles.chatItemSub}>
+                                    {c.summaryMessageCount || 0} messages • Updated {new Date(c.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                  </Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                                  {!isActive && (
+                                    <Button
+                                      title="SET ACTIVE"
+                                      variant="secondary"
+                                      onPress={() => handleSelectActiveThought(c)}
+                                      style={{ height: 28, paddingHorizontal: 8 }}
+                                      textStyle={{ fontSize: 10, fontWeight: '700' }}
+                                    />
+                                  )}
+                                  <Button
+                                    title="OPEN ↗"
+                                    variant="secondary"
+                                    onPress={() => {
+                                      setShowLinkChatModal(false);
+                                      router.push(`/(app)/thought/${c.id}`);
+                                    }}
+                                    style={{ height: 28, paddingHorizontal: 8 }}
+                                    textStyle={{ fontSize: 10, fontWeight: '700' }}
+                                  />
+                                  <Button
+                                    title={isLinking ? '...' : 'UNLINK ✕'}
+                                    variant="secondary"
+                                    onPress={() => handleUnlinkChat(c)}
+                                    loading={isLinking}
+                                    style={{ height: 28, paddingHorizontal: 8 }}
+                                    textStyle={{ fontSize: 10, fontWeight: '700', color: colors.statusErrorText || '#E03131' }}
+                                  />
+                                </View>
+                              </View>
+                            </Card>
+                          );
+                        })}
+                      </>
+                    )}
+
                     <Text style={[styles.sectionHeading, { marginTop: spacing.base, marginBottom: spacing.xs }]}>
-                      YOUR EXISTING THOUGHTS ({availableChats.length})
+                      ALL YOUR THOUGHTS ({availableChats.length})
                     </Text>
 
                     {loadingChats ? (
@@ -2145,7 +2378,7 @@ export default function ProjectDetailScreen() {
                       </Card>
                     ) : (
                       availableChats.map((c) => {
-                        const isCurrentlyLinked = (ideaChat?.id === c.id) || (project.chatId === c.id);
+                        const isCurrentlyLinked = linkedChats.some((lc) => lc.id === c.id) || (c.projectId === project.id);
                         const isLinking = linkingChatId === c.id;
                         return (
                           <Card
@@ -2162,11 +2395,11 @@ export default function ProjectDetailScreen() {
                                     {c.title}
                                   </Text>
                                   {isCurrentlyLinked && (
-                                    <Badge label="ACTIVE LINK ✓" variant="inverse" style={{ marginLeft: 6 }} />
+                                    <Badge label="LINKED ✓" variant="inverse" style={{ marginLeft: 6 }} />
                                   )}
                                 </View>
                                 <Text style={styles.chatItemSub}>
-                                  {c.projectId === project.id
+                                  {isCurrentlyLinked
                                     ? 'Linked to this idea'
                                     : c.projectTitle
                                     ? `Linked to: ${c.projectTitle}`
@@ -2181,22 +2414,34 @@ export default function ProjectDetailScreen() {
                               </View>
 
                               {isCurrentlyLinked ? (
-                                <Button
-                                  title="OPEN ↗"
-                                  variant="secondary"
-                                  onPress={() => {
-                                    setShowLinkChatModal(false);
-                                    router.push(`/(app)/thought/${c.id}`);
-                                  }}
-                                  style={{ height: 30, paddingHorizontal: 10 }}
-                                />
+                                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                                  <Button
+                                    title="OPEN ↗"
+                                    variant="secondary"
+                                    onPress={() => {
+                                      setShowLinkChatModal(false);
+                                      router.push(`/(app)/thought/${c.id}`);
+                                    }}
+                                    style={{ height: 28, paddingHorizontal: 8 }}
+                                    textStyle={{ fontSize: 10, fontWeight: '700' }}
+                                  />
+                                  <Button
+                                    title={isLinking ? '...' : 'UNLINK ✕'}
+                                    variant="secondary"
+                                    onPress={() => handleUnlinkChat(c)}
+                                    loading={isLinking}
+                                    style={{ height: 28, paddingHorizontal: 8 }}
+                                    textStyle={{ fontSize: 10, fontWeight: '700', color: colors.statusErrorText || '#E03131' }}
+                                  />
+                                </View>
                               ) : (
                                 <Button
-                                  title={isLinking ? 'LINKING...' : 'LINK TO IDEA'}
+                                  title={isLinking ? 'LINKING...' : '+ LINK TO IDEA'}
                                   variant="primary"
                                   onPress={() => handleLinkChat(c)}
                                   loading={isLinking}
-                                  style={{ height: 30, paddingHorizontal: 10 }}
+                                  style={{ height: 28, paddingHorizontal: 10 }}
+                                  textStyle={{ fontSize: 10, fontWeight: '700' }}
                                 />
                               )}
                             </View>
@@ -3305,6 +3550,65 @@ const getStyles = (colors: ThemeColors) =>
   },
   thoughtsEqualBtnTextPrimary: {
     color: colors.canvas,
+  },
+  multiThoughtBar: {
+    width: '100%',
+    marginBottom: spacing.xs,
+  },
+  multiThoughtScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  thoughtPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  thoughtPillActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  thoughtPillText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+    maxWidth: 160,
+  },
+  thoughtPillTextActive: {
+    color: colors.canvas,
+  },
+  thoughtPillAdd: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    borderStyle: 'dashed',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thoughtPillAddText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  otherThoughtsSection: {
+    marginTop: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineSoft,
+    paddingTop: spacing.sm,
+  },
+  otherThoughtCard: {
+    marginBottom: spacing.xs,
+    padding: spacing.sm,
   },
   studioTabBar: {
     flexDirection: 'row',

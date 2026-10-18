@@ -355,9 +355,12 @@ export async function getOrCreateIdeaChat(
 ): Promise<ChatSession> {
   const existingChats = await getChatSessions(uid);
 
-  // Match by existing chatId or projectId link
+  const linkedIds = new Set<string>(idea.chatIds || []);
+  if (idea.chatId) linkedIds.add(idea.chatId);
+
+  // Match by existing chatId/chatIds or projectId link
   let matched = existingChats.find(
-    (c) => (idea.chatId && c.id === idea.chatId) || c.projectId === idea.id
+    (c) => linkedIds.has(c.id) || c.projectId === idea.id
   );
 
   const referenceIds = references ? references.map((r) => r.id) : [];
@@ -398,6 +401,102 @@ export async function getOrCreateIdeaChat(
   });
 
   return newSession;
+}
+
+/**
+ * Retrieves all thoughts linked to a given project/idea.
+ * An idea can have multiple linked thoughts simultaneously.
+ */
+export async function getProjectChats(
+  projectId: string,
+  projectChatIds?: string[] | null,
+  uid?: string | null
+): Promise<ChatSession[]> {
+  const allChats = await getChatSessions(uid);
+  const chatIdSet = new Set(projectChatIds || []);
+
+  return allChats.filter(
+    (c) => !c.archived && (c.projectId === projectId || chatIdSet.has(c.id))
+  );
+}
+
+/**
+ * Links a thought session to an idea without detaching other linked thoughts.
+ * Supports multiple thoughts per idea.
+ */
+export async function linkChatToProject(
+  chatId: string,
+  project: Project,
+  uid?: string | null
+): Promise<{ chat: ChatSession; project: Project }> {
+  const session = await getChatSession(chatId, uid);
+  if (!session) {
+    throw new Error(`Chat session ${chatId} not found`);
+  }
+
+  // 1. Attach project link to chat
+  const updatedChat: ChatSession = {
+    ...session,
+    projectId: project.id,
+    projectTitle: project.title,
+    updatedAt: Date.now(),
+  };
+  await saveChatSession(updatedChat, uid);
+
+  // 2. Add chat ID to project.chatIds without duplicates
+  const currentChatIds = new Set<string>(project.chatIds || []);
+  currentChatIds.add(chatId);
+  if (project.chatId) currentChatIds.add(project.chatId);
+
+  const updatedProj: Project = {
+    ...project,
+    chatId: project.chatId || chatId,
+    chatIds: Array.from(currentChatIds),
+    updatedAt: Date.now(),
+  };
+  await saveProject(updatedProj, uid || undefined);
+
+  return { chat: updatedChat, project: updatedProj };
+}
+
+/**
+ * Unlinks a thought session from an idea without deleting the thought.
+ */
+export async function unlinkChatFromProject(
+  chatId: string,
+  project: Project,
+  uid?: string | null
+): Promise<{ chat: ChatSession; project: Project }> {
+  const session = await getChatSession(chatId, uid);
+  if (!session) {
+    throw new Error(`Chat session ${chatId} not found`);
+  }
+
+  // 1. Detach project from chat session
+  const updatedChat: ChatSession = {
+    ...session,
+    projectId: null,
+    projectTitle: null,
+    updatedAt: Date.now(),
+  };
+  await saveChatSession(updatedChat, uid);
+
+  // 2. Remove from project.chatIds
+  const remainingChatIds = (project.chatIds || []).filter((id) => id !== chatId);
+  let newActiveChatId = project.chatId;
+  if (project.chatId === chatId) {
+    newActiveChatId = remainingChatIds.length > 0 ? remainingChatIds[0] : null;
+  }
+
+  const updatedProj: Project = {
+    ...project,
+    chatId: newActiveChatId,
+    chatIds: remainingChatIds,
+    updatedAt: Date.now(),
+  };
+  await saveProject(updatedProj, uid || undefined);
+
+  return { chat: updatedChat, project: updatedProj };
 }
 
 /**

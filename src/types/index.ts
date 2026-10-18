@@ -111,6 +111,7 @@ export interface Project {
   autoLinkEnabled: boolean;
   autoLinkConfidenceThreshold: number;
   chatId?: string | null;
+  chatIds?: string[];
   thesisStatement?: string | null;
   thoughtCount?: number;
   createdAt: number;
