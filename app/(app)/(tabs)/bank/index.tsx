@@ -276,27 +276,18 @@ export default function BankScreen() {
     const badgeHeader = (
       <View style={styles.cardHeader}>
         <View style={styles.badgeRow}>
-          {item.sourcePlatform ? (
+          {item.sourcePlatform && item.sourcePlatform !== 'web' ? (
             <Badge
               label={item.sourcePlatform.toUpperCase()}
               platform={item.sourcePlatform}
-              style={{ marginRight: 4 }}
             />
-          ) : (
-            <Badge label={item.kind.toUpperCase()} variant="grade" style={{ marginRight: 4 }} />
-          )}
-          {item.author ? (
-            <Badge
-              label={item.author.startsWith('@') ? item.author : `@${item.author}`}
-              variant="grade"
-              style={{ marginRight: 4 }}
-            />
-          ) : null}
-          {item.siteName ? (
-            <Badge label={item.siteName} variant="outline" style={{ marginRight: 4 }} />
+          ) : item.siteName ? (
+            <Badge label={item.siteName.toUpperCase()} variant="outline" />
           ) : item.sourceDomain ? (
-            <Badge label={item.sourceDomain} variant="outline" style={{ marginRight: 4 }} />
-          ) : null}
+            <Badge label={item.sourceDomain.toUpperCase()} variant="outline" />
+          ) : (
+            <Badge label={item.kind.toUpperCase()} variant="grade" />
+          )}
         </View>
 
         {item.processingStatus === 'pending' ? (

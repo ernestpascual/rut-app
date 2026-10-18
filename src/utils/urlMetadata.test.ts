@@ -117,6 +117,23 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(formatted).toContain('💡 Note: Look into texture treatment');
   });
 
+  test('does not duplicate platform as author in formatNotesWithCaption or extractAuthorAndCaption', () => {
+    const { author } = extractAuthorAndCaption(
+      'https://www.pinterest.com/pin/123456789/',
+      'Check out this pin from Pinterest'
+    );
+    expect(author).toBeNull();
+
+    const formatted = formatNotesWithCaption(
+      'Pinterest',
+      'Brutalist Concrete Architecture',
+      'Look into texture treatment',
+      'Pinterest'
+    );
+    expect(formatted).not.toContain('@Pinterest');
+    expect(formatted).toContain('🌐 Pinterest');
+  });
+
   test('enriches with user note context', async () => {
     const enriched = await enrichUrlMetadata(
       'https://pinterest.com/pin/123-brutalist-basalt-sculpture',

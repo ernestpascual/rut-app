@@ -315,14 +315,13 @@ export default function TrashScreen() {
                           {item.title}
                         </Text>
                         <View style={styles.trashBadges}>
-                          {item.sourcePlatform ? (
+                          {item.sourcePlatform && item.sourcePlatform !== 'web' ? (
                             <Badge
                               label={item.sourcePlatform.toUpperCase()}
-                              variant="grade"
+                              platform={item.sourcePlatform}
                               style={{ marginRight: 4 }}
                             />
-                          ) : null}
-                          {item.sourceDomain ? (
+                          ) : item.sourceDomain ? (
                             <Badge
                               label={item.sourceDomain}
                               variant="outline"

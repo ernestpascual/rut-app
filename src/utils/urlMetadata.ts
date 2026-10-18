@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { isPlatformTag } from '../design/platformColors';
 import { SourcePlatform } from '../types';
 import { detectPlatform, extractDomain, normalizeUrl } from './url';
 
@@ -338,6 +339,10 @@ export function extractAuthorAndCaption(
     caption = text.slice(0, 160);
   }
 
+  if (author && isPlatformTag(author)) {
+    author = null;
+  }
+
   return { author, caption, thumbnail };
 }
 
@@ -354,7 +359,7 @@ export function formatNotesWithCaption(
   if (siteName) {
     parts.push(`🌐 ${siteName}`);
   }
-  if (author) {
+  if (author && !isPlatformTag(author, siteName)) {
     parts.push(`👤 @${author.replace(/^@/, '')}`);
   }
   if (caption) {
@@ -621,7 +626,10 @@ export async function fetchLiveMetadata(rawUrl: string): Promise<LiveMetadataPay
           if (thumbnail && typeof thumbnail === 'string') {
             thumbnail = thumbnail.replace('/236x/', '/736x/');
           }
-          const author = cleanMetadata(data.author_name || '');
+          let author = cleanMetadata(data.author_name || '');
+          if (author && isPlatformTag(author, 'pinterest')) {
+            author = '';
+          }
           let title = cleanMetadata(data.title || '');
           if (/video::cue|[{};]|font-family/i.test(title)) {
             title = '';
@@ -656,6 +664,9 @@ export async function fetchLiveMetadata(rawUrl: string): Promise<LiveMetadataPay
         const d = json.data;
         let title = cleanMetadata(d.title || '');
         let author = cleanMetadata(d.author || '');
+        if (author && isPlatformTag(author)) {
+          author = '';
+        }
         let caption = cleanMetadata(d.description || '');
         let image =
           d.image?.url && typeof d.image.url === 'string' && /^https?:\/\//i.test(d.image.url)

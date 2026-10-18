@@ -451,15 +451,15 @@ export default function InspirationDetailScreen() {
             <View style={styles.metaRow}>
               <Badge label={item.kind.toUpperCase()} variant="inverse" />
               {item.sourcePlatform ? (
-                <Badge label={item.sourcePlatform.toUpperCase()} variant="grade" />
+                <Badge label={item.sourcePlatform.toUpperCase()} platform={item.sourcePlatform} />
               ) : null}
-              {item.author ? (
+              {item.author && !isPlatformTag(item.author, item.sourcePlatform) ? (
                 <Badge
                   label={item.author.startsWith('@') ? item.author : `@${item.author}`}
                   variant="outline"
                 />
               ) : null}
-              {item.sourceDomain ? (
+              {item.sourceDomain && (!item.sourcePlatform || !item.sourceDomain.toLowerCase().includes(item.sourcePlatform.toLowerCase())) ? (
                 <Badge label={item.sourceDomain} variant="outline" />
               ) : null}
               <Badge

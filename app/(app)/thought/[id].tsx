@@ -918,13 +918,16 @@ export default function ChatWorkspaceScreen() {
                   return (
                     <Card key={bItem.id} style={styles.dumpPullCard}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                        {bItem.sourcePlatform ? (
-                          <Badge label={bItem.sourcePlatform.toUpperCase()} variant="inverse" style={{ marginRight: 6 }} />
-                        ) : null}
-                        {bItem.siteName ? (
-                          <Badge label={bItem.siteName} variant="outline" style={{ marginRight: 6 }} />
+                        {bItem.sourcePlatform && bItem.sourcePlatform !== 'web' ? (
+                          <Badge
+                            label={bItem.sourcePlatform.toUpperCase()}
+                            platform={bItem.sourcePlatform}
+                            style={{ marginRight: 6 }}
+                          />
+                        ) : bItem.siteName ? (
+                          <Badge label={bItem.siteName.toUpperCase()} variant="outline" style={{ marginRight: 6 }} />
                         ) : bItem.sourceDomain ? (
-                          <Badge label={bItem.sourceDomain} variant="outline" style={{ marginRight: 6 }} />
+                          <Badge label={bItem.sourceDomain.toUpperCase()} variant="outline" style={{ marginRight: 6 }} />
                         ) : null}
                         <Badge label={isPinned ? 'PINNED IN CONTEXT' : 'IN DUMP'} variant={isPinned ? 'inverse' : 'grade'} />
                       </View>
