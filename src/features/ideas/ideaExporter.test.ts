@@ -1,4 +1,11 @@
-import { generateIdeaContextMarkdown, generateIdeaHTML, downloadIdeaAsMarkdown } from './ideaExporter';
+import {
+  generateIdeaContextMarkdown,
+  generateIdeaHTML,
+  downloadIdeaAsMarkdown,
+  renderMarkdownToHtml,
+  renderInlineMarkdown,
+  extractThoughtSummary,
+} from './ideaExporter';
 import { Project, ProjectInspirationLink, InspirationItem, ChatMessage, ChatSession } from '../../types';
 
 describe('ideaExporter', () => {
@@ -7,8 +14,8 @@ describe('ideaExporter', () => {
     ownerUid: 'user-1',
     title: 'Kinetic Glass Pavilion',
     status: 'active',
-    brief: 'A reactive glass pavilion responding to natural daylight shifts.',
-    notes: 'Requires dichroic glass panes and low-energy mechanical hinges.',
+    brief: '# Concept Overview\nA reactive **glass pavilion** responding to natural daylight shifts.\n- Responsive shading\n- Dichroic optical prisms',
+    notes: '### Specifications\n- Requires dichroic glass panes\n- `tolerance <= 0.5mm`\n> Structural balance is essential.',
     tags: ['architecture', 'glass', 'kinetic'],
     thesisStatement: 'Material transparency as an interactive structural dialogue.',
     autoLinkEnabled: true,
@@ -48,6 +55,7 @@ describe('ideaExporter', () => {
     ownerUid: 'user-1',
     title: 'Kinetic Glass Pavilion — Train of Thought',
     summary: 'Exploration of kinetic daylight facades.',
+    thoughtSummary: 'The brainstorm centers on calibrating dichroic glass angles for natural sunlight splitting. The team determined dynamic pivot axes balance internal heat gain while producing vivid chromatic refraction.',
     projectId: 'proj-1',
     projectTitle: 'Kinetic Glass Pavilion',
     pinnedInspirationIds: ['insp-1'],
@@ -73,7 +81,66 @@ describe('ideaExporter', () => {
     } as unknown as ChatMessage,
   ];
 
-  test('generates valid idea context markdown containing all sections', () => {
+  describe('renderMarkdownToHtml', () => {
+    test('renders markdown headings, lists, bold, blockquotes, and code to semantic HTML', () => {
+      const md = `# Overview
+This is **bold** and *italic* text.
+
+### Key Features:
+- Feature one
+- Feature two
+
+1. Step one
+2. Step two
+
+> "Design is intelligence made visible."
+
+\`inlineCode\`
+
+\`\`\`
+const x = 42;
+\`\`\`
+
+---
+Visit [Studio](https://studiodrift.com)`;
+
+      const html = renderMarkdownToHtml(md);
+
+      expect(html).toContain('<h3>Overview</h3>');
+      expect(html).toContain('<strong>bold</strong>');
+      expect(html).toContain('<em>italic</em>');
+      expect(html).toContain('<h5>Key Features:</h5>');
+      expect(html).toContain('<ul><li>Feature one</li><li>Feature two</li></ul>');
+      expect(html).toContain('<ol><li>Step one</li><li>Step two</li></ol>');
+      expect(html).toContain('<blockquote>&quot;Design is intelligence made visible.&quot;</blockquote>');
+      expect(html).toContain('<code>inlineCode</code>');
+      expect(html).toContain('<pre><code>const x = 42;</code></pre>');
+      expect(html).toContain('<hr/>');
+      expect(html).toContain('<a href="https://studiodrift.com" target="_blank" rel="noopener">Studio</a>');
+    });
+
+    test('handles empty or blank markdown gracefully', () => {
+      expect(renderMarkdownToHtml('')).toBe('');
+      expect(renderMarkdownToHtml('   ')).toBe('');
+      expect(renderMarkdownToHtml(null)).toBe('');
+    });
+  });
+
+  describe('extractThoughtSummary', () => {
+    test('uses cached thoughtSummary when present', () => {
+      const summary = extractThoughtSummary(mockChatSession, mockChatMessages);
+      expect(summary).toBe(mockChatSession.thoughtSummary);
+    });
+
+    test('extracts 2-sentence summary from messages when no cached summary exists', () => {
+      const sessionWithoutSummary: ChatSession = { ...mockChatSession, thoughtSummary: null, summary: null };
+      const summary = extractThoughtSummary(sessionWithoutSummary, mockChatMessages);
+      expect(summary).toContain('The brainstorm centers on exploring');
+      expect(summary).toContain('Calibrate rotation angles');
+    });
+  });
+
+  test('generates valid idea context markdown containing thought summaries instead of raw chat messages', () => {
     const md = generateIdeaContextMarkdown(
       mockProject,
       mockLinks,
@@ -84,19 +151,18 @@ describe('ideaExporter', () => {
 
     expect(md).toContain('# KINETIC GLASS PAVILION');
     expect(md).toContain('## 1. CONCEPT BRIEF');
-    expect(md).toContain(mockProject.brief!);
     expect(md).toContain('## 2. NOTES & SPECIFICATIONS');
-    expect(md).toContain(mockProject.notes);
     expect(md).toContain('## 3. ATTACHED REFERENCES & INSPIRATIONS (1)');
     expect(md).toContain('Studio Drift Kinetic Shutter');
-    expect(md).toContain('https://studiodrift.com/kinetic-shutter');
-    expect(md).toContain('## 4. TRAIN OF THOUGHT (2 INSIGHTS)');
-    expect(md).toContain('How should the dichroic glass interface with sunlight?');
-    expect(md).toContain('Calibrate rotation angles');
-    expect(md).toContain('Studio Drift Kinetic Shutter');
+    expect(md).toContain('## 4. TRAINS OF THOUGHT (1 SESSION)');
+    // Includes summary
+    expect(md).toContain(mockChatSession.thoughtSummary!);
+    // Does NOT dump raw prompt format
+    expect(md).not.toContain('#### [');
+    expect(md).not.toContain('YOU\n\nHow should the dichroic glass interface');
   });
 
-  test('generates HTML representation with clean layout', () => {
+  test('generates HTML representation with clean layout and properly rendered markdown', () => {
     const html = generateIdeaHTML(
       mockProject,
       mockLinks,
@@ -105,11 +171,54 @@ describe('ideaExporter', () => {
       mockChatMessages
     );
 
-    expect(html).toContain('Kinetic Glass Pavilion');
-    expect(html).toContain('Studio Drift Kinetic Shutter');
-    expect(html).toContain('How should the dichroic glass interface with sunlight?');
-    expect(html).toContain('THESIS:');
-    expect(html).toContain('<!DOCTYPE html>');
+    // Markdown rendered into HTML tags
+    expect(html).toContain('<h3>Concept Overview</h3>');
+    expect(html).toContain('<strong>glass pavilion</strong>');
+    expect(html).toContain('<ul><li>Responsive shading</li><li>Dichroic optical prisms</li></ul>');
+    expect(html).toContain('<h5>Specifications</h5>');
+    expect(html).toContain('<code>tolerance &lt;= 0.5mm</code>');
+    expect(html).toContain('<blockquote>Structural balance is essential.</blockquote>');
+
+    // Thought summary card included without raw message dump
+    expect(html).toContain('Kinetic Glass Pavilion — Train of Thought');
+    expect(html).toContain('THOUGHT SUMMARY');
+    expect(html).toContain(mockChatSession.thoughtSummary!);
+    expect(html).not.toContain('<div class="chat-content">How should the dichroic glass');
+  });
+
+  test('supports exporting multiple trains of thought in options.allThoughts', () => {
+    const secondThought = {
+      id: 'chat-2',
+      title: 'Structural Engineering Review',
+      summary: 'Focused on stress analysis for wind sheer resistance.',
+      model: 'gemini-3.5-flash-lite',
+      messageCount: 5,
+    };
+
+    const html = generateIdeaHTML(
+      mockProject,
+      mockLinks,
+      mockBankMap,
+      mockChatSession,
+      mockChatMessages,
+      {
+        allThoughts: [
+          {
+            id: mockChatSession.id,
+            title: mockChatSession.title,
+            summary: mockChatSession.thoughtSummary,
+            model: mockChatSession.model,
+            messageCount: 2,
+          },
+          secondThought,
+        ],
+      }
+    );
+
+    expect(html).toContain('<h2>4. Trains of Thought (2)</h2>');
+    expect(html).toContain('Kinetic Glass Pavilion — Train of Thought');
+    expect(html).toContain('Structural Engineering Review');
+    expect(html).toContain('Focused on stress analysis');
   });
 
   test('downloadIdeaAsMarkdown produces expected output without throwing', async () => {

@@ -69,6 +69,8 @@ import {
   exportIdeaAsPDF,
   exportIdeaAsDoc,
   generateIdeaContextMarkdown,
+  ExportIdeaOptions,
+  ThoughtExportItem,
 } from '../../../src/features/ideas/ideaExporter';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
@@ -978,14 +980,63 @@ export default function ProjectDetailScreen() {
   };
 
   // Export handlers
+  const getExportOptions = (): ExportIdeaOptions => {
+    const list: ThoughtExportItem[] = [];
+    const seen = new Set<string>();
+
+    if (ideaChat) {
+      const citedIds = Array.from(
+        new Set(
+          chatMessages
+            .flatMap((m) => m.sourceInspirationIds || [])
+            .concat(ideaChat.pinnedInspirationIds || [])
+        )
+      ).filter(Boolean);
+
+      list.push({
+        id: ideaChat.id,
+        title: ideaChat.title || `${project?.title || 'Idea'} — Train of Thought`,
+        summary: thoughtSummary || ideaChat.thoughtSummary || ideaChat.summary || null,
+        model: ideaChat.model || null,
+        messageCount: chatMessages.length || ideaChat.summaryMessageCount || 0,
+        updatedAt: ideaChat.updatedAt,
+        citedInspirationIds: citedIds,
+        messages: chatMessages,
+      });
+      seen.add(ideaChat.id);
+    }
+
+    availableChats.forEach((c) => {
+      if (!seen.has(c.id) && project && (c.projectId === project.id || c.id === project.chatId)) {
+        list.push({
+          id: c.id,
+          title: c.title,
+          summary: c.thoughtSummary || c.summary || null,
+          model: c.model || null,
+          messageCount: c.summaryMessageCount || 0,
+          updatedAt: c.updatedAt,
+          citedInspirationIds: c.pinnedInspirationIds || [],
+        });
+        seen.add(c.id);
+      }
+    });
+
+    return {
+      thoughtSummary,
+      allThoughts: list,
+    };
+  };
+
   const handleCopyMarkdown = async () => {
     if (!project) return;
+    const exportOpts = getExportOptions();
     const success = await copyIdeaAsMarkdown(
       project,
       uniqueLinks,
       bankMap,
       ideaChat,
-      chatMessages
+      chatMessages,
+      exportOpts
     );
     if (success) {
       setCopiedMarkdown(true);
@@ -1000,12 +1051,14 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     setDownloadingMarkdown(true);
     try {
+      const exportOpts = getExportOptions();
       const success = await downloadIdeaAsMarkdown(
         project,
         uniqueLinks,
         bankMap,
         ideaChat,
-        chatMessages
+        chatMessages,
+        exportOpts
       );
       if (!success) {
         Alert.alert('Notice', 'Unable to download Markdown file directly.');
@@ -1019,12 +1072,14 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     setExportingPDF(true);
     try {
+      const exportOpts = getExportOptions();
       await exportIdeaAsPDF(
         project,
         uniqueLinks,
         bankMap,
         ideaChat,
-        chatMessages
+        chatMessages,
+        exportOpts
       );
     } catch (e: any) {
       Alert.alert('PDF Export Notice', e.message || 'Could not export as PDF.');
@@ -1037,12 +1092,14 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     setExportingDoc(true);
     try {
+      const exportOpts = getExportOptions();
       await exportIdeaAsDoc(
         project,
         uniqueLinks,
         bankMap,
         ideaChat,
-        chatMessages
+        chatMessages,
+        exportOpts
       );
     } catch (e: any) {
       Alert.alert('Document Export Notice', e.message || 'Could not export as Document.');
@@ -1262,7 +1319,14 @@ export default function ProjectDetailScreen() {
           <Button
             title="EXPORT ▾"
             variant="secondary"
-            onPress={() => setShowExportModal(true)}
+            onPress={() => {
+              setShowExportModal(true);
+              if (availableChats.length === 0) {
+                getChatSessions(user?.uid)
+                  .then((sessions) => setAvailableChats(sessions.filter((s) => !s.archived)))
+                  .catch(() => {});
+              }
+            }}
             style={styles.exportTopNavBtn}
             textStyle={styles.exportTopNavText}
           />
@@ -2219,7 +2283,7 @@ export default function ProjectDetailScreen() {
                   />
                   <ScrollView style={{ padding: spacing.base }}>
                     <Text style={styles.modalSubhead}>
-                      Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and the full thought transcript.
+                      Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and trains of thought summaries.
                     </Text>
 
                     {/* OPTION 1: COPY & DOWNLOAD MARKDOWN */}
@@ -2233,7 +2297,7 @@ export default function ProjectDetailScreen() {
                             )}
                           </View>
                           <Text style={styles.exportOptionDesc}>
-                            Compiles complete structured Markdown context for AI prompts (Claude, ChatGPT, Gemini), Obsidian, or developer docs.
+                            Compiles complete structured Markdown context for AI prompts (Claude, ChatGPT, Gemini), Obsidian, or developer docs with trains of thought summaries.
                           </Text>
                         </View>
                         <View style={{ flexDirection: 'row', gap: spacing.xs, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2262,7 +2326,7 @@ export default function ProjectDetailScreen() {
                         <View style={{ flex: 1, marginRight: spacing.sm }}>
                           <Text style={styles.exportOptionTitle}>📄 EXPORT AS PDF</Text>
                           <Text style={styles.exportOptionDesc}>
-                            Generates an editorial print-ready PDF document with metadata badges, visual citations, and interactive transcripts.
+                            Generates an editorial print-ready PDF document with rendered markdown typography, metadata badges, visual citations, and thought summaries.
                           </Text>
                         </View>
                         <Button
@@ -2282,7 +2346,7 @@ export default function ProjectDetailScreen() {
                         <View style={{ flex: 1, marginRight: spacing.sm }}>
                           <Text style={styles.exportOptionTitle}>📝 EXPORT AS DOC</Text>
                           <Text style={styles.exportOptionDesc}>
-                            Downloads a Microsoft Word and Google Docs compatible (.doc) file for editorial reviews, proposals, and briefs.
+                            Downloads a Microsoft Word and Google Docs compatible (.doc) file with formatted typography and thought summaries.
                           </Text>
                         </View>
                         <Button
@@ -2315,7 +2379,8 @@ export default function ProjectDetailScreen() {
                               links,
                               bankMap,
                               ideaChat,
-                              chatMessages
+                              chatMessages,
+                              getExportOptions()
                             )}
                           </Text>
                         </Card>
