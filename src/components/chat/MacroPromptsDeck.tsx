@@ -205,8 +205,6 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
                 accessibilityRole="button"
                 accessibilityLabel={`Macro Prompt: ${m.name}`}
               >
-                {/* Accent LED top indicator */}
-                <View style={[styles.keyLed, { backgroundColor: m.color }]} />
                 <Feather
                   name={m.icon as any}
                   size={18}
@@ -355,16 +353,14 @@ const styles = StyleSheet.create({
   friendsGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 8,
+    gap: 6,
+    padding: 6,
     borderWidth: 1,
     borderTopWidth: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
   },
   friendDeckKey: {
-    width: '30%',
-    maxWidth: 82,
+    width: '31.8%',
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
@@ -388,17 +384,17 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   friendKeyBottomContent: {
-    paddingHorizontal: 3,
-    paddingBottom: 5,
+    paddingHorizontal: 4,
+    paddingBottom: 6,
     alignItems: 'center',
     width: '100%',
     zIndex: 2,
   },
   friendKeyName: {
     ...typography.captionCap,
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
     textAlign: 'center',
     color: '#FFFFFF',
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
@@ -406,23 +402,15 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   friendKeyRole: {
-    fontSize: 7,
+    fontSize: 7.5,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
     textAlign: 'center',
     color: 'rgba(255, 255, 255, 0.92)',
     marginTop: 1,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
-  },
-  keyLed: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3.5,
-    zIndex: 3,
   },
   keyIcon: {
     fontSize: 20,

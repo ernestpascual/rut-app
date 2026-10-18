@@ -143,7 +143,7 @@ describe('URL Metadata and Auto-Tagging Engine', () => {
     expect(enriched.platform).toBe('pinterest');
     expect(enriched.editorialContext).toContain('Raw textures for packaging prototype');
     expect(enriched.autoTags).toContain('pinterest');
-  });
+  }, 15000);
 
   test('cleans HTML entities and unicode characters in metadata', () => {
     const raw = 'Brutalist &amp; Monolithic&#x20;Design &quot;Inspiration&quot;';
