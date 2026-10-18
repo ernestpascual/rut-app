@@ -991,22 +991,32 @@ export default function ProjectDetailScreen() {
               <Text style={styles.editHeading}>WRITE / REFINE SPECIFICATIONS</Text>
             </View>
 
-            <Input
-              label="IDEA TITLE"
-              value={editTitle}
-              onChangeText={setEditTitle}
-              placeholder="Idea title..."
-            />
+            <View>
+              <Input
+                label="IDEA TITLE"
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="Idea title..."
+              />
+              <Text style={styles.charCountText}>
+                {editTitle.length.toLocaleString()} CHARACTERS
+              </Text>
+            </View>
 
-            <Input
-              label="CONCEPT / BRIEF"
-              value={editBrief}
-              onChangeText={setEditBrief}
-              placeholder="Describe your creative concept, problem, or vision..."
-              multiline
-              numberOfLines={3}
-              style={styles.briefInput}
-            />
+            <View>
+              <Input
+                label="CONCEPT / BRIEF"
+                value={editBrief}
+                onChangeText={setEditBrief}
+                placeholder="Describe your creative concept, problem, or vision..."
+                multiline
+                numberOfLines={3}
+                style={styles.briefInput}
+              />
+              <Text style={styles.charCountText}>
+                {editBrief.length.toLocaleString()} CHARACTERS
+              </Text>
+            </View>
 
             <View style={styles.notesSectionContainer}>
               <Input
@@ -1015,10 +1025,13 @@ export default function ProjectDetailScreen() {
                 onChangeText={setEditNotes}
                 placeholder="Detailed specifications, dimensions, textures, color systems, fabrication notes, references, and train of thought summaries..."
                 multiline
-                numberOfLines={14}
+                numberOfLines={3}
                 containerStyle={styles.notesInputContainer}
                 style={styles.notesInput}
               />
+              <Text style={styles.charCountText}>
+                {editNotes.length.toLocaleString()} CHARACTERS
+              </Text>
             </View>
 
             <View style={styles.tagInputRow}>
@@ -1170,6 +1183,9 @@ export default function ProjectDetailScreen() {
                     <Card style={styles.specCard}>
                       <Text style={styles.specBodyText}>{project.brief}</Text>
                     </Card>
+                    <Text style={styles.charCountText}>
+                      {(project.brief || '').length.toLocaleString()} CHARACTERS
+                    </Text>
                   </View>
                 ) : (
                   <View style={styles.specSection}>
@@ -1195,6 +1211,9 @@ export default function ProjectDetailScreen() {
                     <Card style={styles.specCard}>
                       <Text style={styles.specBodyText}>{project.notes}</Text>
                     </Card>
+                    <Text style={styles.charCountText}>
+                      {(project.notes || '').length.toLocaleString()} CHARACTERS
+                    </Text>
                   </View>
                 ) : (
                   <View style={styles.specSection}>
@@ -2325,20 +2344,27 @@ const getStyles = (colors: ThemeColors) =>
     textAlignVertical: 'top',
   },
   notesSectionContainer: {
-    flex: 1,
     marginVertical: spacing.xs,
   },
   notesInputContainer: {
-    flex: 1,
+    marginVertical: 0,
   },
   notesInput: {
-    flex: 1,
-    minHeight: 300,
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingHorizontal: 10,
+    minHeight: 84,
+    maxHeight: 160,
+    paddingTop: 10,
+    paddingBottom: 10,
     textAlignVertical: 'top',
-    lineHeight: 22,
+  },
+  charCountText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
+    marginTop: 2,
+    marginBottom: spacing.xs,
+    textAlign: 'right',
   },
   tagInputRow: {
     flexDirection: 'row',
