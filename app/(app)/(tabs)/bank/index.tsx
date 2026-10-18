@@ -258,7 +258,6 @@ export default function BankScreen() {
     const badgeHeader = (
       <View style={styles.cardHeader}>
         <View style={styles.badgeRow}>
-          <Badge label="📁 DUMP" variant="grade" style={{ marginRight: 4 }} />
           {item.sourcePlatform ? (
             <Badge
               label={item.sourcePlatform.toUpperCase()}
