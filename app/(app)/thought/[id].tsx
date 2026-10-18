@@ -350,11 +350,23 @@ export default function ChatWorkspaceScreen() {
     return () => clearInterval(interval);
   }, [liveModeOpen, liveStatus]);
 
-  // Keyboard shortcut (Alt+L or Cmd+L) to toggle Google Live mode
+  // Keyboard shortcut (Alt+L / Option+L) to open Google Live mode (never hijack browser Cmd+L / Ctrl+L)
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey || e.altKey) && (e.key === 'l' || e.key === 'L')) {
+      // Do not hijack browser address bar (Cmd+L on Mac or Ctrl+L on Windows/Linux)
+      if (e.metaKey || e.ctrlKey) return;
+      // Do not trigger while typing in an input, textarea, or contentEditable element
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as any).isContentEditable)
+      ) {
+        return;
+      }
+      if (e.altKey && (e.key === 'l' || e.key === 'L')) {
         e.preventDefault();
         setLiveModeOpen((prev) => !prev);
       }
@@ -637,10 +649,10 @@ export default function ChatWorkspaceScreen() {
               onPress={() => setLiveModeOpen(true)}
               style={styles.googleLiveHeaderBtn}
               accessibilityRole="button"
-              accessibilityLabel="Enter Google Live Mode"
+              accessibilityLabel="Open Google Live Mode"
             >
               <Text style={styles.googleLiveHeaderBtnIcon}>⚡</Text>
-              <Text style={styles.googleLiveHeaderBtnText}>GOOGLE LIVE</Text>
+              <Text style={styles.googleLiveHeaderBtnText}>LIVE</Text>
             </Pressable>
             <Pressable
               onPress={() => setMenuModalOpen(true)}
@@ -876,14 +888,6 @@ export default function ChatWorkspaceScreen() {
 
         {/* Input Bar (Auto-expanding textarea up to 5 lines, default 1 line) */}
         <View style={styles.inputBar}>
-          <Pressable
-            onPress={() => setLiveModeOpen(true)}
-            style={styles.googleLiveInputShortcut}
-            accessibilityRole="button"
-            accessibilityLabel="Switch to Google Live Mode"
-          >
-            <Text style={styles.googleLiveInputShortcutText}>⚡ LIVE</Text>
-          </Pressable>
           <Input
             value={inputText}
             onChangeText={(text) => {
@@ -1226,24 +1230,6 @@ export default function ChatWorkspaceScreen() {
             </View>
 
             <ScrollView style={styles.menuBody} showsVerticalScrollIndicator={false}>
-              {/* Option 0: Google Live Mode */}
-              <Pressable
-                style={[styles.menuItemCard, { borderColor: colors.ink }]}
-                onPress={() => {
-                  setMenuModalOpen(false);
-                  setLiveModeOpen(true);
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuItemSection}>REAL-TIME CONVERSATIONAL VOICE</Text>
-                  <Text style={styles.menuItemTitle}>⚡ Enter Google Live Mode</Text>
-                  <Text style={styles.menuItemDesc}>
-                    Real-time voice brainstorming grounded in your Dump RAG and full thought history
-                  </Text>
-                </View>
-                <Badge label="LAUNCH ↗" variant="inverse" />
-              </Pressable>
-
               {/* Option 1: Gemini Model */}
               <Pressable
                 style={styles.menuItemCard}
@@ -1302,6 +1288,24 @@ export default function ChatWorkspaceScreen() {
                   label={webAccessEnabled ? 'ENABLED ✓' : 'TURN ON'}
                   variant={webAccessEnabled ? 'inverse' : 'grade'}
                 />
+              </Pressable>
+
+              {/* Option 4: Google Live Voice Studio (Alternative Modality) */}
+              <Pressable
+                style={styles.menuItemCard}
+                onPress={() => {
+                  setMenuModalOpen(false);
+                  setLiveModeOpen(true);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemSection}>AUDIO & VOICE MODALITY (OPTIONAL)</Text>
+                  <Text style={styles.menuItemTitle}>⚡ Google Live Voice Studio</Text>
+                  <Text style={styles.menuItemDesc}>
+                    Real-time voice brainstorming grounded in your Dump RAG and full thought history (Shortcut: Alt+L)
+                  </Text>
+                </View>
+                <Badge label="LAUNCH ↗" variant="outline" />
               </Pressable>
 
               {/* Option 4: Delete Session (Danger Zone) */}
@@ -2153,39 +2157,22 @@ const getStyles = (colors: ThemeColors) =>
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.ink,
-    backgroundColor: colors.ink,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
   googleLiveHeaderBtnIcon: {
-    color: colors.canvas,
+    color: colors.inkSoft,
     fontSize: 10,
     marginRight: 4,
   },
   googleLiveHeaderBtnText: {
     ...typography.captionCap,
     fontSize: 9,
-    fontWeight: '800',
-    color: colors.canvas,
+    fontWeight: '700',
+    color: colors.inkSoft,
     letterSpacing: 0.8,
-  },
-  googleLiveInputShortcut: {
-    borderWidth: 1,
-    borderColor: colors.ink,
-    backgroundColor: colors.canvas,
-    height: 44,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.xs,
-  },
-  googleLiveInputShortcutText: {
-    ...typography.captionCap,
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.ink,
-    letterSpacing: 0.6,
   },
   liveContainer: {
     flex: 1,
