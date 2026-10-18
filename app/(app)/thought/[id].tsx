@@ -205,6 +205,8 @@ export default function ChatWorkspaceScreen() {
   const recognitionRef = useRef<any>(null);
   const liveTranscriptRef = useRef<string>('');
   const utteranceRef = useRef<any>(null);
+  const liveModeOpenRef = useRef<boolean>(false);
+  const liveManualPausedRef = useRef<boolean>(false);
 
   // Load and cache high-quality natural voices for Google Live
   useEffect(() => {
@@ -434,25 +436,46 @@ export default function ChatWorkspaceScreen() {
     }
   };
 
-  // Animated waveform effect for Google Live mode
+  // Animated waveform effect for Google Live mode (with fluid wave for thinking)
   useEffect(() => {
     if (!liveModeOpen) return;
+    let step = 0;
     const interval = setInterval(() => {
+      step++;
       setWaveformBars((prev) =>
-        prev.map(() => {
+        prev.map((_, idx) => {
           if (liveStatus === 'speaking') {
-            return Math.floor(Math.random() * 40) + 24; // 24 - 64px
+            return Math.floor(Math.random() * 40) + 24; // 24 - 64px active vocal waveform
           } else if (liveStatus === 'listening') {
-            return Math.floor(Math.random() * 32) + 14; // 14 - 46px
+            return Math.floor(Math.random() * 32) + 14; // 14 - 46px live microphone pulse
           } else if (liveStatus === 'thinking') {
-            return Math.floor(Math.random() * 16) + 12; // 12 - 28px
+            // Smooth sine wave ripple indicating Gemini is synthesizing Dump RAG
+            const wave = Math.sin((step * 0.45) + idx * 0.55);
+            return Math.floor(((wave + 1) / 2) * 26) + 10; // 10 - 36px smooth traveling wave
           }
           return 10;
         })
       );
-    }, 120);
+    }, 90);
     return () => clearInterval(interval);
   }, [liveModeOpen, liveStatus]);
+
+  // Hands-free continuous conversational loop: automatically start listening when modal opens
+  useEffect(() => {
+    liveModeOpenRef.current = liveModeOpen;
+    if (liveModeOpen) {
+      liveManualPausedRef.current = false;
+      const timer = setTimeout(() => {
+        handleStartListening();
+      }, 400);
+      return () => clearTimeout(timer);
+    } else {
+      handleStopListening();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+    }
+  }, [liveModeOpen]);
 
   // Keyboard shortcut (Alt+L / Option+L) to open Google Live mode (never hijack browser Cmd+L / Ctrl+L)
   useEffect(() => {
@@ -481,6 +504,8 @@ export default function ChatWorkspaceScreen() {
 
   const handleStartListening = () => {
     if (typeof window === 'undefined') return;
+    if (!liveModeOpenRef.current || liveManualPausedRef.current) return;
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -499,8 +524,12 @@ export default function ChatWorkspaceScreen() {
         } catch {}
       }
 
+      // If Rut was speaking, interrupt cleanly
+      if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+
       liveTranscriptRef.current = '';
-      setLiveTranscript('');
 
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
@@ -524,7 +553,16 @@ export default function ChatWorkspaceScreen() {
       recognition.onerror = (event: any) => {
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
-        setLiveStatus('ready');
+        // Automatically re-arm if silence fired and continuous mode is active
+        if (event.error === 'no-speech' && liveModeOpenRef.current && !liveManualPausedRef.current) {
+          setTimeout(() => {
+            if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+              handleStartListening();
+            }
+          }, 250);
+        } else {
+          setLiveStatus('ready');
+        }
       };
 
       recognition.onend = () => {
@@ -534,7 +572,16 @@ export default function ChatWorkspaceScreen() {
           liveTranscriptRef.current = '';
           handleSendLiveMessage(finalSpoken);
         } else {
-          setLiveStatus('ready');
+          // Seamless continuous loop: keep listening if silence triggered turn end
+          if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+            setTimeout(() => {
+              if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+                handleStartListening();
+              }
+            }, 250);
+          } else {
+            setLiveStatus('ready');
+          }
         }
       };
 
@@ -564,6 +611,10 @@ export default function ChatWorkspaceScreen() {
   const speakLiveResponse = (text: string) => {
     if (!speechSynthesisActive || typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setLiveStatus('ready');
+      // Even if voice TTS is disabled, resume continuous listening automatically
+      if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+        setTimeout(() => handleStartListening(), 1200);
+      }
       return;
     }
     try {
@@ -575,6 +626,9 @@ export default function ChatWorkspaceScreen() {
       const cleanSpoken = prepareLiveSpokenText(text);
       if (!cleanSpoken) {
         setLiveStatus('ready');
+        if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+          setTimeout(() => handleStartListening(), 300);
+        }
         return;
       }
 
@@ -592,11 +646,23 @@ export default function ChatWorkspaceScreen() {
       utterance.onend = () => {
         utteranceRef.current = null;
         setLiveStatus('ready');
+        // CONTINUOUS CONVERSATION: As soon as Rut finishes speaking the answer,
+        // automatically resume listening for your next spoken thought!
+        if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+          setTimeout(() => {
+            if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+              handleStartListening();
+            }
+          }, 450);
+        }
       };
       utterance.onerror = (err) => {
         console.warn('TTS utterance error:', err);
         utteranceRef.current = null;
         setLiveStatus('ready');
+        if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+          setTimeout(() => handleStartListening(), 300);
+        }
       };
       window.speechSynthesis.speak(utterance);
     } catch (err) {
@@ -626,14 +692,44 @@ export default function ChatWorkspaceScreen() {
         speakLiveResponse(result.assistantMessage.content);
       } else {
         setLiveStatus('ready');
+        if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+          setTimeout(() => handleStartListening(), 500);
+        }
       }
     } catch (err) {
       console.warn('[Live] Send message error:', err);
       setLiveStatus('ready');
+      if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+        setTimeout(() => handleStartListening(), 500);
+      }
+    }
+  };
+
+  const handleToggleLivePause = () => {
+    if (isListening || liveStatus === 'listening') {
+      liveManualPausedRef.current = true;
+      handleStopListening();
+      setLiveStatus('ready');
+    } else if (liveStatus === 'speaking') {
+      // User interrupts Rut while speaking -> immediately switch to listening to user!
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+      liveManualPausedRef.current = false;
+      handleStartListening();
+    } else if (liveStatus === 'thinking') {
+      liveManualPausedRef.current = true;
+      setLiveStatus('ready');
+    } else {
+      // Resume continuous hands-free conversation
+      liveManualPausedRef.current = false;
+      handleStartListening();
     }
   };
 
   const handleCloseGoogleLive = () => {
+    liveModeOpenRef.current = false;
+    liveManualPausedRef.current = true;
     handleStopListening();
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
@@ -1590,12 +1686,12 @@ export default function ChatWorkspaceScreen() {
                 </View>
                 <Text style={styles.visualizerHint}>
                   {liveStatus === 'listening'
-                    ? 'Speak naturally — Gemini is listening with full Dump context'
+                    ? '🟢 Listening continuously... speak naturally anytime'
                     : liveStatus === 'thinking'
-                    ? 'Retrieving inspirations and formulating conversational thesis...'
+                    ? '⏳ Synthesizing Dump inspirations & formulating thesis...'
                     : liveStatus === 'speaking'
-                    ? 'Speaking short summary out loud'
-                    : 'Tap microphone or speak to converse in Google Live'}
+                    ? '🔊 Speaking summary out loud (Tap button to interrupt)'
+                    : '⏸️ Paused — Tap button below to resume continuous conversation'}
                 </Text>
               </View>
 
@@ -1614,6 +1710,18 @@ export default function ChatWorkspaceScreen() {
                       {liveTranscript}
                     </Text>
                   ) : null}
+
+                  {liveStatus === 'thinking' && (
+                    <View style={styles.liveThinkingCard}>
+                      <ActivityIndicator size="small" color={colors.ink} style={{ marginRight: 10 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.liveThinkingTitle}>GEMINI 3.5 IS THINKING...</Text>
+                        <Text style={styles.liveThinkingSubtitle}>
+                          Cross-referencing Dump inspirations & formulating spoken reply
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                   {latestLiveResponse ? (
                     <View style={{ marginBottom: 6 }}>
                       <Text style={styles.liveTranscriptAssistant}>
@@ -1719,13 +1827,27 @@ export default function ChatWorkspaceScreen() {
                     style={[
                       styles.liveMicBtn,
                       isListening && styles.liveMicBtnActive,
+                      liveStatus === 'speaking' && styles.liveMicBtnSpeaking,
+                      liveStatus === 'thinking' && styles.liveMicBtnThinking,
                     ]}
-                    onPress={isListening ? handleStopListening : handleStartListening}
+                    onPress={handleToggleLivePause}
                     accessibilityRole="button"
-                    accessibilityLabel={isListening ? 'Stop listening' : 'Start listening'}
+                    accessibilityLabel={
+                      isListening
+                        ? 'Pause continuous listening'
+                        : liveStatus === 'speaking'
+                        ? 'Interrupt speech and speak'
+                        : 'Resume continuous conversation'
+                    }
                   >
-                    <Text style={[styles.liveMicBtnText, isListening && styles.liveMicBtnTextActive]}>
-                      {isListening ? '🎙️ LISTENING (TAP TO STOP)' : '🎙️ TAP TO SPEAK'}
+                    <Text style={[styles.liveMicBtnText, (isListening || liveStatus === 'speaking') && styles.liveMicBtnTextActive]}>
+                      {isListening
+                        ? '🟢 CONTINUOUS LIVE: LISTENING (TAP TO PAUSE)'
+                        : liveStatus === 'speaking'
+                        ? '🔊 RUT SPEAKING (TAP TO INTERRUPT)'
+                        : liveStatus === 'thinking'
+                        ? '⏳ GEMINI 3.5 THINKING...'
+                        : '▶️ RESUME CONTINUOUS CONVERSATION'}
                     </Text>
                   </Pressable>
 
@@ -2552,8 +2674,16 @@ const getStyles = (colors: ThemeColors) =>
     alignItems: 'center',
   },
   liveMicBtnActive: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: '#16A34A',
+    borderColor: '#16A34A',
+  },
+  liveMicBtnSpeaking: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  liveMicBtnThinking: {
+    backgroundColor: colors.inkSoft,
+    borderColor: colors.inkSoft,
   },
   liveMicBtnText: {
     ...typography.captionCap,
@@ -2564,6 +2694,28 @@ const getStyles = (colors: ThemeColors) =>
   },
   liveMicBtnTextActive: {
     color: '#FFFFFF',
+  },
+  liveThinkingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    padding: spacing.xs,
+    marginVertical: spacing.xs,
+  },
+  liveThinkingTitle: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  liveThinkingSubtitle: {
+    ...typography.captionSm,
+    fontSize: 10,
+    color: colors.inkSoft,
+    marginTop: 2,
   },
   liveTtsToggleBtn: {
     flex: 1,
