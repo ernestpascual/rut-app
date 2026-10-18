@@ -292,6 +292,12 @@ export function generateIdeaHTML(
     ${project.tags && project.tags.length > 0 ? `<span> • ${project.tags.map((t) => `#${escapeHtml(t)}`).join(' ')}</span>` : ''}
   </div>
 
+  ${(project.thesisStatement || ideaChat?.thesisStatement) ? `
+    <div style="border-left: 3px solid #111111; padding: 10px 14px; background: #F8F8F8; margin-bottom: 20px; font-style: italic;">
+      <strong>THESIS:</strong> ${escapeHtml(project.thesisStatement || ideaChat?.thesisStatement || '')}
+    </div>
+  ` : ''}
+
   <h2>1. Concept Brief</h2>
   <div class="card">
     ${briefHtml}
@@ -346,8 +352,56 @@ export async function copyIdeaAsMarkdown(
 }
 
 /**
- * Exports the idea as a PDF using expo-print.
- * On Web, opens the system print/PDF dialog.
+ * Downloads the compiled markdown context as a .md file directly.
+ */
+export async function downloadIdeaAsMarkdown(
+  project: Project,
+  links: ProjectInspirationLink[],
+  bankMap: Record<string, InspirationItem>,
+  ideaChat?: ChatSession | null,
+  chatMessages: ChatMessage[] = []
+): Promise<boolean> {
+  const md = generateIdeaContextMarkdown(project, links, bankMap, ideaChat, chatMessages);
+  const cleanTitle = (project.title || 'idea')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  const fileName = `${cleanTitle || 'idea'}-context.md`;
+
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    try {
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Native: fallback to sharing
+  try {
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await copyIdeaAsMarkdown(project, links, bankMap, ideaChat, chatMessages);
+      Alert.alert('Markdown Copied', 'Markdown context copied to clipboard.');
+      return true;
+    }
+  } catch {}
+
+  return false;
+}
+
+/**
+ * Exports the idea as a PDF.
+ * On Web, isolates the markdown document in a hidden iframe and invokes print,
+ * ensuring only the markdown document is printed and NEVER the app screen or UI.
  * On Native (iOS/Android), generates the PDF file and opens the native Share Sheet.
  */
 export async function exportIdeaAsPDF(
@@ -359,8 +413,50 @@ export async function exportIdeaAsPDF(
 ): Promise<void> {
   const html = generateIdeaHTML(project, links, bankMap, ideaChat, chatMessages);
 
-  if (Platform.OS === 'web') {
-    await Print.printAsync({ html });
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    // Isolate document in a rendered, off-screen iframe so ONLY the document prints (never the app screen)
+    const iframe = document.createElement('iframe');
+    iframe.id = 'rut-pdf-isolated-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '1000px';
+    iframe.style.height = '1000px';
+    iframe.style.border = 'none';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+
+    const frameDoc = iframe.contentWindow?.document;
+    if (frameDoc) {
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+
+      // Give browser time to parse CSS and layout HTML
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.warn('Iframe print failed, falling back to dedicated print window:', err);
+        const printWin = window.open('', '_blank');
+        if (printWin) {
+          printWin.document.open();
+          printWin.document.write(html);
+          printWin.document.close();
+          printWin.focus();
+          printWin.print();
+        }
+      } finally {
+        setTimeout(() => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 5000);
+      }
+    }
     return;
   }
 

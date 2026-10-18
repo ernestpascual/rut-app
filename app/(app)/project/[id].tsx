@@ -65,6 +65,7 @@ import {
 import { openExternalUrl } from '../../../src/utils/linking';
 import {
   copyIdeaAsMarkdown,
+  downloadIdeaAsMarkdown,
   exportIdeaAsPDF,
   exportIdeaAsDoc,
   generateIdeaContextMarkdown,
@@ -155,6 +156,7 @@ export default function ProjectDetailScreen() {
   // Export idea context states
   const [showExportModal, setShowExportModal] = useState(false);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [downloadingMarkdown, setDownloadingMarkdown] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [exportingDoc, setExportingDoc] = useState(false);
   const [showPreviewMarkdown, setShowPreviewMarkdown] = useState(false);
@@ -991,6 +993,25 @@ export default function ProjectDetailScreen() {
       Alert.alert('Copied to Clipboard', 'Full idea context markdown has been copied to your clipboard.');
     } else {
       Alert.alert('Notice', 'Unable to copy to clipboard automatically.');
+    }
+  };
+
+  const handleDownloadMarkdown = async () => {
+    if (!project) return;
+    setDownloadingMarkdown(true);
+    try {
+      const success = await downloadIdeaAsMarkdown(
+        project,
+        uniqueLinks,
+        bankMap,
+        ideaChat,
+        chatMessages
+      );
+      if (!success) {
+        Alert.alert('Notice', 'Unable to download Markdown file directly.');
+      }
+    } finally {
+      setDownloadingMarkdown(false);
     }
   };
 
@@ -2201,12 +2222,12 @@ export default function ProjectDetailScreen() {
                       Export &ldquo;{project.title}&rdquo; as comprehensive research context, including concept brief, specifications, attached dump references, and the full thought transcript.
                     </Text>
 
-                    {/* OPTION 1: COPY AS MARKDOWN */}
+                    {/* OPTION 1: COPY & DOWNLOAD MARKDOWN */}
                     <Card style={styles.exportOptionCard}>
                       <View style={styles.exportOptionHeader}>
                         <View style={{ flex: 1, marginRight: spacing.sm }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={styles.exportOptionTitle}>📋 COPY AS MARKDOWN</Text>
+                            <Text style={styles.exportOptionTitle}>📋 MARKDOWN FILE & CONTEXT</Text>
                             {copiedMarkdown && (
                               <Badge label="COPIED ✓" variant="inverse" style={{ marginLeft: 6 }} />
                             )}
@@ -2215,13 +2236,23 @@ export default function ProjectDetailScreen() {
                             Compiles complete structured Markdown context for AI prompts (Claude, ChatGPT, Gemini), Obsidian, or developer docs.
                           </Text>
                         </View>
-                        <Button
-                          title={copiedMarkdown ? 'COPIED ✓' : 'COPY ⎘'}
-                          variant={copiedMarkdown ? 'primary' : 'secondary'}
-                          onPress={handleCopyMarkdown}
-                          style={styles.exportModalOptionBtn}
-                          textStyle={styles.exportModalOptionBtnText}
-                        />
+                        <View style={{ flexDirection: 'row', gap: spacing.xs, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <Button
+                            title={copiedMarkdown ? 'COPIED ✓' : 'COPY ⎘'}
+                            variant={copiedMarkdown ? 'primary' : 'secondary'}
+                            onPress={handleCopyMarkdown}
+                            style={styles.exportModalOptionBtn}
+                            textStyle={styles.exportModalOptionBtnText}
+                          />
+                          <Button
+                            title={downloadingMarkdown ? 'DOWNLOADING...' : 'DOWNLOAD .MD ⤓'}
+                            variant="secondary"
+                            onPress={handleDownloadMarkdown}
+                            loading={downloadingMarkdown}
+                            style={styles.exportModalOptionBtn}
+                            textStyle={styles.exportModalOptionBtnText}
+                          />
+                        </View>
                       </View>
                     </Card>
 

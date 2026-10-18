@@ -1,4 +1,4 @@
-import { generateIdeaContextMarkdown, generateIdeaHTML } from './ideaExporter';
+import { generateIdeaContextMarkdown, generateIdeaHTML, downloadIdeaAsMarkdown } from './ideaExporter';
 import { Project, ProjectInspirationLink, InspirationItem, ChatMessage, ChatSession } from '../../types';
 
 describe('ideaExporter', () => {
@@ -108,6 +108,18 @@ describe('ideaExporter', () => {
     expect(html).toContain('Kinetic Glass Pavilion');
     expect(html).toContain('Studio Drift Kinetic Shutter');
     expect(html).toContain('How should the dichroic glass interface with sunlight?');
+    expect(html).toContain('THESIS:');
     expect(html).toContain('<!DOCTYPE html>');
+  });
+
+  test('downloadIdeaAsMarkdown produces expected output without throwing', async () => {
+    const res = await downloadIdeaAsMarkdown(
+      mockProject,
+      mockLinks,
+      mockBankMap,
+      mockChatSession,
+      mockChatMessages
+    );
+    expect(typeof res).toBe('boolean');
   });
 });
