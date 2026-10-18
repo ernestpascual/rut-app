@@ -460,21 +460,47 @@ export default function ChatWorkspaceScreen() {
     return () => clearInterval(interval);
   }, [liveModeOpen, liveStatus]);
 
+  const stopAllAudioAndReplies = () => {
+    liveModeOpenRef.current = false;
+    liveManualPausedRef.current = true;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    if (utteranceRef.current) {
+      utteranceRef.current.onstart = null;
+      utteranceRef.current.onend = null;
+      utteranceRef.current.onerror = null;
+      utteranceRef.current = null;
+    }
+    setIsListening(false);
+    setLiveStatus('ready');
+  };
+
   // Hands-free continuous conversational loop: automatically start listening when modal opens
   useEffect(() => {
     liveModeOpenRef.current = liveModeOpen;
     if (liveModeOpen) {
       liveManualPausedRef.current = false;
       const timer = setTimeout(() => {
-        handleStartListening();
+        if (liveModeOpenRef.current && !liveManualPausedRef.current) {
+          handleStartListening();
+        }
       }, 400);
       return () => clearTimeout(timer);
     } else {
-      handleStopListening();
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try { window.speechSynthesis.cancel(); } catch {}
-      }
+      stopAllAudioAndReplies();
     }
+    return () => {
+      stopAllAudioAndReplies();
+    };
   }, [liveModeOpen]);
 
   // Keyboard shortcut (Alt+L / Option+L) to open Google Live mode (never hijack browser Cmd+L / Ctrl+L)
@@ -609,9 +635,8 @@ export default function ChatWorkspaceScreen() {
   };
 
   const speakLiveResponse = (text: string) => {
-    if (!speechSynthesisActive || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (!liveModeOpenRef.current || !speechSynthesisActive || typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setLiveStatus('ready');
-      // Even if voice TTS is disabled, resume continuous listening automatically
       if (liveModeOpenRef.current && !liveManualPausedRef.current) {
         setTimeout(() => handleStartListening(), 1200);
       }
@@ -619,12 +644,13 @@ export default function ChatWorkspaceScreen() {
     }
     try {
       window.speechSynthesis.cancel();
+      if (!liveModeOpenRef.current) return;
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
       // Clean and isolate strictly the 1-2 sentence spoken summary for crisp vocal delivery
       const cleanSpoken = prepareLiveSpokenText(text);
-      if (!cleanSpoken) {
+      if (!cleanSpoken || !liveModeOpenRef.current) {
         setLiveStatus('ready');
         if (liveModeOpenRef.current && !liveManualPausedRef.current) {
           setTimeout(() => handleStartListening(), 300);
@@ -642,9 +668,16 @@ export default function ChatWorkspaceScreen() {
       }
       utterance.rate = 1.0; // Calm natural human pacing
       utterance.pitch = 1.0;
-      utterance.onstart = () => setLiveStatus('speaking');
+      utterance.onstart = () => {
+        if (!liveModeOpenRef.current) {
+          try { window.speechSynthesis.cancel(); } catch {}
+          return;
+        }
+        setLiveStatus('speaking');
+      };
       utterance.onend = () => {
         utteranceRef.current = null;
+        if (!liveModeOpenRef.current) return;
         setLiveStatus('ready');
         // CONTINUOUS CONVERSATION: As soon as Rut finishes speaking the answer,
         // automatically resume listening for your next spoken thought!
@@ -659,12 +692,15 @@ export default function ChatWorkspaceScreen() {
       utterance.onerror = (err) => {
         console.warn('TTS utterance error:', err);
         utteranceRef.current = null;
+        if (!liveModeOpenRef.current) return;
         setLiveStatus('ready');
         if (liveModeOpenRef.current && !liveManualPausedRef.current) {
           setTimeout(() => handleStartListening(), 300);
         }
       };
-      window.speechSynthesis.speak(utterance);
+      if (liveModeOpenRef.current) {
+        window.speechSynthesis.speak(utterance);
+      }
     } catch (err) {
       console.warn('TTS playback error:', err);
       utteranceRef.current = null;
@@ -681,6 +717,10 @@ export default function ChatWorkspaceScreen() {
 
     try {
       const result = await handleSendMessage(cleanText, { isLiveAudio: true });
+      // If user exited Live mode while thinking/inferring, immediately abort sound and live updates!
+      if (!liveModeOpenRef.current) {
+        return;
+      }
       if (result && result.assistantMessage) {
         setLatestLiveResponse(result.assistantMessage.content);
         // Resolve referenced items from Dump RAG and web precedents to display on screen
@@ -697,6 +737,7 @@ export default function ChatWorkspaceScreen() {
         }
       }
     } catch (err) {
+      if (!liveModeOpenRef.current) return;
       console.warn('[Live] Send message error:', err);
       setLiveStatus('ready');
       if (liveModeOpenRef.current && !liveManualPausedRef.current) {
@@ -728,16 +769,8 @@ export default function ChatWorkspaceScreen() {
   };
 
   const handleCloseGoogleLive = () => {
-    liveModeOpenRef.current = false;
-    liveManualPausedRef.current = true;
-    handleStopListening();
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {}
-    }
+    stopAllAudioAndReplies();
     setLiveModeOpen(false);
-    setLiveStatus('ready');
   };
 
   const handleTogglePin = async (inspirationId: string) => {
@@ -1597,7 +1630,7 @@ export default function ChatWorkspaceScreen() {
       </Modal>
 
       {/* Google Live Mode Modal */}
-      <Modal visible={liveModeOpen} animationType="slide" transparent>
+      <Modal visible={liveModeOpen} animationType="slide" transparent onRequestClose={handleCloseGoogleLive}>
         <SafeAreaView style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <TopNav
