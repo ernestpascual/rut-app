@@ -216,18 +216,20 @@ export default function ChatsListScreen() {
                 title={selectedIds.length === chats.length ? 'DESELECT' : 'SELECT ALL'}
                 variant="secondary"
                 onPress={handleToggleSelectAll}
-                style={{ height: 36, paddingHorizontal: 10 }}
+                style={{ height: 28, paddingHorizontal: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: '700' }}
               />
               <Button
                 title={deleting ? 'DELETING...' : `DELETE (${selectedIds.length})`}
                 onPress={handleDeleteSelectedChats}
                 disabled={selectedIds.length === 0 || deleting}
                 style={{
-                  height: 36,
-                  paddingHorizontal: 12,
+                  height: 28,
+                  paddingHorizontal: 10,
                   backgroundColor: colors.statusErrorText || '#E03131',
                   borderWidth: 0,
                 }}
+                textStyle={{ fontSize: 11, fontWeight: '700' }}
               />
             </View>
           ) : (
@@ -237,11 +239,12 @@ export default function ChatsListScreen() {
                   title="SELECT"
                   variant="secondary"
                   onPress={() => setSelectMode(true)}
-                  style={{ height: 36, paddingHorizontal: 12 }}
+                  style={{ height: 28, paddingHorizontal: 10 }}
+                  textStyle={{ fontSize: 11, fontWeight: '700' }}
                 />
               )}
               <Button
-                title="+ NEW THOUGHT"
+                title="+ NEW"
                 onPress={() => {
                   if (chats.length >= 10) {
                     Alert.alert(
@@ -252,7 +255,8 @@ export default function ChatsListScreen() {
                   }
                   router.push('/(app)/thought/new');
                 }}
-                style={{ height: 36, paddingHorizontal: 16 }}
+                style={{ height: 28, paddingHorizontal: 10 }}
+                textStyle={{ fontSize: 11, fontWeight: '700' }}
               />
             </View>
           )

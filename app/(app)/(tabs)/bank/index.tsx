@@ -445,7 +445,8 @@ export default function BankScreen() {
           <Button
             title="+ NEW"
             onPress={() => router.push('/(app)/inspiration/new')}
-            style={{ height: 34, paddingHorizontal: 14 }}
+            style={{ height: 28, paddingHorizontal: 10 }}
+            textStyle={{ fontSize: 11, fontWeight: '700' }}
           />
         }
       />
