@@ -2,19 +2,26 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { rounded, typography, spacing } from '../../design/tokens';
 import { useTheme } from '../../design/ThemeContext';
+import { getPlatformBadgeStyle } from '../../design/platformColors';
+import { SourcePlatform } from '../../types';
 
-interface BadgeProps {
+export interface BadgeProps {
   label: string;
   variant?: 'outline' | 'grade' | 'inverse';
+  platform?: string | SourcePlatform | null;
+  textColor?: string;
   style?: ViewStyle;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   label,
   variant = 'grade',
+  platform,
+  textColor,
   style,
 }) => {
   const { colors } = useTheme();
+  const platformStyle = getPlatformBadgeStyle(platform || label);
 
   return (
     <View
@@ -33,6 +40,11 @@ export const Badge: React.FC<BadgeProps> = ({
         variant === 'inverse' && {
           backgroundColor: colors.ink,
         },
+        platformStyle && {
+          backgroundColor: platformStyle.backgroundColor,
+          borderWidth: 1,
+          borderColor: platformStyle.borderColor,
+        },
         style,
       ]}
     >
@@ -40,6 +52,8 @@ export const Badge: React.FC<BadgeProps> = ({
         style={[
           styles.text,
           { color: variant === 'inverse' ? colors.onInk : colors.ink },
+          platformStyle && { color: textColor || platformStyle.textColor },
+          textColor && !platformStyle ? { color: textColor } : null,
         ]}
       >
         {label}

@@ -36,6 +36,7 @@ import { Badge } from '../../../../src/components/ui/Badge';
 import { openExternalUrl } from '../../../../src/utils/linking';
 import { PINTEREST_SVG } from '../../../../src/utils/urlMetadata';
 import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
+import { getPlatformBadgeStyle } from '../../../../src/design/platformColors';
 import { InspirationItem } from '../../../../src/types';
 import {
   getDumpInspirations,
@@ -220,11 +221,14 @@ export default function BankScreen() {
     if (item.archived) return false;
 
     // Platform filter
-    if (
-      selectedPlatform !== 'ALL' &&
-      item.sourcePlatform?.toUpperCase() !== selectedPlatform
-    ) {
-      return false;
+    if (selectedPlatform !== 'ALL') {
+      const p = item.sourcePlatform?.toUpperCase() || (item.url ? 'WEB' : 'NOTE');
+      const isDribbbleMatch =
+        (selectedPlatform === 'DRIBBLE' || selectedPlatform === 'DRIBBBLE') &&
+        (p === 'DRIBBLE' || p === 'DRIBBBLE');
+      if (p !== selectedPlatform && !isDribbbleMatch) {
+        return false;
+      }
     }
 
     // Tag filter
@@ -261,7 +265,7 @@ export default function BankScreen() {
           {item.sourcePlatform ? (
             <Badge
               label={item.sourcePlatform.toUpperCase()}
-              variant="inverse"
+              platform={item.sourcePlatform}
               style={{ marginRight: 4 }}
             />
           ) : (
@@ -551,9 +555,24 @@ export default function BankScreen() {
             {selectedPlatform !== 'ALL' ? (
               <Pressable
                 onPress={() => setSelectedPlatform('ALL')}
-                style={styles.activeFilterChip}
+                style={[
+                  styles.activeFilterChip,
+                  getPlatformBadgeStyle(selectedPlatform) && {
+                    backgroundColor: getPlatformBadgeStyle(selectedPlatform)!.backgroundColor,
+                    borderColor: getPlatformBadgeStyle(selectedPlatform)!.borderColor,
+                  },
+                ]}
               >
-                <Text style={styles.activeFilterChipText}>{selectedPlatform} ✕</Text>
+                <Text
+                  style={[
+                    styles.activeFilterChipText,
+                    getPlatformBadgeStyle(selectedPlatform) && {
+                      color: getPlatformBadgeStyle(selectedPlatform)!.textColor,
+                    },
+                  ]}
+                >
+                  {selectedPlatform} ✕
+                </Text>
               </Pressable>
             ) : null}
 
@@ -611,24 +630,42 @@ export default function BankScreen() {
               data={platforms}
               keyExtractor={(item) => item}
               style={styles.platformRow}
-              renderItem={({ item: plat }) => (
-                <Pressable
-                  onPress={() => setSelectedPlatform(plat)}
-                  style={[
-                    styles.platformPill,
-                    selectedPlatform === plat && styles.platformPillActive,
-                  ]}
-                >
-                  <Text
+              renderItem={({ item: plat }) => {
+                const platStyle = getPlatformBadgeStyle(plat);
+                const isActive =
+                  selectedPlatform === plat ||
+                  (plat === 'DRIBBBLE' && selectedPlatform === 'DRIBBLE');
+                return (
+                  <Pressable
+                    onPress={() => setSelectedPlatform(plat)}
                     style={[
-                      styles.platformPillText,
-                      selectedPlatform === plat && styles.platformPillTextActive,
+                      styles.platformPill,
+                      isActive && styles.platformPillActive,
+                      isActive &&
+                        platStyle && {
+                          backgroundColor: platStyle.backgroundColor,
+                          borderColor: platStyle.borderColor,
+                        },
                     ]}
                   >
-                    {plat}{totalStats.platformsMap[plat] !== undefined ? ` (${totalStats.platformsMap[plat]})` : ''}
-                  </Text>
-                </Pressable>
-              )}
+                    <Text
+                      style={[
+                        styles.platformPillText,
+                        isActive && styles.platformPillTextActive,
+                        isActive &&
+                          platStyle && {
+                            color: platStyle.textColor,
+                          },
+                      ]}
+                    >
+                      {plat}
+                      {totalStats.platformsMap[plat] !== undefined
+                        ? ` (${totalStats.platformsMap[plat]})`
+                        : ''}
+                    </Text>
+                  </Pressable>
+                );
+              }}
             />
 
             {allTags.length > 0 ? (

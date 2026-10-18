@@ -118,7 +118,7 @@ export function detectPlatform(urlOrDomain: string): SourcePlatform {
   if (lower.includes('behance.net')) {
     return 'behance';
   }
-  if (lower.includes('dribbble.com')) {
+  if (lower.includes('dribbble.com') || lower.includes('dribble.com')) {
     return 'dribbble';
   }
   if (lower.includes('are.na')) {
