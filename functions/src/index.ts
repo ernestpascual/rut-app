@@ -5,3 +5,4 @@ export { chatWithBank } from './callable/chatWithBank';
 export { suggestProjectLinks } from './callable/suggestProjectLinks';
 export { deleteAccountData } from './callable/deleteAccountData';
 export { captureMetadata } from './callable/captureMetadata';
+export { summarizeChat } from './callable/summarizeChat';

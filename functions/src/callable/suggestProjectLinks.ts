@@ -88,7 +88,7 @@ export const suggestProjectLinks = onCall({ invoker: 'public', cors: true }, asy
     });
 
     return {
-      suggestions: (result.suggestions || []).slice(0, 5),
+      suggestions: (result.suggestions || []).slice(0, 10),
     };
   } catch (err: any) {
     console.error(`[Project Link Suggestion] Error for ${uid}:`, err);

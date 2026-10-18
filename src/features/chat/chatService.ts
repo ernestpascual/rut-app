@@ -1368,3 +1368,103 @@ export function generateThesisStatement(
   return `${subject} synthesizes deliberate material tensions and bold structural restraint to define a distinctive design thesis.`;
 }
 
+/**
+ * Retrieves an existing cached 2-sentence summary or generates a new one.
+ * If the last message has not changed since the summary was created,
+ * returns the cached summary without reprocessing.
+ * Stores generated summaries in Firestore and local storage.
+ */
+export async function getOrGenerateThoughtSummary(
+  chatId: string,
+  messages: ChatMessage[],
+  session?: ChatSession | null,
+  uid?: string | null
+): Promise<string> {
+  if (!messages || messages.length === 0) {
+    return '';
+  }
+
+  const lastMessage = messages[messages.length - 1];
+
+  // 1. Check if cached summary is already valid (no last changes from chat)
+  if (
+    session?.thoughtSummary &&
+    session.summaryLastMessageId === lastMessage.id &&
+    session.thoughtSummary.trim().length > 0
+  ) {
+    return session.thoughtSummary;
+  }
+
+  // 2. If authenticated, try server-side summarizeChat Cloud Function
+  if (isLiveAuth(uid)) {
+    try {
+      const summarizeFn = httpsCallable<{ chatId: string; model?: string }, { summary: string; cached: boolean }>(
+        functions,
+        'summarizeChat'
+      );
+      const res = await summarizeFn({ chatId, model: session?.model || undefined });
+      if (res.data?.summary) {
+        const generated = res.data.summary.trim();
+        if (session) {
+          session.thoughtSummary = generated;
+          session.summaryLastMessageId = lastMessage.id;
+          session.summaryUpdatedAt = Date.now();
+          session.summaryMessageCount = messages.length;
+          await saveChatSession(session, uid);
+        }
+        return generated;
+      }
+    } catch (fnErr) {
+      console.warn('[getOrGenerateThoughtSummary] Cloud function fallback:', fnErr);
+    }
+  }
+
+  // 3. Deterministic local/offline 2-sentence summary generator
+  // Synthesizes the core angles from the discussion into exactly 2 crisp sentences.
+  const assistantMessages = messages.filter((m) => m.role === 'assistant' && m.content.trim().length > 0);
+  const userMessages = messages.filter((m) => m.role === 'user' && m.content.trim().length > 0);
+
+  let sentenceOne = '';
+  let sentenceTwo = '';
+
+  if (userMessages.length > 0) {
+    const firstUser = userMessages[0].content.trim().replace(/\n+/g, ' ');
+    const cleanUser = firstUser.length > 140 ? `${firstUser.slice(0, 137)}...` : firstUser;
+    sentenceOne = `The brainstorm centers on exploring ${cleanUser.replace(/^(\?|\.|\!)+/, '')}${cleanUser.endsWith('.') ? '' : '.'}`;
+  } else {
+    sentenceOne = `The brainstorm explores creative angles and conceptual directions for this idea.`;
+  }
+
+  if (assistantMessages.length > 0) {
+    const lastAssistant = assistantMessages[assistantMessages.length - 1].content.trim();
+    const rawSentences = lastAssistant
+      .replace(/[#*`_]/g, '')
+      .replace(/\n+/g, ' ')
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 20 && !s.startsWith('http'));
+
+    if (rawSentences.length > 0) {
+      sentenceTwo = rawSentences[0];
+      if (!/[.!?]$/.test(sentenceTwo)) sentenceTwo += '.';
+    } else {
+      sentenceTwo = `Key insights prioritize cohesive material execution, structural clarity, and focused refinement.`;
+    }
+  } else {
+    sentenceTwo = `Key insights prioritize cohesive material execution, structural clarity, and focused refinement.`;
+  }
+
+  const localSummary = `${sentenceOne} ${sentenceTwo}`.trim();
+
+  // Save to session and Firestore
+  if (session) {
+    session.thoughtSummary = localSummary;
+    session.summaryLastMessageId = lastMessage.id;
+    session.summaryUpdatedAt = Date.now();
+    session.summaryMessageCount = messages.length;
+    await saveChatSession(session, uid);
+  }
+
+  return localSummary;
+}
+

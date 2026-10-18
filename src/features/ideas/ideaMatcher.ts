@@ -58,12 +58,16 @@ export function matchIdeaWithDump(
   idea: IdeaMatchInput,
   dumpItems: InspirationItem[],
   attachedIds: Set<string> = new Set(),
-  limit: number = 5
+  limit: number = 10
 ): IdeaMatchResult[] {
+  const briefTokens = tokenize(idea.brief || '');
+  const notesTokens = tokenize(idea.notes || '');
+  const briefAndNotesTokens = new Set<string>([...briefTokens, ...notesTokens]);
+
   const ideaTokens = new Set<string>([
     ...tokenize(idea.title),
-    ...tokenize(idea.brief || ''),
-    ...tokenize(idea.notes || ''),
+    ...briefTokens,
+    ...notesTokens,
     ...(idea.tags || []).map((t) => t.toLowerCase().trim()),
   ]);
 
@@ -103,28 +107,31 @@ export function matchIdeaWithDump(
 
     // 1. Direct concept and tag matches (highest priority)
     for (const ideaToken of ideaTokens) {
+      const isFromBriefOrNotes = briefAndNotesTokens.has(ideaToken);
+      const briefNotesMultiplier = isFromBriefOrNotes ? 1.5 : 1.0;
+
       if (itemConcepts.some((c) => c === ideaToken || c.includes(ideaToken) || ideaToken.includes(c))) {
-        score += 30;
+        score += Math.round(30 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
       if (itemAiTags.some((t) => t === ideaToken || t.includes(ideaToken) || ideaToken.includes(t))) {
-        score += 25;
+        score += Math.round(25 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
       if (itemTags.some((t) => t === ideaToken || t.includes(ideaToken) || ideaToken.includes(t))) {
-        score += 25;
+        score += Math.round(25 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
       if (itemTitleTokens.some((t) => t === ideaToken || t.includes(ideaToken) || ideaToken.includes(t))) {
-        score += 20;
+        score += Math.round(20 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
       if (itemSummaryTokens.some((s) => s === ideaToken || s.includes(ideaToken))) {
-        score += 15;
+        score += Math.round(15 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
       if (itemNoteTokens.some((n) => n === ideaToken || n.includes(ideaToken))) {
-        score += 10;
+        score += Math.round(10 * briefNotesMultiplier);
         matchedWords.add(ideaToken);
       }
     }

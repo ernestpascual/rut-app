@@ -75,6 +75,10 @@ export interface ChatSession {
   model?: string | null;
   pinnedInspirationIds: string[];
   summary: string | null;
+  thoughtSummary?: string | null;
+  summaryLastMessageId?: string | null;
+  summaryMessageCount?: number;
+  summaryUpdatedAt?: number;
   thesisStatement?: string | null;
   projectId?: string | null;
   projectTitle?: string | null;

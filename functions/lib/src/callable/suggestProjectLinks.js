@@ -77,7 +77,7 @@ exports.suggestProjectLinks = (0, https_1.onCall)({ invoker: 'public', cors: tru
             status: 'success',
         });
         return {
-            suggestions: (result.suggestions || []).slice(0, 5),
+            suggestions: (result.suggestions || []).slice(0, 10),
         };
     }
     catch (err) {

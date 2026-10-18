@@ -56,6 +56,7 @@ import {
   getChatSessions,
   saveChatSession,
   createChatSession,
+  getOrGenerateThoughtSummary,
   AVAILABLE_MODELS,
   DEFAULT_AI_MODEL,
   getUserPreferredModel,
@@ -113,6 +114,8 @@ export default function ProjectDetailScreen() {
   // Train of Thought Chat state
   const [ideaChat, setIdeaChat] = useState<ChatSession | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [thoughtSummary, setThoughtSummary] = useState<string>('');
+  const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
   const [chatInputText, setChatInputText] = useState('');
   const [sendingThought, setSendingThought] = useState(false);
@@ -348,7 +351,7 @@ export default function ProjectDetailScreen() {
           >(functions, 'suggestProjectLinks');
           const res = await suggestFn({ projectId: id! });
           if (res.data?.suggestions && res.data.suggestions.length > 0) {
-            const mapped: IdeaMatchResult[] = res.data.suggestions.slice(0, 5).map((s) => ({
+            const mapped: IdeaMatchResult[] = res.data.suggestions.slice(0, 10).map((s) => ({
               inspirationId: s.inspirationId,
               inspiration: bankMap[s.inspirationId] || {
                 id: s.inspirationId,
@@ -378,10 +381,10 @@ export default function ProjectDetailScreen() {
         },
         allDumpItems,
         attachedSet,
-        5
+        10
       );
 
-      setMatchedResults(localMatches.slice(0, 5));
+      setMatchedResults(localMatches.slice(0, 10));
       setHasSearched(true);
     } finally {
       setLoadingSuggestions(false);
@@ -574,6 +577,77 @@ export default function ProjectDetailScreen() {
       isMounted = false;
     };
   }, [project?.id, project?.title, links.length, user?.uid]);
+
+  // Load and cache 2-sentence summary of the train of thought
+  useEffect(() => {
+    let isMounted = true;
+    if (!ideaChat || chatMessages.length === 0) {
+      setThoughtSummary('');
+      return;
+    }
+
+    const lastMsg = chatMessages[chatMessages.length - 1];
+
+    // If chat already has a cached summary and the last message matches, do not reprocess!
+    if (
+      ideaChat.thoughtSummary &&
+      ideaChat.summaryLastMessageId === lastMsg.id &&
+      ideaChat.thoughtSummary.trim().length > 0
+    ) {
+      setThoughtSummary(ideaChat.thoughtSummary);
+      return;
+    }
+
+    setLoadingSummary(true);
+    getOrGenerateThoughtSummary(ideaChat.id, chatMessages, ideaChat, user?.uid)
+      .then((summary) => {
+        if (isMounted && summary) {
+          setThoughtSummary(summary);
+          setIdeaChat((prev) => (prev ? {
+            ...prev,
+            thoughtSummary: summary,
+            summaryLastMessageId: lastMsg.id,
+            summaryUpdatedAt: Date.now(),
+          } : prev));
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to summarize thought chat:', err);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingSummary(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [ideaChat?.id, chatMessages, user?.uid]);
+
+  // Force re-sync of thought summary
+  const handleRefreshSummary = async () => {
+    if (!ideaChat || chatMessages.length === 0) return;
+    setLoadingSummary(true);
+    try {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      const chatWithoutCache = { ...ideaChat, summaryLastMessageId: null, thoughtSummary: null };
+      const summary = await getOrGenerateThoughtSummary(ideaChat.id, chatMessages, chatWithoutCache, user?.uid);
+      setThoughtSummary(summary);
+      setIdeaChat((prev) => (prev ? {
+        ...prev,
+        thoughtSummary: summary,
+        summaryLastMessageId: lastMsg.id,
+        summaryUpdatedAt: Date.now(),
+      } : prev));
+      setToastMessage('THOUGHT SUMMARY RE-SYNCED');
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err) {
+      console.warn('Failed to refresh thought summary:', err);
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   // Open the full dedicated chat interface for this thought / idea
   const handleOpenFullChat = async () => {
@@ -1112,7 +1186,8 @@ export default function ProjectDetailScreen() {
             title="EXPORT ▾"
             variant="secondary"
             onPress={() => setShowExportModal(true)}
-            style={{ height: 28, paddingHorizontal: 8 }}
+            style={styles.exportTopNavBtn}
+            textStyle={styles.exportTopNavText}
           />
         }
       />
@@ -1155,10 +1230,10 @@ export default function ProjectDetailScreen() {
                 style={[styles.studioTab, activeTab === 'references' && styles.studioTabActive]}
                 onPress={() => setActiveTab('references')}
                 accessibilityRole="tab"
-                accessibilityLabel="References tab"
+                accessibilityLabel="Inspirations tab"
               >
                 <Text style={[styles.studioTabLabel, activeTab === 'references' && styles.studioTabLabelActive]}>
-                  REFERENCES
+                  INSPIRATIONS
                 </Text>
               </Pressable>
 
@@ -1255,7 +1330,7 @@ export default function ProjectDetailScreen() {
                     style={styles.overviewNavCard}
                     onPress={() => setActiveTab('references')}
                   >
-                    <Text style={styles.overviewNavLabel}>VISUAL REFERENCES</Text>
+                    <Text style={styles.overviewNavLabel}>INSPIRATIONS</Text>
                     <Text style={styles.overviewNavCount}>{links.length} Linked</Text>
                     <Text style={styles.overviewNavHint}>OPEN GALLERY →</Text>
                   </Pressable>
@@ -1540,10 +1615,10 @@ export default function ProjectDetailScreen() {
                   </View>
                 )}
 
-                {/* ATTACHED REFERENCES SECTION HEADER & BATCH ACTIONS */}
+                {/* ATTACHED INSPIRATIONS SECTION HEADER & BATCH ACTIONS */}
                 <View style={styles.refSectionHeaderRow}>
                   <Text style={styles.sectionHeading}>
-                    ATTACHED REFERENCES ({links.length})
+                    INSPIRATIONS ({links.length})
                   </Text>
                   {links.length > 0 && !selectRefsMode && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
@@ -1604,12 +1679,12 @@ export default function ProjectDetailScreen() {
                   </View>
                 )}
 
-                {/* ATTACHED REFERENCES LIST */}
+                {/* ATTACHED INSPIRATIONS LIST */}
                 {links.length === 0 ? (
                   <Card style={styles.emptyLinksCard}>
-                    <Text style={styles.emptyLinksTitle}>NO REFERENCES ATTACHED YET</Text>
+                    <Text style={styles.emptyLinksTitle}>NO INSPIRATIONS ATTACHED YET</Text>
                     <Text style={styles.emptyLinksText}>
-                      Tap &ldquo;⚡ SCAN DUMP&rdquo; above to automatically match references from your saved items, or &ldquo;+ BROWSE DUMP&rdquo; to attach manually.
+                      Tap &ldquo;⚡ SCAN DUMP&rdquo; above to automatically match inspirations from your saved items, or &ldquo;+ BROWSE DUMP&rdquo; to attach manually.
                     </Text>
                   </Card>
                 ) : (
@@ -1768,255 +1843,104 @@ export default function ProjectDetailScreen() {
 
                 <Card style={styles.thoughtCard}>
                   <View style={styles.thoughtBannerRow}>
-                    <Text style={styles.thoughtBannerText}>
-                      Interactive thought flow linked to &ldquo;{ideaChat?.title || project.title}&rdquo;.
-                    </Text>
-                    <Pressable onPress={handleOpenFullChat} hitSlop={8}>
-                      <Text style={styles.thoughtBannerAction}>OPEN CHAT →</Text>
-                    </Pressable>
+                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                      <Text style={styles.thoughtBannerLabel}>THOUGHT SUMMARY</Text>
+                      <Text style={styles.thoughtBannerText} numberOfLines={1}>
+                        &ldquo;{ideaChat?.title || project.title}&rdquo;
+                      </Text>
+                    </View>
+                    <Button
+                      title="OPEN CHAT →"
+                      variant="primary"
+                      onPress={handleOpenFullChat}
+                      style={{ height: 32, paddingHorizontal: 12 }}
+                    />
                   </View>
 
-                    {/* SCROLLABLE CHAT MESSAGES STREAM */}
-                    <View style={styles.chatStreamContainer}>
-                      {chatMessages.length > 0 ? (
-                        <ScrollView
-                          nestedScrollEnabled
-                          ref={thoughtStreamScrollRef}
-                          style={styles.chatMessageScroll}
-                          contentContainerStyle={styles.chatMessageScrollContent}
-                          showsVerticalScrollIndicator
-                        >
-                          {chatMessages.map((msg) => {
-                            const isUser = msg.role === 'user';
-                            return (
-                              <Pressable
-                                key={msg.id}
-                                onPress={handleOpenFullChat}
-                                style={({ pressed }) => [
-                                  styles.chatBubbleWrapper,
-                                  isUser ? styles.chatUserWrapper : styles.chatAssistantWrapper,
-                                  pressed && { opacity: 0.8 },
-                                ]}
-                              >
-                                <View
-                                  style={[
-                                    styles.chatBubble,
-                                    isUser ? styles.chatUserBubble : styles.chatAssistantBubble,
-                                  ]}
-                                >
-                                  <View style={styles.chatBubbleMetaRow}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                      <Text
-                                        style={[
-                                          styles.chatRoleTag,
-                                          isUser ? styles.chatUserRoleTag : styles.chatAssistantRoleTag,
-                                        ]}
-                                      >
-                                        {isUser ? 'YOU' : 'RUT'}
-                                      </Text>
-                                      {!isUser && (
-                                        <Badge
-                                          label={
-                                            msg.model
-                                              ? msg.model.replace('gemini-', '').toUpperCase()
-                                              : selectedModel.replace('gemini-', '').toUpperCase()
-                                          }
-                                          variant="grade"
-                                          style={{ marginLeft: 6, paddingVertical: 1, paddingHorizontal: 4 }}
-                                        />
-                                      )}
-                                    </View>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                      <Text
-                                        style={[
-                                          styles.chatTimestamp,
-                                          isUser ? styles.chatUserTimestamp : styles.chatAssistantTimestamp,
-                                        ]}
-                                      >
-                                        {new Date(msg.createdAt).toLocaleTimeString([], {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
-                                      </Text>
-                                      <Pressable
-                                        onPress={handleOpenFullChat}
-                                        hitSlop={8}
-                                        style={styles.openInChatChip}
-                                      >
-                                        <Text style={styles.openInChatChipText}>↗ FULL CHAT</Text>
-                                      </Pressable>
-                                      <Pressable
-                                        onPress={(e) => {
-                                          e.stopPropagation?.();
-                                          handleDeleteThought(msg.id);
-                                        }}
-                                        hitSlop={8}
-                                        style={{ marginLeft: 8 }}
-                                      >
-                                        <Text
-                                          style={[
-                                            styles.chatDeleteBtn,
-                                            isUser ? styles.chatUserDeleteBtn : styles.chatAssistantDeleteBtn,
-                                          ]}
-                                        >
-                                          ✕
-                                        </Text>
-                                      </Pressable>
-                                    </View>
-                                  </View>
-
-                                  {isUser ? (
-                                    <Text style={styles.chatUserText} selectable>
-                                      {msg.content}
-                                    </Text>
-                                  ) : (
-                                    <MarkdownRenderer content={msg.content} />
-                                  )}
-
-                                  {/* ALL SOURCES USED BY ANSWER (COLLAPSIBLE) */}
-                                  {!isUser && ((msg.sourceInspirationIds?.length || 0) + (msg.webSources?.length || 0)) > 0 && (
-                                    <View style={styles.chatCitationsBox}>
-                                      <Pressable
-                                        style={styles.chatCitationsHeader}
-                                        onPress={() => {
-                                          setExpandedCitations((prev) => ({
-                                            ...prev,
-                                            [msg.id]: !prev[msg.id],
-                                          }));
-                                        }}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Toggle Sources"
-                                      >
-                                        <Text style={styles.chatCitationsTitle}>
-                                          SOURCES ({((msg.sourceInspirationIds?.length || 0) + (msg.webSources?.length || 0))})
-                                        </Text>
-                                        <Text style={styles.chatCitationsToggle}>
-                                          {expandedCitations[msg.id] ? '▲ COLLAPSE' : '▼ EXPAND'}
-                                        </Text>
-                                      </Pressable>
-
-                                      {expandedCitations[msg.id] && (
-                                        <View style={{ marginTop: 6, gap: 6 }}>
-                                          {msg.sourceInspirationIds && msg.sourceInspirationIds.length > 0 && (
-                                            <View style={styles.chatCitationsRow}>
-                                              {msg.sourceInspirationIds.map((sid) => {
-                                                const item = bankMap[sid] || allDumpItems.find((d) => d.id === sid);
-                                                return (
-                                                  <Pressable
-                                                    key={sid}
-                                                    style={styles.citationPill}
-                                                    onPress={(e) => {
-                                                      e.stopPropagation?.();
-                                                      router.push(`/(app)/inspiration/${sid}`);
-                                                    }}
-                                                  >
-                                                    <Text style={styles.citationPillText} numberOfLines={1}>
-                                                      🔗 {item?.title || `Ref [${sid.slice(-4)}]`}
-                                                    </Text>
-                                                  </Pressable>
-                                                );
-                                              })}
-                                            </View>
-                                          )}
-
-                                          {msg.webSources && msg.webSources.length > 0 && (
-                                            <View style={styles.chatCitationsRow}>
-                                              {msg.webSources.map((ws, wIdx) => {
-                                                const domain = ws.uri ? ws.uri.replace(/^https?:\/\//, '').split('/')[0] : '';
-                                                return (
-                                                  <Pressable
-                                                    key={`web-${wIdx}`}
-                                                    style={[styles.citationPill, { backgroundColor: colors.ink }]}
-                                                    onPress={(e) => {
-                                                      e.stopPropagation?.();
-                                                      if (ws.uri) {
-                                                        Linking.openURL(ws.uri).catch(() => {});
-                                                      }
-                                                    }}
-                                                  >
-                                                    <Text style={[styles.citationPillText, { color: colors.onInk }]} numberOfLines={1}>
-                                                      🌐 {ws.title || domain || 'Web source'} ↗
-                                                    </Text>
-                                                  </Pressable>
-                                                );
-                                              })}
-                                            </View>
-                                          )}
-                                        </View>
-                                      )}
-                                    </View>
-                                  )}
-                                  {/* ACTION ROW: ADD THOUGHT TO IDEA NOTES / BRIEF */}
-                                  <View style={styles.thoughtActionRow}>
-                                    <Pressable
-                                      style={styles.thoughtActionBtn}
-                                      onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        handleAddThoughtToNotes(msg.content);
-                                      }}
-                                      accessibilityRole="button"
-                                      accessibilityLabel="Add to idea notes"
-                                    >
-                                      <Text style={styles.thoughtActionBtnText}>+ ADD TO NOTES</Text>
-                                    </Pressable>
-                                    <Pressable
-                                      style={styles.thoughtActionBtn}
-                                      onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        handleSetThoughtAsBrief(msg.content);
-                                      }}
-                                      accessibilityRole="button"
-                                      accessibilityLabel="Set as brief"
-                                    >
-                                      <Text style={styles.thoughtActionBtnText}>SET AS BRIEF</Text>
-                                    </Pressable>
-                                    <Pressable
-                                      style={styles.thoughtActionBtn}
-                                      onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        handleOpenFullChat();
-                                      }}
-                                      accessibilityRole="button"
-                                      accessibilityLabel="Open in full chat"
-                                    >
-                                      <Text style={styles.thoughtActionBtnText}>OPEN CHAT →</Text>
-                                    </Pressable>
-                                  </View>
-                                </View>
-                              </Pressable>
-                            );
-                          })}
-                        </ScrollView>
-                      ) : (
-                        <Pressable
-                          style={styles.emptyThoughtBox}
-                          onPress={handleOpenFullChat}
-                        >
-                          <Text style={styles.emptyThoughtHeading}>START A THOUGHT</Text>
-                          <Text style={styles.emptyThoughtText}>
-                            Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open chat.
-                          </Text>
-                          <Button
-                            title="OPEN CHAT"
-                            variant="primary"
-                            onPress={handleOpenFullChat}
-                            style={{ marginTop: spacing.sm, alignSelf: 'center', height: 36, paddingHorizontal: 16 }}
-                          />
-                        </Pressable>
-                      )}
+                  {loadingSummary ? (
+                    <View style={styles.thinkingIndicator}>
+                      <ActivityIndicator size="small" color={colors.ink} />
+                      <Text style={styles.thinkingText}>
+                        SYNTHESIZING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                      </Text>
                     </View>
-
-                    {sendingThought ? (
-                      <View style={styles.thinkingIndicator}>
-                        <ActivityIndicator size="small" color={colors.ink} />
-                        <Text style={styles.thinkingText}>
-                          DEVELOPING THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                  ) : chatMessages.length === 0 ? (
+                    <Pressable
+                      style={styles.emptyThoughtBox}
+                      onPress={handleOpenFullChat}
+                    >
+                      <Text style={styles.emptyThoughtHeading}>START A THOUGHT</Text>
+                      <Text style={styles.emptyThoughtText}>
+                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat.
+                      </Text>
+                      <Button
+                        title="OPEN CHAT"
+                        variant="primary"
+                        onPress={handleOpenFullChat}
+                        style={{ marginTop: spacing.sm, alignSelf: 'center', height: 36, paddingHorizontal: 16 }}
+                      />
+                    </Pressable>
+                  ) : (
+                    <View style={styles.thoughtSummaryWrapper}>
+                      <View style={styles.thoughtSummaryQuoteBox}>
+                        <Text style={styles.thoughtSummaryQuoteText} selectable>
+                          {thoughtSummary || 'Exploring creative angles and conceptual directions for this idea.'}
                         </Text>
                       </View>
-                    ) : null}
-                  </Card>
-                </View>
-              )}
+
+                      <View style={styles.thoughtSummaryMetaRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Badge
+                            label={`${chatMessages.length} MESSAGES`}
+                            variant="grade"
+                            style={{ paddingVertical: 1, paddingHorizontal: 6 }}
+                          />
+                          <Badge
+                            label={selectedModel.replace('gemini-', '').toUpperCase()}
+                            variant="outline"
+                            style={{ paddingVertical: 1, paddingHorizontal: 6 }}
+                          />
+                          <Text style={styles.thoughtSummaryMetaNote}>
+                            {ideaChat?.summaryUpdatedAt
+                              ? `Updated ${new Date(ideaChat.summaryUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                              : 'Up to date'}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={handleRefreshSummary}
+                          hitSlop={8}
+                          style={styles.thoughtSummaryRefreshBtn}
+                        >
+                          <Text style={styles.thoughtSummaryRefreshText}>↻ RE-SYNC</Text>
+                        </Pressable>
+                      </View>
+
+                      {/* SUMMARY ACTIONS */}
+                      <View style={styles.thoughtSummaryActionsRow}>
+                        <Button
+                          title="OPEN CHAT →"
+                          variant="primary"
+                          onPress={handleOpenFullChat}
+                          style={{ flex: 1.2, height: 36 }}
+                        />
+                        <Button
+                          title="+ ADD TO NOTES"
+                          variant="secondary"
+                          onPress={() => handleAddThoughtToNotes(thoughtSummary)}
+                          style={{ flex: 1, height: 36 }}
+                        />
+                        <Button
+                          title="SET AS BRIEF"
+                          variant="secondary"
+                          onPress={() => handleSetThoughtAsBrief(thoughtSummary)}
+                          style={{ flex: 1, height: 36 }}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </Card>
+              </View>
+            )}
 
             {/* LINK TRAIN OF THOUGHT MODAL */}
             <Modal visible={showLinkChatModal} animationType="slide" transparent>
@@ -2230,7 +2154,8 @@ export default function ProjectDetailScreen() {
                           title={copiedMarkdown ? 'COPIED ✓' : 'COPY ⎘'}
                           variant={copiedMarkdown ? 'primary' : 'secondary'}
                           onPress={handleCopyMarkdown}
-                          style={{ height: 32, paddingHorizontal: 12 }}
+                          style={styles.exportModalOptionBtn}
+                          textStyle={styles.exportModalOptionBtnText}
                         />
                       </View>
                     </Card>
@@ -2249,7 +2174,8 @@ export default function ProjectDetailScreen() {
                           variant="primary"
                           onPress={handleExportPDF}
                           loading={exportingPDF}
-                          style={{ height: 32, paddingHorizontal: 12 }}
+                          style={styles.exportModalOptionBtn}
+                          textStyle={styles.exportModalOptionBtnText}
                         />
                       </View>
                     </Card>
@@ -2268,7 +2194,8 @@ export default function ProjectDetailScreen() {
                           variant="secondary"
                           onPress={handleExportDoc}
                           loading={exportingDoc}
-                          style={{ height: 32, paddingHorizontal: 12 }}
+                          style={styles.exportModalOptionBtn}
+                          textStyle={styles.exportModalOptionBtnText}
                         />
                       </View>
                     </Card>
@@ -2781,6 +2708,14 @@ const getStyles = (colors: ThemeColors) =>
     alignItems: 'flex-start',
     marginBottom: spacing.sm,
   },
+  thoughtBannerLabel: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
   thoughtBannerText: {
     ...typography.captionSm,
     color: colors.inkSoft,
@@ -2793,6 +2728,53 @@ const getStyles = (colors: ThemeColors) =>
     fontWeight: '800',
     color: colors.ink,
     marginLeft: spacing.xs,
+  },
+  thoughtSummaryWrapper: {
+    gap: spacing.sm,
+  },
+  thoughtSummaryQuoteBox: {
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.ink,
+    padding: spacing.base,
+  },
+  thoughtSummaryQuoteText: {
+    ...typography.bodyMd,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.ink,
+    fontStyle: 'italic',
+  },
+  thoughtSummaryMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  thoughtSummaryMetaNote: {
+    ...typography.captionSm,
+    fontSize: 10,
+    color: colors.inkSoft,
+  },
+  thoughtSummaryRefreshBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+  },
+  thoughtSummaryRefreshText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  thoughtSummaryActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   openInChatChip: {
     borderWidth: 1,
@@ -3424,5 +3406,33 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 10,
     color: colors.ink,
     lineHeight: 16,
+  },
+  exportTopNavBtn: {
+    height: 24,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exportTopNavText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    lineHeight: 12,
+  },
+  exportModalOptionBtn: {
+    height: 26,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exportModalOptionBtnText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    lineHeight: 12,
   },
 });

@@ -9,6 +9,16 @@
 
 ---
 
+### Brief Description (Submission Form)
+
+> **Prompt:** *Brief description of what you have built (please include how you are leveraging Firebase, Firestore, Cloud Run and Gemini in your submission).*
+
+**`rut` is an AI-powered universal inspiration bank and visual thinking studio (Web, iOS, Android, and Chrome Extension) that unifies fragmented social bookmark hoarding into an active ideation workspace using Firebase Authentication, Firebase Hosting, and Cloud Firestore for real-time multi-device synchronization.**
+
+**It leverages serverless Google Cloud Run to execute secure web scraping and sub-25ms in-memory vector search with zero database egress costs, while orchestrating Google Gemini (Flash Lite, Flash, and `text-embedding-004`) for autonomous tagging, 2-sentence summarization, and citation-backed conversational ideation.**
+
+---
+
 ### 1. Brief About the Idea (100 words)
 
 `rut` is an AI-powered creative inspiration vault and visual thinking studio available across Web, iOS, Android, and a Chrome extension. It replaces fragmented digital bookmark hoarding with universal one-click capture and social collection syncing from Instagram, Pinterest, and Facebook. Every captured link, snippet, and note is autonomously analyzed, tagged, and indexed with Google Gemini and dense text embeddings. Creators brainstorm inside an interactive "Train of Thought" canvas that cites private inspirations and live web precedents inline, while an automated brief matcher connects saved assets directly to active project concepts with zero media storage overhead.

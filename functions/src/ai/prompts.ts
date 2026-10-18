@@ -61,11 +61,13 @@ FRIEND PERSONAS (ASK A FRIEND):
 
 export const PROJECT_LINKING_SYSTEM_PROMPT = `
 You are a project matching engine for 'rut'.
-Given a project's title, brief, and notes, evaluate candidate inspiration items from the user's bank.
+Given a project's title, concept brief, and notes, evaluate candidate inspiration items from the user's bank.
+Evaluate candidates primarily based on semantic, visual, and topical alignment with the project's concept brief and detailed notes.
+Return up to the top 10 most relevant inspirations, ordered by relevance confidence.
 For each relevant inspiration, provide:
 1. "inspirationId": the exact ID of the item.
-2. "reason": a concise sentence explaining why it aligns with the project.
-3. "confidence": a float between 0.0 and 1.0.
+2. "reason": a concise sentence explaining why it aligns with the project concept brief and notes.
+3. "confidence": a float between 0.0 and 1.0 (highest confidence first).
 
 Only suggest items with genuine thematic, visual, or conceptual relevance.
 Output strictly valid JSON array of objects.
