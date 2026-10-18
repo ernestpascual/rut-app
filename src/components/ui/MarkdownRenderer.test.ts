@@ -105,6 +105,46 @@ Paragraph 2 line C`;
       content: 'Paragraph 2 line C',
     });
   });
+
+  test('parses ASCII and Unicode flowchart diagrams into scrollable codeblocks without breaking', () => {
+    const raw = `3. The Signal Processing & Mapping Pipeline
+Once your IoT receiver node captures raw CSI matrices, it sends them via UDP/WebSocket to a local edge broker (e.g., a Python service or Rust backend). The data pipeline looks like this:
+[WiFi RF Wave Environment] 
+         │
+         ▼
+[ESP32 / Rx Antenna Array] ──(Raw CSI Subcarrier Matrix)──► [Edge Computing Server]
+                                                                  │
+                                                                  ├─► Phase Unwrapping & SFO Sanitization
+                                                                  ├─► MUSIC / ESPRIT (AoA & ToF Calculation)
+                                                                  └─► Point Cloud / Heatmap Reconstruction
+1.
+Phase Sanitization: Raw CSI phase readings are contaminated by Sampling Frequency Offset (SFO) and Carrier Frequency Offset (CFO). You apply a linear transformation across subcarriers to unwrap and sanitize the phase.`;
+
+    const blocks = parseBlocks(raw);
+    expect(blocks).toHaveLength(4);
+    expect(blocks[0]).toEqual({
+      type: 'ol',
+      orderNumber: '3',
+      content: 'The Signal Processing & Mapping Pipeline',
+    });
+    expect(blocks[1].type).toBe('paragraph');
+    expect(blocks[1].content).toContain('The data pipeline looks like this:');
+
+    // Flowchart diagram preserved as codeblock
+    expect(blocks[2].type).toBe('codeblock');
+    expect(blocks[2].lang).toBe('flowchart');
+    expect(blocks[2].content).toContain('[WiFi RF Wave Environment]');
+    expect(blocks[2].content).toContain('├─► Phase Unwrapping & SFO Sanitization');
+    expect(blocks[2].content).toContain('└─► Point Cloud / Heatmap Reconstruction');
+
+    // Multiline ordered list item parsed cleanly
+    expect(blocks[3]).toEqual({
+      type: 'ol',
+      orderNumber: '1',
+      content:
+        'Phase Sanitization: Raw CSI phase readings are contaminated by Sampling Frequency Offset (SFO) and Carrier Frequency Offset (CFO). You apply a linear transformation across subcarriers to unwrap and sanitize the phase.',
+    });
+  });
 });
 
 describe('MarkdownRenderer hex color swatches', () => {

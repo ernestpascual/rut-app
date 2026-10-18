@@ -17,6 +17,19 @@ export interface Block {
   tableRows?: string[][];
 }
 
+const BOX_DRAWING_REGEX = /[│┃─━┌┐└┘├┤┬┴┼►▼◄▲▶◀▲▼\u2500-\u257F]/;
+const ASCII_CONNECTOR_REGEX = /(?:--+>|==+>|<--+|<==+|──+►|──+>|\+--+|\|--+|\|->|\+-+>)/;
+const ASCII_BOX_BORDER_REGEX = /^\s*(\+[-=+]+\+|\|[-=+]+\|)\s*$/;
+
+export function isDiagramLine(line: string): boolean {
+  if (!line) return false;
+  return (
+    BOX_DRAWING_REGEX.test(line) ||
+    ASCII_CONNECTOR_REGEX.test(line) ||
+    ASCII_BOX_BORDER_REGEX.test(line)
+  );
+}
+
 /**
  * Parses raw markdown text into structural blocks (headers, code blocks, lists, quotes, paragraphs).
  */
@@ -125,14 +138,89 @@ export function parseBlocks(raw: string): Block[] {
       continue;
     }
 
-    // Ordered list item (1. item)
-    if (/^\d+\.\s+/.test(trimmed)) {
+    // Flowchart / ASCII Diagram block check
+    const isStartOfDiagram = (idx: number): boolean => {
+      if (idx >= lines.length) return false;
+      const cur = lines[idx];
+      if (isDiagramLine(cur)) return true;
+      if (
+        idx + 1 < lines.length &&
+        isDiagramLine(lines[idx + 1]) &&
+        /^\s*(\[.+\]|\(.+\)|\+[-=+]+\+)\s*$/.test(cur)
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    if (isStartOfDiagram(i)) {
       flushParagraph();
-      const match = trimmed.match(/^(\d+)\.\s+(.*)/);
+      const diagramLines: string[] = [];
+      while (i < lines.length) {
+        const cur = lines[i];
+        const trimmedCur = cur.trim();
+
+        if (diagramLines.length === 0 && isStartOfDiagram(i)) {
+          diagramLines.push(cur);
+          i++;
+          continue;
+        }
+
+        if (isDiagramLine(cur)) {
+          diagramLines.push(cur);
+          i++;
+          continue;
+        }
+
+        // Check if line is an indented node, connector, or label within the diagram
+        if (
+          diagramLines.length > 0 &&
+          (cur.startsWith('  ') || /^\s*(\[.+\]|\(.+\)|\+[-=+]+\+)\s*$/.test(cur)) &&
+          (i + 1 >= lines.length || isDiagramLine(lines[i + 1]) || lines[i + 1].startsWith('  ') || !lines[i + 1].trim())
+        ) {
+          diagramLines.push(cur);
+          i++;
+          continue;
+        }
+
+        // Allow at most 1 blank line if immediately followed by another diagram line
+        if (!trimmedCur && i + 1 < lines.length && isDiagramLine(lines[i + 1])) {
+          diagramLines.push(cur);
+          i++;
+          continue;
+        }
+
+        break;
+      }
+
+      i--; // adjust because for loop increments i
+
+      if (diagramLines.length > 0) {
+        blocks.push({
+          type: 'codeblock',
+          lang: 'flowchart',
+          content: diagramLines.join('\n'),
+        });
+      }
+      continue;
+    }
+
+    // Ordered list item (e.g. "1. Step" or "1." on its own line followed by content)
+    const olMatch = trimmed.match(/^(\d+)\.(?:\s+(.*)|\s*$)/);
+    if (olMatch) {
+      flushParagraph();
+      let orderContent = (olMatch[2] || '').trim();
+      if (!orderContent && i + 1 < lines.length && lines[i + 1].trim()) {
+        const nextTrimmed = lines[i + 1].trim();
+        if (!/^(?:#{1,6}\s+|[-*•]\s+|\d+\.\s*|---|\*\*\*|```|>)/.test(nextTrimmed)) {
+          orderContent = nextTrimmed;
+          i++; // consume next line
+        }
+      }
       blocks.push({
         type: 'ol',
-        orderNumber: match ? match[1] : '1',
-        content: match ? match[2].trim() : trimmed,
+        orderNumber: olMatch[1],
+        content: orderContent,
       });
       continue;
     }
@@ -625,7 +713,20 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
               />
             );
 
-          case 'table':
+          case 'table': {
+            const headers = block.tableHeaders || [];
+            const rows = block.tableRows || [];
+            const colCount = Math.max(headers.length, ...rows.map((r) => r.length), 1);
+
+            // Compute synchronized column widths across header and all rows
+            const colWidths = Array.from({ length: colCount }).map((_, cIdx) => {
+              let maxLen = (headers[cIdx] || '').length;
+              rows.forEach((r) => {
+                if (r[cIdx]) maxLen = Math.max(maxLen, r[cIdx].length);
+              });
+              return Math.min(280, Math.max(100, Math.round(maxLen * 8.5 + 24)));
+            });
+
             return (
               <ScrollView
                 key={`b-${idx}`}
@@ -639,7 +740,7 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                     { borderColor: isUser ? colors.onInk : colors.hairline },
                   ]}
                 >
-                  {block.tableHeaders && block.tableHeaders.length > 0 ? (
+                  {headers.length > 0 ? (
                     <View
                       style={[
                         styles.tableRow,
@@ -652,8 +753,11 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                         },
                       ]}
                     >
-                      {block.tableHeaders.map((header, hIdx) => (
-                        <View key={`th-${hIdx}`} style={styles.tableCell}>
+                      {headers.map((header, hIdx) => (
+                        <View
+                          key={`th-${hIdx}`}
+                          style={[styles.tableCell, { width: colWidths[hIdx] }]}
+                        >
                           <Text style={[styles.tableHeaderText, { color: textColor }]}>
                             {renderInlineFormatted(
                               header,
@@ -668,19 +772,26 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                     </View>
                   ) : null}
 
-                  {block.tableRows?.map((row, rIdx) => (
+                  {rows.map((row, rIdx) => (
                     <View
                       key={`tr-${rIdx}`}
                       style={[
                         styles.tableRow,
-                        { borderBottomColor: isUser ? 'rgba(255,255,255,0.1)' : colors.hairlineGrade },
-                        rIdx === (block.tableRows?.length || 0) - 1
+                        {
+                          borderBottomColor: isUser
+                            ? 'rgba(255,255,255,0.1)'
+                            : colors.hairlineGrade,
+                        },
+                        rIdx === rows.length - 1
                           ? { borderBottomWidth: 0 }
                           : { borderBottomWidth: 1 },
                       ]}
                     >
                       {row.map((cell, cIdx) => (
-                        <View key={`td-${cIdx}`} style={styles.tableCell}>
+                        <View
+                          key={`td-${cIdx}`}
+                          style={[styles.tableCell, { width: colWidths[cIdx] }]}
+                        >
                           <Text style={[baseTextStyle, { fontSize: 13, lineHeight: 18 }]}>
                             {renderInlineFormatted(
                               cell,
@@ -697,6 +808,7 @@ export function MarkdownRenderer({ content, isUser = false }: MarkdownRendererPr
                 </View>
               </ScrollView>
             );
+          }
 
           case 'paragraph':
           default:
@@ -830,7 +942,7 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   tableHeaderRow: {
     borderBottomWidth: 1.5,
@@ -838,7 +950,7 @@ const styles = StyleSheet.create({
   tableCell: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    minWidth: 90,
+    minWidth: 100,
     justifyContent: 'center',
   },
   tableHeaderText: {
