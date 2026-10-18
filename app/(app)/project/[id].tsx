@@ -71,6 +71,16 @@ import {
 } from '../../../src/features/ideas/ideaExporter';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 
+function getShortModelName(model: string): string {
+  if (!model) return 'AI';
+  const clean = model.replace('gemini-', '');
+  if (clean.includes('flash-thinking')) return 'THINKING';
+  if (clean.includes('flash-lite')) return '3.5 LITE';
+  if (clean.includes('2.5-pro')) return '2.5 PRO';
+  if (clean.includes('2.5-flash')) return '2.5 FLASH';
+  return clean.slice(0, 10).toUpperCase();
+}
+
 export default function ProjectDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -1864,7 +1874,7 @@ export default function ProjectDetailScreen() {
                     accessibilityLabel="Select AI Model"
                   >
                     <Text style={styles.thoughtsEqualBtnText} numberOfLines={1}>
-                      {selectedModel.replace('gemini-', '').toUpperCase()} ▾
+                      {getShortModelName(selectedModel)} ▾
                     </Text>
                   </Pressable>
 
@@ -1893,9 +1903,9 @@ export default function ProjectDetailScreen() {
 
                 <Card style={styles.thoughtCard}>
                   <View style={styles.thoughtBannerRow}>
-                    <View style={{ flex: 1, marginRight: spacing.sm }}>
+                    <View style={{ flex: 1, marginRight: spacing.xs }}>
                       <Text style={styles.thoughtBannerLabel}>THOUGHT SUMMARY</Text>
-                      <Text style={styles.thoughtBannerText} numberOfLines={1}>
+                      <Text style={styles.thoughtBannerText} numberOfLines={1} ellipsizeMode="tail">
                         &ldquo;{ideaChat?.title || project.title}&rdquo;
                       </Text>
                     </View>
@@ -1903,15 +1913,16 @@ export default function ProjectDetailScreen() {
                       title="OPEN CHAT →"
                       variant="primary"
                       onPress={handleOpenFullChat}
-                      style={{ height: 32, paddingHorizontal: 12 }}
+                      style={styles.thoughtBannerBtn}
+                      textStyle={styles.thoughtBannerBtnText}
                     />
                   </View>
 
                   {loadingSummary ? (
                     <View style={styles.thinkingIndicator}>
                       <ActivityIndicator size="small" color={colors.ink} />
-                      <Text style={styles.thinkingText}>
-                        SYNTHESIZING TRAIN OF THOUGHT ({selectedModel.replace('gemini-', '').toUpperCase()})...
+                      <Text style={styles.thinkingText} numberOfLines={2}>
+                        SYNTHESIZING TRAIN OF THOUGHT ({getShortModelName(selectedModel)})...
                       </Text>
                     </View>
                   ) : chatMessages.length === 0 ? (
@@ -1921,13 +1932,14 @@ export default function ProjectDetailScreen() {
                     >
                       <Text style={styles.emptyThoughtHeading}>START A THOUGHT</Text>
                       <Text style={styles.emptyThoughtText}>
-                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {selectedModel}. Tap to open full chat.
+                        Brainstorm angles, critique directions, or synthesize your saved inspirations using {getShortModelName(selectedModel)}. Tap to open full chat.
                       </Text>
                       <Button
                         title="OPEN CHAT"
                         variant="primary"
                         onPress={handleOpenFullChat}
-                        style={{ marginTop: spacing.sm, alignSelf: 'center', height: 36, paddingHorizontal: 16 }}
+                        style={{ marginTop: spacing.sm, alignSelf: 'center', height: 30, paddingHorizontal: 12 }}
+                        textStyle={styles.thoughtActionBtnText}
                       />
                     </Pressable>
                   ) : (
@@ -1939,18 +1951,18 @@ export default function ProjectDetailScreen() {
                       </View>
 
                       <View style={styles.thoughtSummaryMetaRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
                           <Badge
-                            label={`${chatMessages.length} MESSAGES`}
+                            label={`${chatMessages.length} MSGS`}
                             variant="grade"
-                            style={{ paddingVertical: 1, paddingHorizontal: 6 }}
+                            style={{ paddingVertical: 1, paddingHorizontal: 5 }}
                           />
                           <Badge
-                            label={selectedModel.replace('gemini-', '').toUpperCase()}
+                            label={getShortModelName(selectedModel)}
                             variant="outline"
-                            style={{ paddingVertical: 1, paddingHorizontal: 6 }}
+                            style={{ paddingVertical: 1, paddingHorizontal: 5 }}
                           />
-                          <Text style={styles.thoughtSummaryMetaNote}>
+                          <Text style={styles.thoughtSummaryMetaNote} numberOfLines={1}>
                             {ideaChat?.summaryUpdatedAt
                               ? `Updated ${new Date(ideaChat.summaryUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                               : 'Up to date'}
@@ -1971,19 +1983,22 @@ export default function ProjectDetailScreen() {
                           title="OPEN CHAT →"
                           variant="primary"
                           onPress={handleOpenFullChat}
-                          style={{ flex: 1.2, height: 36 }}
+                          style={styles.thoughtActionBtn}
+                          textStyle={styles.thoughtActionBtnText}
                         />
                         <Button
-                          title="+ ADD TO NOTES"
+                          title="+ TO NOTES"
                           variant="secondary"
                           onPress={() => handleAddThoughtToNotes(thoughtSummary)}
-                          style={{ flex: 1, height: 36 }}
+                          style={styles.thoughtActionBtn}
+                          textStyle={styles.thoughtActionBtnText}
                         />
                         <Button
                           title="SET AS BRIEF"
                           variant="secondary"
                           onPress={() => handleSetThoughtAsBrief(thoughtSummary)}
-                          style={{ flex: 1, height: 36 }}
+                          style={styles.thoughtActionBtn}
+                          textStyle={styles.thoughtActionBtnText}
                         />
                       </View>
                     </View>
@@ -2750,13 +2765,14 @@ const getStyles = (colors: ThemeColors) =>
     backgroundColor: colors.surfaceGrade,
     borderWidth: 1,
     borderColor: colors.ink,
-    padding: spacing.base,
+    padding: spacing.sm,
+    overflow: 'hidden',
   },
   thoughtBannerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
+    alignItems: 'center',
+    marginBottom: spacing.xs,
   },
   thoughtBannerLabel: {
     ...typography.captionCap,
@@ -2772,6 +2788,16 @@ const getStyles = (colors: ThemeColors) =>
     lineHeight: 18,
     flex: 1,
   },
+  thoughtBannerBtn: {
+    height: 26,
+    paddingHorizontal: 8,
+  },
+  thoughtBannerBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   thoughtBannerAction: {
     ...typography.captionCap,
     fontSize: 9,
@@ -2780,7 +2806,7 @@ const getStyles = (colors: ThemeColors) =>
     marginLeft: spacing.xs,
   },
   thoughtSummaryWrapper: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   thoughtSummaryQuoteBox: {
     backgroundColor: colors.canvas,
@@ -2788,20 +2814,23 @@ const getStyles = (colors: ThemeColors) =>
     borderColor: colors.hairline,
     borderLeftWidth: 3,
     borderLeftColor: colors.ink,
-    padding: spacing.base,
+    padding: spacing.sm,
   },
   thoughtSummaryQuoteText: {
     ...typography.bodyMd,
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
     color: colors.ink,
     fontStyle: 'italic',
+    flexShrink: 1,
   },
   thoughtSummaryMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 2,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   thoughtSummaryMetaNote: {
     ...typography.captionSm,
@@ -2823,8 +2852,22 @@ const getStyles = (colors: ThemeColors) =>
   },
   thoughtSummaryActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     marginTop: spacing.xs,
+  },
+  thoughtActionBtn: {
+    flex: 1,
+    minWidth: 88,
+    height: 30,
+    paddingHorizontal: 6,
+  },
+  thoughtActionBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textAlign: 'center',
   },
   openInChatChip: {
     borderWidth: 1,
@@ -2999,6 +3042,8 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 9,
     color: colors.inkSoft,
     marginLeft: spacing.xs,
+    flex: 1,
+    flexShrink: 1,
   },
   quickPromptScroll: {
     marginBottom: spacing.sm,
@@ -3138,11 +3183,11 @@ const getStyles = (colors: ThemeColors) =>
     flexDirection: 'row',
     gap: spacing.xs,
     width: '100%',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   thoughtsEqualBtn: {
     flex: 1,
-    height: 38,
+    height: 30,
     borderWidth: 1,
     borderColor: colors.hairline,
     backgroundColor: colors.canvas,
@@ -3159,7 +3204,7 @@ const getStyles = (colors: ThemeColors) =>
     fontSize: 9,
     fontWeight: '700',
     color: colors.ink,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     textAlign: 'center',
   },
   thoughtsEqualBtnTextPrimary: {
@@ -3289,30 +3334,6 @@ const getStyles = (colors: ThemeColors) =>
     color: colors.ink,
     fontWeight: '700',
     marginTop: 4,
-  },
-  thoughtActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    paddingTop: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.hairlineSoft,
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  thoughtActionBtn: {
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    backgroundColor: colors.canvas,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  thoughtActionBtnText: {
-    ...typography.captionCap,
-    fontSize: 8,
-    fontWeight: '700',
-    color: colors.ink,
-    letterSpacing: 0.5,
   },
   newChatCard: {
     backgroundColor: colors.surfaceGrade,

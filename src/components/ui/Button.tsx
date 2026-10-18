@@ -60,6 +60,8 @@ export const Button: React.FC<ButtonProps> = ({
         />
       ) : (
         <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[
             styles.baseText,
             variant === 'primary' && { color: colors.onInk },
