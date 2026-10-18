@@ -519,7 +519,17 @@ Prototype performance and system resilience are measured across **five concrete 
 #### 9.1 Submission Summary
 `rut` solves creative fragmentation by turning unorganized digital hoarding across Instagram, Pinterest, TikTok, and the open web into an active, citation-backed ideation partner. By integrating native mobile share sheets, a dedicated Manifest V3 Chrome extension, and a high-performance Web PWA with Google Gemini models, `rut` bridges the gap between passive asset collection and active creative execution. The platform is architected for zero-binary storage overhead, extreme speed (< 25ms semantic search, ~1s live voice turnarounds), and sustainable unit economics ($0.039/user/month with a 99.2% gross margin).
 
-#### 9.2 Key Solution Highlights
+#### 9.2 Top 5 "By the Numbers" Highlights
+
+| Rank | Highlight Metric | Measured Value | Significance to Creators & Business |
+|:---:|---|:---:|---|
+| **#1** | **Blended Cost per User** | **$0.039 / month** | **99.2% Gross Margin** ($4.961 profit on a $5.00/mo subscriber) powered by integer-micros ledger accounting and Gemini Flash Lite economics. |
+| **#2** | **In-Memory Vector Search** | **< 25 ms** | Sub-perceptual natural-language semantic retrieval across 768-dimensional embeddings executed directly in memory with **$0 external vector DB costs**. |
+| **#3** | **Zero-Binary Storage** | **0 bytes ($0.00)** | Zero media binaries stored in cloud buckets—eliminates hosting and bandwidth egress bills through verified remote URL architecture. |
+| **#4** | **Automated Test Suite** | **120 / 120 (100%)** | Zero-defect production resilience across **15 automated test suites** and **0 TypeScript compilation errors** across Web, Mobile, Functions, and Extension. |
+| **#5** | **Tri-Surface Ecosystem** | **3 Platforms** | Seamless cross-platform capture and ideation spanning **Web PWA** (`rut.web.app`), **Native Mobile** (iOS & Android share extensions), and **Chrome Extension** (v1.0.3). |
+
+#### 9.3 Key Architectural & Functional Highlights
 
 1. **True Tri-Surface Ubiquity (Web, Mobile, Extension)**
    - **Chrome Extension (v1.0.3)**: 1-click active tab dump with duplicate prevention and automated collection scrapers for Instagram, Pinterest, and Facebook.
