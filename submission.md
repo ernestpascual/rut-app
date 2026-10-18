@@ -474,9 +474,9 @@ Blended Average Cost per User = (0.70 × $0.0045) + (0.25 × $0.0442) + (0.05 ×
 ### 8. Prototype Performance Report & Benchmarking
 
 #### 8.1 Verification Baseline & Code Commit
-- **Baseline Git Commit Hash:** `66a5973fa4309c7776b7391344478197519dc162`
-- **Commit Description:** `feat(live): implement hands-free continuous conversational loop with waiting animation and auto-rearming`
-- **Date & Timestamp:** `2026-10-19T00:50:16+08:00`
+- **Baseline Git Commit Hash:** `8cfa46b19f0d953c1aa7935ed2658b4d45b7e193`
+- **Commit Description:** `fix(live): immediately cancel all speech recognition, active speech, and in-flight replies when exiting Google Live`
+- **Date & Timestamp:** `2026-10-19T00:55:26+08:00`
 - **Working Tree State:** Clean (100% committed)
 
 #### 8.2 How Performance is Measured
@@ -489,7 +489,7 @@ Prototype performance and system resilience are measured across **five concrete 
 
 #### 8.3 Benchmark Results Matrix
 
-| Metric Category | Target / SLA | Measured Value (Commit `66a5973`) | Status | Verification Method |
+| Metric Category | Target / SLA | Measured Value (Commit `8cfa46b`) | Status | Verification Method |
 |---|---|---|:---:|---|
 | **Client Test Suite** | 100% Pass | **12 / 12 suites passed, 105 / 105 tests passed** | **PASS** | `npm test` (Jest) |
 | **Client Test Duration** | < 25.0s | **20.49s – 21.69s** | **PASS** | Automated execution time |
