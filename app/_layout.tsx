@@ -11,6 +11,8 @@ import { extractInstagramUrl, extractUrlFromText, detectPlatform } from '../src/
 import { IncomingSharePayload } from '../src/types';
 
 import * as Linking from 'expo-linking';
+import { useFonts } from 'expo-font';
+import { Feather } from '@expo/vector-icons';
 import { redirectSystemPath } from './+native-intent';
 
 function ShareIntentHandler() {
@@ -171,6 +173,10 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  useFonts({
+    ...(Feather.font || {}),
+  });
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
