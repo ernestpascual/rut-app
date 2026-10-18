@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../design/ThemeContext';
 import { typography, spacing, rounded } from '../../design/tokens';
-import { Badge } from '../ui/Badge';
 
 export const FRIEND_AVATARS: Record<string, any> = {
   kenji: require('../../../assets/images/friends/kenji.jpg'),
@@ -40,7 +40,7 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
     name: "Occam's Razor",
     shortLabel: 'OCCAM',
     subtitle: 'SIMPLEST WAY',
-    icon: '🪒',
+    icon: 'scissors',
     color: '#0057FF',
     prompt:
       "Apply Occam's Razor to our current discussion: What is the absolute simplest, most direct, and unbloated way to accomplish what we are discussing? Strip away all unneeded complexity, extra steps, and over-engineering.",
@@ -50,7 +50,7 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
     name: 'Pareto (80/20)',
     shortLabel: 'PARETO',
     subtitle: '80% BENEFIT',
-    icon: '⚖️',
+    icon: 'pie-chart',
     color: '#10B981',
     prompt:
       'Apply the Pareto Principle (80/20 Rule) to our current discussion: What is the vital 20% of effort, features, or core decisions that will yield 80% of the total benefit and impact? What can we safely de-prioritize or omit for now?',
@@ -60,7 +60,7 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
     name: 'Cost Estimate',
     shortLabel: 'COST',
     subtitle: 'BUDGET EST.',
-    icon: '💰',
+    icon: 'dollar-sign',
     color: '#F59E0B',
     prompt:
       'Determine all the cost components of what we are discussing and provide a quick summarized cost estimate. Break down infrastructure, APIs/token costs, operational tooling, and human effort/time, with realistic rough figures.',
@@ -70,7 +70,7 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
     name: 'Similar Ideas',
     shortLabel: 'SIMILAR',
     subtitle: 'FIND SIMILAR IDEAS',
-    icon: '🌐',
+    icon: 'globe',
     color: '#8B5CF6',
     webAccess: true,
     prompt:
@@ -84,7 +84,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Kenji',
     role: 'DATA & FACTS',
     subtitle: 'Objective Truth',
-    icon: '📊',
+    icon: 'bar-chart-2',
     color: '#0EA5E9',
     instruction:
       'You are Kenji. You focus purely on verifiable data, neutral facts, and missing information. Never express feelings or make value judgments; present numbers, cite what is known versus unknown, and remain objective.',
@@ -94,7 +94,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Tala',
     role: 'GUT & WARMTH',
     subtitle: 'Emotional Honesty',
-    icon: '❤️',
+    icon: 'heart',
     color: '#F43F5E',
     instruction:
       "You are Tala. You lead with genuine warmth, gut instinct, and raw emotional honesty. Never waste time over-rationalizing your reactions with data; express your immediate kutob (hunches), heartfelt feelings, and how decisions will truly impact people's spirits.",
@@ -104,7 +104,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Ingrid',
     role: 'REALIST & RISKS',
     subtitle: 'Downside Hunter',
-    icon: '🛡️',
+    icon: 'shield',
     color: '#E11D48',
     instruction:
       'You are Ingrid. You are the realist who spots flaws, legal hazards, and potential downsides. Point out critical risks, vulnerabilities, and worst-case scenarios logically and constructively to prevent failure.',
@@ -114,7 +114,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Tariq',
     role: 'OPTIMISM & UPSIDE',
     subtitle: 'Value Creation',
-    icon: '🚀',
+    icon: 'trending-up',
     color: '#10B981',
     instruction:
       'You are Tariq. You embody grounded optimism, value creation, and best-case potential. Highlight the distinct benefits, practical feasibility, and long-term upside in every concept, backing up your enthusiasm with clear reasons.',
@@ -124,7 +124,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Priya',
     role: 'LATERAL & WHAT-IF',
     subtitle: 'Disruptive Spark',
-    icon: '💡',
+    icon: 'compass',
     color: '#A855F7',
     instruction:
       'You are Priya. You generate lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs." Ignore feasibility constraints initially; focus on breaking standard assumptions and sparking original possibilities.',
@@ -134,7 +134,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     name: 'Mateo',
     role: 'STRUCTURE & FOCUS',
     subtitle: 'Synthesizer',
-    icon: '🧭',
+    icon: 'target',
     color: '#D97706',
     instruction:
       'You are Mateo. You manage the structure, summarize viewpoints, and keep conversations on track. Synthesize what others say, enforce focus, define next steps, and ensure all perspectives are balanced.',
@@ -179,9 +179,8 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
           accessibilityLabel="Toggle Macro Prompts"
         >
           <View style={styles.toggleTitleRow}>
-            <Text style={styles.toggleEmoji}>⚡</Text>
+            <Feather name="zap" size={13} color={colors.ink} style={styles.toggleIcon} />
             <Text style={[styles.toggleLabel, { color: colors.ink }]}>MACRO PROMPTS</Text>
-            <Badge label="4 KEYS" variant="grade" style={{ marginLeft: 6 }} />
           </View>
           <Text style={[styles.chevronText, { color: colors.inkSoft }]}>
             {showMacros ? '▲ COLLAPSE' : '▼ EXPAND'}
@@ -208,7 +207,12 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
               >
                 {/* Accent LED top indicator */}
                 <View style={[styles.keyLed, { backgroundColor: m.color }]} />
-                <Text style={styles.keyIcon}>{m.icon}</Text>
+                <Feather
+                  name={m.icon as any}
+                  size={18}
+                  color={colors.ink}
+                  style={styles.keyIcon}
+                />
                 <Text style={[styles.keyLabel, { color: colors.ink }]} numberOfLines={1}>
                   {m.shortLabel}
                 </Text>
@@ -236,9 +240,8 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
           accessibilityLabel="Toggle Ask a Friend"
         >
           <View style={styles.toggleTitleRow}>
-            <Text style={styles.toggleEmoji}>👥</Text>
+            <Feather name="users" size={13} color={colors.ink} style={styles.toggleIcon} />
             <Text style={[styles.toggleLabel, { color: colors.ink }]}>ASK A FRIEND</Text>
-            <Badge label="6 PERSONAS" variant="grade" style={{ marginLeft: 6 }} />
           </View>
           <Text style={[styles.chevronText, { color: colors.inkSoft }]}>
             {showFriends ? '▲ COLLAPSE' : '▼ EXPAND'}
@@ -315,8 +318,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  toggleEmoji: {
-    fontSize: 13,
+  toggleIcon: {
     marginRight: 6,
   },
   toggleLabel: {
