@@ -34,6 +34,7 @@ import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { InspirationItem } from '../../../src/types';
+import { isPlatformTag } from '../../../src/design/platformColors';
 import { getDumpInspirations, setDumpInspirations, deleteInspiration } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
 import { enrichUrlMetadata, PINTEREST_SVG } from '../../../src/utils/urlMetadata';
@@ -577,9 +578,11 @@ export default function InspirationDetailScreen() {
             <View style={styles.tagSection}>
               <Text style={styles.noteHeading}>TAGS</Text>
               <View style={styles.tagRow}>
-                {Array.from(new Set([...(item.tags || []), ...(item.aiTags || [])])).map((t, idx) => (
-                  <Badge key={`tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
-                ))}
+                {Array.from(new Set([...(item.tags || []), ...(item.aiTags || [])]))
+                  .filter((t) => !isPlatformTag(t, item.sourcePlatform))
+                  .map((t, idx) => (
+                    <Badge key={`tag-${t}-${idx}`} label={`#${t}`} variant="grade" />
+                  ))}
               </View>
             </View>
 

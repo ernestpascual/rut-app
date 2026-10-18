@@ -35,6 +35,7 @@ import { SourceCard } from '../../../src/components/ui/SourceCard';
 import { MarkdownRenderer } from '../../../src/components/ui/MarkdownRenderer';
 import * as WebBrowser from 'expo-web-browser';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { isPlatformTag } from '../../../src/design/platformColors';
 import { ChatMessage, ChatSession, InspirationItem, Project } from '../../../src/types';
 import {
   getChatSession,
@@ -952,9 +953,12 @@ export default function ChatWorkspaceScreen() {
 
                       {bItem.tags && bItem.tags.length > 0 ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 }}>
-                          {Array.from(new Set(bItem.tags)).slice(0, 5).map((t, idx) => (
-                            <Badge key={`dump-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
-                          ))}
+                          {Array.from(new Set(bItem.tags))
+                            .filter((t) => !isPlatformTag(t, bItem.sourcePlatform))
+                            .slice(0, 5)
+                            .map((t, idx) => (
+                              <Badge key={`dump-tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 2 }} />
+                            ))}
                         </View>
                       ) : null}
 

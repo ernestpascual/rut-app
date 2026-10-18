@@ -36,7 +36,7 @@ import { Badge } from '../../../../src/components/ui/Badge';
 import { openExternalUrl } from '../../../../src/utils/linking';
 import { PINTEREST_SVG } from '../../../../src/utils/urlMetadata';
 import { rounded, typography, spacing, ThemeColors } from '../../../../src/design/tokens';
-import { getPlatformBadgeStyle } from '../../../../src/design/platformColors';
+import { getPlatformBadgeStyle, isPlatformTag } from '../../../../src/design/platformColors';
 import { InspirationItem } from '../../../../src/types';
 import {
   getDumpInspirations,
@@ -156,20 +156,20 @@ export default function BankScreen() {
     }
   };
 
-  const platforms = [
+  const platforms = useMemo(() => [
     'ALL',
-    'BEHANCE',
-    'ARE.NA',
-    'DRIBBBLE',
-    'PINTEREST',
     'INSTAGRAM',
+    'PINTEREST',
     'TIKTOK',
+    'BEHANCE',
+    'DRIBBBLE',
+    'YOUTUBE',
     'X',
     'THREADS',
-    'YOUTUBE',
+    'ARE.NA',
     'GITHUB',
     'WEB',
-  ];
+  ], []);
 
   const sortOptionsList: Array<{ label: string; value: DumpSortOption }> = [
     { label: 'NEWEST', value: 'newest' },
@@ -192,11 +192,15 @@ export default function BankScreen() {
     const tagsMap: Record<string, number> = {};
 
     for (const item of active) {
-      const plat = item.sourcePlatform?.toUpperCase() || (item.url ? 'WEB' : 'NOTE');
+      let plat = item.sourcePlatform?.toUpperCase() || (item.url ? 'WEB' : 'NOTE');
+      if (plat === 'DRIBBLE') plat = 'DRIBBBLE';
       platformsMap[plat] = (platformsMap[plat] || 0) + 1;
 
       for (const t of [...(item.tags || []), ...(item.aiTags || [])]) {
-        tagsMap[t] = (tagsMap[t] || 0) + 1;
+        const cleanTag = t.trim().toLowerCase();
+        if (cleanTag && !isPlatformTag(cleanTag, item.sourcePlatform)) {
+          tagsMap[cleanTag] = (tagsMap[cleanTag] || 0) + 1;
+        }
       }
     }
 
@@ -211,10 +215,20 @@ export default function BankScreen() {
     };
   }, [items]);
 
-  // Collect unique tags
-  const allTags = Array.from(
-    new Set(items.flatMap((i) => [...(i.tags || []), ...(i.aiTags || [])]))
-  ).slice(0, 15);
+  // Collect unique content tags (strictly excluding platforms to prevent duplication)
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of items) {
+      if (i.archived) continue;
+      for (const t of [...(i.tags || []), ...(i.aiTags || [])]) {
+        const clean = t.trim().toLowerCase();
+        if (clean && !isPlatformTag(clean, i.sourcePlatform)) {
+          set.add(clean);
+        }
+      }
+    }
+    return Array.from(set).slice(0, 20);
+  }, [items]);
 
   // Filter items
   const filtered = items.filter((item) => {
@@ -340,9 +354,24 @@ export default function BankScreen() {
         ) : null}
 
         <View style={styles.itemTagRow}>
-          {Array.from(new Set(item.tags || [])).slice(0, 6).map((t, idx) => (
-            <Badge key={`tag-${t}-${idx}`} label={`#${t}`} variant="grade" style={{ marginRight: 4, marginBottom: 4 }} />
-          ))}
+          {Array.from(new Set(item.tags || []))
+            .filter((t) => !isPlatformTag(t, item.sourcePlatform))
+            .slice(0, 6)
+            .map((t, idx) => (
+              <Pressable
+                key={`tag-${t}-${idx}`}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedTag(selectedTag === t ? null : t);
+                }}
+              >
+                <Badge
+                  label={`#${t}`}
+                  variant={selectedTag === t ? 'inverse' : 'grade'}
+                  style={{ marginRight: 4, marginBottom: 4 }}
+                />
+              </Pressable>
+            ))}
         </View>
       </View>
     );
@@ -637,31 +666,35 @@ export default function BankScreen() {
                   (plat === 'DRIBBBLE' && selectedPlatform === 'DRIBBLE');
                 return (
                   <Pressable
-                    onPress={() => setSelectedPlatform(plat)}
+                    onPress={() => setSelectedPlatform(selectedPlatform === plat ? 'ALL' : plat)}
                     style={[
                       styles.platformPill,
-                      isActive && styles.platformPillActive,
-                      isActive &&
-                        platStyle && {
-                          backgroundColor: platStyle.backgroundColor,
-                          borderColor: platStyle.borderColor,
-                        },
+                      platStyle && {
+                        backgroundColor: platStyle.backgroundColor,
+                        borderColor: platStyle.borderColor,
+                      },
+                      isActive && {
+                        borderWidth: 2,
+                        borderColor: colors.ink,
+                      },
+                      !platStyle && isActive && styles.platformPillActive,
                     ]}
                   >
                     <Text
                       style={[
                         styles.platformPillText,
-                        isActive && styles.platformPillTextActive,
-                        isActive &&
-                          platStyle && {
-                            color: platStyle.textColor,
-                          },
+                        platStyle && {
+                          color: platStyle.textColor,
+                          fontWeight: isActive ? '800' : '600',
+                        },
+                        !platStyle && isActive && styles.platformPillTextActive,
                       ]}
                     >
                       {plat}
                       {totalStats.platformsMap[plat] !== undefined
                         ? ` (${totalStats.platformsMap[plat]})`
                         : ''}
+                      {isActive && plat !== 'ALL' ? ' ✓' : ''}
                     </Text>
                   </Pressable>
                 );

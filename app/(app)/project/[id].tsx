@@ -35,6 +35,7 @@ import { Button } from '../../../src/components/ui/Button';
 import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
+import { isPlatformTag } from '../../../src/design/platformColors';
 import { MarkdownRenderer } from '../../../src/components/ui/MarkdownRenderer';
 import { Project, ProjectInspirationLink, InspirationItem, ChatMessage, ChatSession } from '../../../src/types';
 import {
@@ -1630,14 +1631,17 @@ export default function ProjectDetailScreen() {
 
                             {item?.tags && item.tags.length > 0 ? (
                               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                                {Array.from(new Set(item.tags)).slice(0, 4).map((t, idx) => (
-                                  <Badge
-                                    key={`item-tag-${t}-${idx}`}
-                                    label={`#${t}`}
-                                    variant="grade"
-                                    style={{ marginRight: 4, marginBottom: 2 }}
-                                  />
-                                ))}
+                                {Array.from(new Set(item.tags))
+                                  .filter((t) => !isPlatformTag(t, item?.sourcePlatform))
+                                  .slice(0, 4)
+                                  .map((t, idx) => (
+                                    <Badge
+                                      key={`item-tag-${t}-${idx}`}
+                                      label={`#${t}`}
+                                      variant="grade"
+                                      style={{ marginRight: 4, marginBottom: 2 }}
+                                    />
+                                  ))}
                               </View>
                             ) : null}
                           </View>
