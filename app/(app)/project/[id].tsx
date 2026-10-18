@@ -1519,10 +1519,11 @@ export default function ProjectDetailScreen() {
                           {/* Attach Action Button */}
                           <View style={styles.pickerActionRow}>
                             <Button
-                              title="+ ATTACH AS REFERENCE"
+                              title="ATTACH"
                               variant="secondary"
                               onPress={() => handleAttachReference(item.id, 'Manually attached reference')}
-                              style={{ height: 30, paddingHorizontal: 12 }}
+                              style={styles.compactActionBtn}
+                              textStyle={styles.compactActionBtnText}
                             />
                           </View>
                         </View>
@@ -1539,10 +1540,11 @@ export default function ProjectDetailScreen() {
                         MATCHED INSPIRATIONS ({matchedResults.length})
                       </Text>
                       <Button
-                        title="ATTACH ALL MATCHES"
+                        title="ATTACH ALL"
                         variant="primary"
                         onPress={handleAttachAllMatches}
-                        style={{ height: 28, paddingHorizontal: 8 }}
+                        style={styles.compactActionBtn}
+                        textStyle={styles.compactActionBtnText}
                       />
                     </View>
 
@@ -1587,7 +1589,7 @@ export default function ProjectDetailScreen() {
 
                           <View style={styles.matchedButtonRow}>
                             <Button
-                              title="+ ATTACH AS REFERENCE"
+                              title="ATTACH"
                               variant="primary"
                               onPress={() =>
                                 handleAttachReference(
@@ -1596,7 +1598,8 @@ export default function ProjectDetailScreen() {
                                   result.confidence
                                 )
                               }
-                              style={{ height: 28, paddingHorizontal: 10 }}
+                              style={styles.compactActionBtn}
+                              textStyle={styles.compactActionBtnText}
                             />
                             <Button
                               title="DISMISS"
@@ -1606,7 +1609,8 @@ export default function ProjectDetailScreen() {
                                   prev.filter((r) => r.inspirationId !== result.inspirationId)
                                 )
                               }
-                              style={{ marginLeft: spacing.sm, height: 28, paddingHorizontal: 8 }}
+                              style={styles.dismissBtn}
+                              textStyle={styles.dismissBtnText}
                             />
                           </View>
                         </Card>
@@ -3434,5 +3438,35 @@ const getStyles = (colors: ThemeColors) =>
     fontWeight: '700',
     letterSpacing: 0.5,
     lineHeight: 12,
+  },
+  compactActionBtn: {
+    height: 24,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactActionBtnText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    lineHeight: 12,
+  },
+  dismissBtn: {
+    height: 24,
+    paddingHorizontal: 8,
+    marginLeft: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dismissBtnText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    lineHeight: 12,
+    color: colors.inkSoft,
   },
 });

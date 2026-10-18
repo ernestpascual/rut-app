@@ -113,6 +113,17 @@ export default function ChatWorkspaceScreen() {
   // Dynamic input height for auto-expanding textarea (max 5 lines)
   const [inputHeight, setInputHeight] = useState(44);
 
+  // Google Live Mode state
+  const [liveModeOpen, setLiveModeOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<'ready' | 'listening' | 'thinking' | 'speaking'>('ready');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [speechSynthesisActive, setSpeechSynthesisActive] = useState(true);
+  const [latestLiveResponse, setLatestLiveResponse] = useState('');
+  const [liveInputText, setLiveInputText] = useState('');
+  const [waveformBars, setWaveformBars] = useState<number[]>([12, 18, 10, 24, 16, 30, 20, 14, 22, 16, 28, 12]);
+  const recognitionRef = useRef<any>(null);
+
   const flatListRef = useRef<FlatList>(null);
 
   // Load session & messages with dual-mode fallback (local + Firestore)
@@ -242,10 +253,10 @@ export default function ChatWorkspaceScreen() {
 
   const handleSendMessage = async (
     customText?: string,
-    options?: { webAccess?: boolean; displayText?: string }
+    options?: { webAccess?: boolean; displayText?: string; isLiveAudio?: boolean }
   ) => {
     const textToSend = (customText !== undefined ? customText : inputText).trim();
-    if (!textToSend || !id || sending) return;
+    if (!textToSend || !id || sending) return null;
     setInputText('');
     setInputHeight(44);
     setSending(true);
@@ -266,6 +277,7 @@ export default function ChatWorkspaceScreen() {
       estimatedCostMicros: null,
       status: 'complete',
       webAccess: effectiveWebAccess,
+      isLiveAudio: Boolean(options?.isLiveAudio),
       createdAt: Date.now(),
     };
 
@@ -292,6 +304,7 @@ export default function ChatWorkspaceScreen() {
         model: selectedModel,
         webAccess: effectiveWebAccess,
         displayContent: options?.displayText,
+        isLiveAudio: options?.isLiveAudio,
       });
 
       // Update state immediately with final assistant message and confirmed user message
@@ -308,11 +321,173 @@ export default function ChatWorkspaceScreen() {
           updatedAt: Date.now(),
         });
       }
+      return result;
     } catch (err: any) {
       Alert.alert('AI Notice', err.message || 'Could not complete thought train response.');
+      return null;
     } finally {
       setSending(false);
     }
+  };
+
+  // Animated waveform effect for Google Live mode
+  useEffect(() => {
+    if (!liveModeOpen) return;
+    const interval = setInterval(() => {
+      setWaveformBars((prev) =>
+        prev.map(() => {
+          if (liveStatus === 'speaking') {
+            return Math.floor(Math.random() * 40) + 24; // 24 - 64px
+          } else if (liveStatus === 'listening') {
+            return Math.floor(Math.random() * 32) + 14; // 14 - 46px
+          } else if (liveStatus === 'thinking') {
+            return Math.floor(Math.random() * 16) + 12; // 12 - 28px
+          }
+          return 10;
+        })
+      );
+    }, 120);
+    return () => clearInterval(interval);
+  }, [liveModeOpen, liveStatus]);
+
+  // Keyboard shortcut (Alt+L or Cmd+L) to toggle Google Live mode
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey || e.altKey) && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        setLiveModeOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleStartListening = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      Alert.alert(
+        'Speech Recognition Unavailable',
+        'Web Speech Recognition is not supported by this browser. You can type prompts in Google Live mode to converse with full Dump RAG and chat history.'
+      );
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setLiveStatus('listening');
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setLiveTranscript(currentTranscript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+        setLiveStatus('ready');
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        if (liveTranscript.trim()) {
+          handleSendLiveMessage(liveTranscript.trim());
+        } else {
+          setLiveStatus('ready');
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.warn('Failed to start speech recognition:', err);
+      setIsListening(false);
+      setLiveStatus('ready');
+    }
+  };
+
+  const handleStopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+  };
+
+  const speakLiveResponse = (text: string) => {
+    if (!speechSynthesisActive || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setLiveStatus('ready');
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const cleanSpoken = text
+        .replace(/[#*`_~]/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/\n+/g, ' ')
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(cleanSpoken);
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+      utterance.onstart = () => setLiveStatus('speaking');
+      utterance.onend = () => setLiveStatus('ready');
+      utterance.onerror = () => setLiveStatus('ready');
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('TTS playback error:', err);
+      setLiveStatus('ready');
+    }
+  };
+
+  const handleSendLiveMessage = async (textToSend: string) => {
+    if (!textToSend.trim() || sending) return;
+    setLiveStatus('thinking');
+    setLiveTranscript('');
+    setLiveInputText('');
+
+    try {
+      const result = await handleSendMessage(textToSend, { isLiveAudio: true });
+      if (result && result.assistantMessage) {
+        setLatestLiveResponse(result.assistantMessage.content);
+        speakLiveResponse(result.assistantMessage.content);
+      } else {
+        setLiveStatus('ready');
+      }
+    } catch {
+      setLiveStatus('ready');
+    }
+  };
+
+  const handleCloseGoogleLive = () => {
+    handleStopListening();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    setLiveModeOpen(false);
+    setLiveStatus('ready');
   };
 
   const handleTogglePin = async (inspirationId: string) => {
@@ -457,15 +632,26 @@ export default function ChatWorkspaceScreen() {
         }}
         backTitle="THOUGHTS"
         rightAction={
-          <Pressable
-            onPress={() => setMenuModalOpen(true)}
-            style={styles.hamburgerBtn}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Chat options menu"
-          >
-            <Text style={styles.hamburgerIcon}>☰</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Pressable
+              onPress={() => setLiveModeOpen(true)}
+              style={styles.googleLiveHeaderBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Enter Google Live Mode"
+            >
+              <Text style={styles.googleLiveHeaderBtnIcon}>⚡</Text>
+              <Text style={styles.googleLiveHeaderBtnText}>GOOGLE LIVE</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setMenuModalOpen(true)}
+              style={styles.hamburgerBtn}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Chat options menu"
+            >
+              <Text style={styles.hamburgerIcon}>☰</Text>
+            </Pressable>
+          </View>
         }
       />
 
@@ -538,6 +724,9 @@ export default function ChatWorkspaceScreen() {
                   >
                     {item.role === 'user' ? 'YOU' : 'RUT'}
                   </Text>
+                  {item.isLiveAudio ? (
+                    <Badge label="⚡ GOOGLE LIVE" variant="grade" style={{ marginLeft: 6 }} />
+                  ) : null}
                   {item.webAccess ? (
                     <Badge label="🌐 LIVE WEB" variant="grade" style={{ marginLeft: 6 }} />
                   ) : null}
@@ -687,6 +876,14 @@ export default function ChatWorkspaceScreen() {
 
         {/* Input Bar (Auto-expanding textarea up to 5 lines, default 1 line) */}
         <View style={styles.inputBar}>
+          <Pressable
+            onPress={() => setLiveModeOpen(true)}
+            style={styles.googleLiveInputShortcut}
+            accessibilityRole="button"
+            accessibilityLabel="Switch to Google Live Mode"
+          >
+            <Text style={styles.googleLiveInputShortcutText}>⚡ LIVE</Text>
+          </Pressable>
           <Input
             value={inputText}
             onChangeText={(text) => {
@@ -1029,6 +1226,24 @@ export default function ChatWorkspaceScreen() {
             </View>
 
             <ScrollView style={styles.menuBody} showsVerticalScrollIndicator={false}>
+              {/* Option 0: Google Live Mode */}
+              <Pressable
+                style={[styles.menuItemCard, { borderColor: colors.ink }]}
+                onPress={() => {
+                  setMenuModalOpen(false);
+                  setLiveModeOpen(true);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemSection}>REAL-TIME CONVERSATIONAL VOICE</Text>
+                  <Text style={styles.menuItemTitle}>⚡ Enter Google Live Mode</Text>
+                  <Text style={styles.menuItemDesc}>
+                    Real-time voice brainstorming grounded in your Dump RAG and full thought history
+                  </Text>
+                </View>
+                <Badge label="LAUNCH ↗" variant="inverse" />
+              </Pressable>
+
               {/* Option 1: Gemini Model */}
               <Pressable
                 style={styles.menuItemCard}
@@ -1137,6 +1352,216 @@ export default function ChatWorkspaceScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Google Live Mode Modal */}
+      <Modal visible={liveModeOpen} animationType="slide" transparent>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TopNav
+              title="rut"
+              subtitle="Google Live · Real-Time Studio"
+              rightAction={
+                <Button
+                  title="EXIT LIVE ✕"
+                  variant="text"
+                  onPress={handleCloseGoogleLive}
+                />
+              }
+            />
+
+            <View style={styles.liveContainer}>
+              {/* STATUS & TELEMETRY HEADER */}
+              <View style={styles.liveStatusRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View
+                    style={[
+                      styles.livePulseDot,
+                      liveStatus === 'listening' && styles.livePulseDotListening,
+                      liveStatus === 'speaking' && styles.livePulseDotSpeaking,
+                      liveStatus === 'thinking' && styles.livePulseDotThinking,
+                    ]}
+                  />
+                  <Text style={styles.liveStatusText}>
+                    {liveStatus === 'listening'
+                      ? 'GOOGLE LIVE: LISTENING...'
+                      : liveStatus === 'thinking'
+                      ? 'GOOGLE LIVE: SYNTHESIZING DUMP RAG...'
+                      : liveStatus === 'speaking'
+                      ? 'GOOGLE LIVE: SPEAKING...'
+                      : 'GOOGLE LIVE: READY'}
+                  </Text>
+                </View>
+                <Badge
+                  label={selectedModel.replace('gemini-', '').toUpperCase()}
+                  variant="grade"
+                  style={{ paddingVertical: 2, paddingHorizontal: 6 }}
+                />
+              </View>
+
+              {/* RAG & CONTEXT STRIP */}
+              <View style={styles.liveRagStrip}>
+                <View style={styles.liveRagItem}>
+                  <Text style={styles.liveRagItemLabel}>DUMP RAG</Text>
+                  <Text style={styles.liveRagItemVal}>{bankItems.length} Saved Items</Text>
+                </View>
+                <View style={styles.liveRagDivider} />
+                <View style={styles.liveRagItem}>
+                  <Text style={styles.liveRagItemLabel}>CONVERSATION</Text>
+                  <Text style={styles.liveRagItemVal}>{messages.length} Prior Turns</Text>
+                </View>
+                <View style={styles.liveRagDivider} />
+                <View style={styles.liveRagItem}>
+                  <Text style={styles.liveRagItemLabel}>WEB SEARCH</Text>
+                  <Text style={styles.liveRagItemVal}>{webAccessEnabled ? 'Active' : 'Offline'}</Text>
+                </View>
+              </View>
+
+              {/* DYNAMIC WAVEFORM AUDIO VISUALIZER */}
+              <View style={styles.visualizerContainer}>
+                <View style={styles.waveformRow}>
+                  {waveformBars.map((height, idx) => (
+                    <View
+                      key={`bar-${idx}`}
+                      style={[
+                        styles.waveformBar,
+                        { height },
+                        liveStatus === 'speaking' && { backgroundColor: colors.ink },
+                        liveStatus === 'listening' && { backgroundColor: colors.ink },
+                        liveStatus === 'thinking' && { backgroundColor: colors.inkSoft },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.visualizerHint}>
+                  {liveStatus === 'listening'
+                    ? 'Speak naturally — Gemini is listening with full Dump context'
+                    : liveStatus === 'thinking'
+                    ? 'Retrieving inspirations and formulating conversational thesis...'
+                    : liveStatus === 'speaking'
+                    ? 'Speaking response out loud'
+                    : 'Tap microphone or speak to converse in Google Live'}
+                </Text>
+              </View>
+
+              {/* LIVE TRANSCRIPT DISPLAY */}
+              <View style={styles.liveTranscriptCard}>
+                <Text style={styles.liveTranscriptLabel}>LIVE TRANSCRIPTION & INFERENCE</Text>
+                <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator>
+                  {liveTranscript ? (
+                    <Text style={styles.liveTranscriptUser}>
+                      <Text style={{ fontWeight: '800' }}>YOU: </Text>
+                      {liveTranscript}
+                    </Text>
+                  ) : null}
+                  {latestLiveResponse ? (
+                    <Text style={styles.liveTranscriptAssistant}>
+                      <Text style={{ fontWeight: '800' }}>RUT: </Text>
+                      {latestLiveResponse}
+                    </Text>
+                  ) : null}
+                  {!liveTranscript && !latestLiveResponse ? (
+                    <Text style={styles.liveTranscriptPlaceholder}>
+                      All turns spoken or submitted in Google Live are automatically stored in this thought&rsquo;s permanent chat and Firestore.
+                    </Text>
+                  ) : null}
+                </ScrollView>
+              </View>
+
+              {/* QUICK PROMPT SPARKS */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.liveSparksScroll}
+                contentContainerStyle={{ gap: 6, paddingVertical: 4 }}
+              >
+                <Pressable
+                  style={styles.liveSparkBtn}
+                  onPress={() => handleSendLiveMessage('Synthesize my saved Dump inspirations for this thought')}
+                >
+                  <Text style={styles.liveSparkBtnText}>⚡ Synthesize Dump RAG</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.liveSparkBtn}
+                  onPress={() => handleSendLiveMessage('Critique our current thesis and point out blind spots')}
+                >
+                  <Text style={styles.liveSparkBtnText}>🔍 Critique Concept</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.liveSparkBtn}
+                  onPress={() => handleSendLiveMessage('What references from my bank are most relevant right now?')}
+                >
+                  <Text style={styles.liveSparkBtnText}>📚 Query Saved Bank</Text>
+                </Pressable>
+              </ScrollView>
+
+              {/* LIVE CONTROLS: MIC BUTTON, TTS TOGGLE, QUICK TEXT */}
+              <View style={styles.liveControlsContainer}>
+                <View style={styles.liveMicRow}>
+                  <Pressable
+                    style={[
+                      styles.liveMicBtn,
+                      isListening && styles.liveMicBtnActive,
+                    ]}
+                    onPress={isListening ? handleStopListening : handleStartListening}
+                    accessibilityRole="button"
+                    accessibilityLabel={isListening ? 'Stop listening' : 'Start listening'}
+                  >
+                    <Text style={[styles.liveMicBtnText, isListening && styles.liveMicBtnTextActive]}>
+                      {isListening ? '🎙️ LISTENING (TAP TO STOP)' : '🎙️ TAP TO SPEAK'}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.liveTtsToggleBtn}
+                    onPress={() => {
+                      const next = !speechSynthesisActive;
+                      setSpeechSynthesisActive(next);
+                      if (!next && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle voice speech"
+                  >
+                    <Text style={styles.liveTtsToggleText}>
+                      {speechSynthesisActive ? '🔊 VOICE: ON' : '🔇 VOICE: OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Silent / Quick text fallback for Live Mode */}
+                <View style={styles.liveTextInputRow}>
+                  <Input
+                    value={liveInputText}
+                    onChangeText={setLiveInputText}
+                    placeholder="Or type prompt to converse live..."
+                    onKeyPress={(e: any) => {
+                      if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                        e.preventDefault?.();
+                        if (liveInputText.trim()) {
+                          handleSendLiveMessage(liveInputText.trim());
+                        }
+                      }
+                    }}
+                    containerStyle={{ flex: 1, marginVertical: 0 }}
+                    style={{ height: 40 }}
+                  />
+                  <Button
+                    title="SEND"
+                    onPress={() => {
+                      if (liveInputText.trim()) {
+                        handleSendLiveMessage(liveInputText.trim());
+                      }
+                    }}
+                    disabled={!liveInputText.trim() || sending}
+                    style={{ marginLeft: 6, height: 40, paddingHorizontal: 14 }}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -1721,6 +2146,241 @@ const getStyles = (colors: ThemeColors) =>
     marginBottom: spacing.lg,
   },
   confirmModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  googleLiveHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.ink,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  googleLiveHeaderBtnIcon: {
+    color: colors.canvas,
+    fontSize: 10,
+    marginRight: 4,
+  },
+  googleLiveHeaderBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.canvas,
+    letterSpacing: 0.8,
+  },
+  googleLiveInputShortcut: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.canvas,
+    height: 44,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.xs,
+  },
+  googleLiveInputShortcutText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.6,
+  },
+  liveContainer: {
+    flex: 1,
+    padding: spacing.base,
+    backgroundColor: colors.canvas,
+    justifyContent: 'space-between',
+  },
+  liveStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+  livePulseDot: {
+    width: 10,
+    height: 10,
+    backgroundColor: colors.inkSoft,
+  },
+  livePulseDotListening: {
+    backgroundColor: '#10B981',
+  },
+  livePulseDotSpeaking: {
+    backgroundColor: '#3B82F6',
+  },
+  livePulseDotThinking: {
+    backgroundColor: '#F59E0B',
+  },
+  liveStatusText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: 0.8,
+  },
+  liveRagStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    marginVertical: spacing.sm,
+  },
+  liveRagItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  liveRagItemLabel: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.inkSoft,
+    letterSpacing: 0.5,
+  },
+  liveRagItemVal: {
+    ...typography.bodyMd,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  liveRagDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: colors.hairline,
+  },
+  visualizerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    backgroundColor: colors.surfaceGrade,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    marginVertical: spacing.xs,
+  },
+  waveformRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 68,
+    gap: 6,
+  },
+  waveformBar: {
+    width: 6,
+    backgroundColor: colors.inkSoft,
+  },
+  visualizerHint: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: spacing.base,
+    textAlign: 'center',
+  },
+  liveTranscriptCard: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    padding: spacing.sm,
+    marginVertical: spacing.xs,
+    minHeight: 100,
+  },
+  liveTranscriptLabel: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  liveTranscriptUser: {
+    ...typography.bodyMd,
+    fontSize: 12,
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  liveTranscriptAssistant: {
+    ...typography.bodyMd,
+    fontSize: 12,
+    color: colors.ink,
+    lineHeight: 18,
+  },
+  liveTranscriptPlaceholder: {
+    ...typography.captionSm,
+    fontSize: 11,
+    color: colors.inkSoft,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  liveSparksScroll: {
+    marginVertical: spacing.xxs,
+    maxHeight: 38,
+  },
+  liveSparkBtn: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  liveSparkBtnText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  liveControlsContainer: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  liveMicRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  liveMicBtn: {
+    flex: 2,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    backgroundColor: colors.ink,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveMicBtnActive: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  liveMicBtnText: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.canvas,
+    letterSpacing: 0.8,
+  },
+  liveMicBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  liveTtsToggleBtn: {
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveTtsToggleText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  liveTextInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },

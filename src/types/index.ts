@@ -65,6 +65,7 @@ export interface ChatMessage {
   status: 'pending' | 'complete' | 'failed';
   webAccess?: boolean;
   webSources?: Array<{ title?: string; uri?: string }>;
+  isLiveAudio?: boolean;
   createdAt: number;
 }
 

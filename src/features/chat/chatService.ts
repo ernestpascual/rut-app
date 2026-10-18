@@ -948,6 +948,7 @@ export async function sendChatMessage(
     model?: string;
     webAccess?: boolean;
     displayContent?: string;
+    isLiveAudio?: boolean;
   }
 ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage; thesisStatement?: string }> {
   const cleanContent = messageContent.trim();
@@ -974,6 +975,7 @@ export async function sendChatMessage(
     estimatedCostMicros: null,
     status: 'complete',
     webAccess: isWebAccess,
+    isLiveAudio: Boolean(options?.isLiveAudio),
     createdAt: Date.now(),
   };
 
@@ -1233,6 +1235,7 @@ export async function sendChatMessage(
     status: 'complete',
     webAccess: isWebAccess,
     webSources,
+    isLiveAudio: Boolean(options?.isLiveAudio),
     createdAt: Date.now() + 1,
   };
 
