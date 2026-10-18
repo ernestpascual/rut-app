@@ -3,6 +3,9 @@ import {
   quickDumpLinkOrNote,
   deleteInspiration,
   getDumpInspirations,
+  attachInspirationToProject,
+  getProjectLinks,
+  detachInspirationFromProject,
 } from './dumpService';
 import { InspirationItem } from '../../types';
 
@@ -122,5 +125,29 @@ describe('dumpService sorting', () => {
     await deleteInspiration(item.id);
     const after = await getDumpInspirations();
     expect(after.some((i) => i.id === item.id)).toBe(false);
+  }, 15000);
+
+  test('attachInspirationToProject does not duplicate links when attached repeatedly', async () => {
+    const projectId = `proj-test-${Date.now()}`;
+    const inspirationId = `insp-test-${Date.now()}`;
+
+    // First attach
+    const link1 = await attachInspirationToProject(projectId, inspirationId, 'ai', 'First match reason', 0.95);
+    expect(link1.inspirationId).toBe(inspirationId);
+
+    // Second attach (same inspirationId)
+    const link2 = await attachInspirationToProject(projectId, inspirationId, 'user', 'Updated reason', null);
+    expect(link2.inspirationId).toBe(inspirationId);
+
+    // Verify getProjectLinks only has one entry for this inspirationId
+    const links = await getProjectLinks(projectId);
+    const matching = links.filter((l) => (l.inspirationId || l.id) === inspirationId);
+    expect(matching.length).toBe(1);
+    expect(matching[0].reason).toBe('Updated reason');
+
+    // Detach
+    await detachInspirationFromProject(projectId, inspirationId);
+    const afterDetach = await getProjectLinks(projectId);
+    expect(afterDetach.some((l) => (l.inspirationId || l.id) === inspirationId)).toBe(false);
   }, 15000);
 });

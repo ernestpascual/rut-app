@@ -34,7 +34,14 @@ exports.suggestProjectLinks = (0, https_1.onCall)({ invoker: 'public', cors: tru
             .doc(projectId)
             .collection('inspirationLinks')
             .get();
-        const existingLinkedIds = new Set(linksSnap.docs.map((d) => d.id));
+        const existingLinkedIds = new Set();
+        linksSnap.docs.forEach((d) => {
+            existingLinkedIds.add(d.id);
+            const data = d.data();
+            if (data?.inspirationId) {
+                existingLinkedIds.add(data.inspirationId);
+            }
+        });
         // Fetch candidate inspirations
         const inspirationsSnap = await config_1.db
             .collection('users')

@@ -39,7 +39,14 @@ export const suggestProjectLinks = onCall({ invoker: 'public', cors: true }, asy
       .collection('inspirationLinks')
       .get();
 
-    const existingLinkedIds = new Set(linksSnap.docs.map((d) => d.id));
+    const existingLinkedIds = new Set<string>();
+    linksSnap.docs.forEach((d) => {
+      existingLinkedIds.add(d.id);
+      const data = d.data();
+      if (data?.inspirationId) {
+        existingLinkedIds.add(data.inspirationId);
+      }
+    });
 
     // Fetch candidate inspirations
     const inspirationsSnap = await db

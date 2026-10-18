@@ -359,8 +359,16 @@ export async function getProjectLinks(projectId: string, uid?: string): Promise<
     const snap = await getDocs(
       collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks')
     );
+    const seen = new Set<string>();
     const links: ProjectInspirationLink[] = [];
-    snap.forEach((d) => links.push({ id: d.id, ...(d.data() as any) }));
+    snap.forEach((d) => {
+      const data = { id: d.id, ...(d.data() as any) } as ProjectInspirationLink;
+      const inspId = data.inspirationId || d.id;
+      if (!seen.has(inspId)) {
+        seen.add(inspId);
+        links.push({ ...data, id: inspId, inspirationId: inspId });
+      }
+    });
     AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(links)).catch(() => {});
     return links;
   } catch (err) {
@@ -370,7 +378,14 @@ export async function getProjectLinks(projectId: string, uid?: string): Promise<
   try {
     const raw = await AsyncStorage.getItem(`${LINKS_STORAGE_PREFIX}${projectId}`);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed: ProjectInspirationLink[] = JSON.parse(raw);
+      const seen = new Set<string>();
+      return parsed.filter((l) => {
+        const inspId = l.inspirationId || l.id;
+        if (seen.has(inspId)) return false;
+        seen.add(inspId);
+        return true;
+      });
     }
   } catch (e) {
     console.warn('Failed to load project inspiration links:', e);
@@ -388,7 +403,7 @@ export async function attachInspirationToProject(
 ): Promise<ProjectInspirationLink> {
   const targetUid = getTargetUid(uid);
   const newLink: ProjectInspirationLink = {
-    id: `link-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    id: inspirationId,
     inspirationId,
     linkedBy,
     reason: reason || null,
@@ -397,16 +412,31 @@ export async function attachInspirationToProject(
   };
 
   try {
+    // 1. Set document with deterministic inspirationId as ID to guarantee idempotency
     await setDoc(
-      doc(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks', newLink.id),
-      newLink
+      doc(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks', inspirationId),
+      newLink,
+      { merge: true }
     );
+
+    // 2. Cleanup any legacy docs that had random doc IDs for this inspirationId
+    const snap = await getDocs(
+      query(
+        collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks'),
+        where('inspirationId', '==', inspirationId)
+      )
+    );
+    for (const d of snap.docs) {
+      if (d.id !== inspirationId) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
   } catch (err) {
     console.warn('[dumpService] attachInspiration Firestore fallback:', err);
   }
 
   const current = await getProjectLinks(projectId, targetUid);
-  const updated = [newLink, ...current.filter((l) => l.inspirationId !== inspirationId)];
+  const updated = [newLink, ...current.filter((l) => (l.inspirationId || l.id) !== inspirationId)];
   await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated)).catch(() => {});
   return newLink;
 }
@@ -418,6 +448,12 @@ export async function detachInspirationFromProject(
 ): Promise<void> {
   const targetUid = getTargetUid(uid);
   try {
+    // Delete deterministic doc
+    await deleteDoc(
+      doc(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks', inspirationId)
+    ).catch(() => {});
+
+    // Delete any legacy doc matching this inspirationId
     const snap = await getDocs(
       query(
         collection(db, 'users', targetUid, 'projects', projectId, 'inspirationLinks'),
@@ -432,6 +468,6 @@ export async function detachInspirationFromProject(
   }
 
   const current = await getProjectLinks(projectId, targetUid);
-  const updated = current.filter((l) => l.inspirationId !== inspirationId);
+  const updated = current.filter((l) => (l.inspirationId || l.id) !== inspirationId);
   await AsyncStorage.setItem(`${LINKS_STORAGE_PREFIX}${projectId}`, JSON.stringify(updated)).catch(() => {});
 }

@@ -81,6 +81,19 @@ export default function ProjectDetailScreen() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [links, setLinks] = useState<ProjectInspirationLink[]>([]);
+  const [attachingIds, setAttachingIds] = useState<Set<string>>(new Set());
+
+  // Guaranteed deduplicated list of attached inspiration links
+  const uniqueLinks = useMemo(() => {
+    const seen = new Set<string>();
+    return links.filter((l) => {
+      const inspId = l.inspirationId || l.id;
+      if (!inspId || seen.has(inspId)) return false;
+      seen.add(inspId);
+      return true;
+    });
+  }, [links]);
+
   const [bankMap, setBankMap] = useState<Record<string, InspirationItem>>({});
   const [allDumpItems, setAllDumpItems] = useState<InspirationItem[]>([]);
   const [matchedResults, setMatchedResults] = useState<IdeaMatchResult[]>([]);
@@ -227,12 +240,39 @@ export default function ProjectDetailScreen() {
         linksRef,
         (snap) => {
           const fetched: ProjectInspirationLink[] = [];
-          snap.forEach((d) => fetched.push({ id: d.id, ...(d.data() as any) }));
+          const seen = new Set<string>();
+          const duplicateDocIdsToDelete: string[] = [];
+
+          snap.forEach((d) => {
+            const data = { id: d.id, ...(d.data() as any) } as ProjectInspirationLink;
+            const inspId = data.inspirationId || d.id;
+            if (!seen.has(inspId)) {
+              seen.add(inspId);
+              fetched.push({ ...data, id: inspId, inspirationId: inspId });
+            } else {
+              duplicateDocIdsToDelete.push(d.id);
+            }
+          });
           setLinks(fetched);
+
+          // Asynchronously purge any legacy duplicate docs in the background
+          if (duplicateDocIdsToDelete.length > 0 && user) {
+            duplicateDocIdsToDelete.forEach((docId) => {
+              deleteDoc(doc(db, 'users', user.uid, 'projects', id, 'inspirationLinks', docId)).catch(() => {});
+            });
+          }
         },
         async () => {
           const localLinks = await getProjectLinks(id);
-          setLinks(localLinks);
+          const seen = new Set<string>();
+          setLinks(
+            localLinks.filter((l) => {
+              const inspId = l.inspirationId || l.id;
+              if (seen.has(inspId)) return false;
+              seen.add(inspId);
+              return true;
+            })
+          );
         }
       );
 
@@ -371,7 +411,7 @@ export default function ProjectDetailScreen() {
       }
 
       // 2. Intelligent local matching engine
-      const attachedSet = new Set(links.map((l) => l.inspirationId));
+      const attachedSet = new Set(uniqueLinks.map((l) => l.inspirationId || l.id));
       const localMatches = matchIdeaWithDump(
         {
           title: project.title,
@@ -397,46 +437,51 @@ export default function ProjectDetailScreen() {
     reason: string | null = null,
     confidence: number | null = null
   ) => {
-    if (!id) return;
+    if (!id || !inspirationId) return;
+
+    // Guard against simultaneous or repeated clicks
+    if (attachingIds.has(inspirationId)) return;
+    if (uniqueLinks.some((l) => (l.inspirationId || l.id) === inspirationId)) {
+      setMatchedResults((prev) => prev.filter((r) => r.inspirationId !== inspirationId));
+      return;
+    }
+
+    setAttachingIds((prev) => new Set(prev).add(inspirationId));
+
+    // Immediately remove from matched results so UI doesn't allow double clicks
+    setMatchedResults((prev) => prev.filter((r) => r.inspirationId !== inspirationId));
+
     try {
       const newLink = await attachInspirationToProject(
         id,
         inspirationId,
         confidence ? 'ai' : 'user',
         reason,
-        confidence
+        confidence,
+        user?.uid
       );
 
-      if (user) {
-        try {
-          await setDoc(
-            doc(db, 'users', user.uid, 'projects', id, 'inspirationLinks', inspirationId),
-            {
-              inspirationId,
-              linkedBy: confidence ? 'ai' : 'user',
-              reason,
-              confidence,
-              createdAt: Date.now(),
-            }
-          );
-        } catch {}
-      }
-
       setLinks((prev) => {
-        if (prev.some((l) => l.inspirationId === inspirationId)) return prev;
+        if (prev.some((l) => (l.inspirationId || l.id) === inspirationId)) return prev;
         return [newLink, ...prev];
       });
-
-      // Remove from matched results
-      setMatchedResults((prev) => prev.filter((r) => r.inspirationId !== inspirationId));
     } catch (err: any) {
       Alert.alert('Error', 'Failed to attach reference.');
+    } finally {
+      setAttachingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(inspirationId);
+        return next;
+      });
     }
   };
 
   // Attach all top matched inspirations
   const handleAttachAllMatches = async () => {
-    for (const match of matchedResults) {
+    if (matchedResults.length === 0) return;
+    const toAttach = [...matchedResults];
+    setMatchedResults([]);
+    for (const match of toAttach) {
       await handleAttachReference(match.inspirationId, match.reason, match.confidence);
     }
   };
@@ -468,10 +513,10 @@ export default function ProjectDetailScreen() {
   };
 
   const handleToggleSelectAllRef = () => {
-    if (selectedRefIds.length === links.length) {
+    if (selectedRefIds.length === uniqueLinks.length) {
       setSelectedRefIds([]);
     } else {
-      setSelectedRefIds(links.map((l) => l.inspirationId));
+      setSelectedRefIds(uniqueLinks.map((l) => l.inspirationId || l.id));
     }
   };
 
@@ -557,7 +602,7 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     let isMounted = true;
 
-    const attachedItems = links
+    const attachedItems = uniqueLinks
       .map((l) => bankMap[l.inspirationId])
       .filter(Boolean) as InspirationItem[];
 
@@ -576,7 +621,7 @@ export default function ProjectDetailScreen() {
     return () => {
       isMounted = false;
     };
-  }, [project?.id, project?.title, links.length, user?.uid]);
+  }, [project?.id, project?.title, uniqueLinks.length, user?.uid]);
 
   // Load and cache 2-sentence summary of the train of thought
   useEffect(() => {
@@ -657,7 +702,7 @@ export default function ProjectDetailScreen() {
     }
     if (!project) return;
     try {
-      const attachedItems = links
+      const attachedItems = uniqueLinks
         .map((l) => bankMap[l.inspirationId])
         .filter(Boolean) as InspirationItem[];
       const chat = await getOrCreateIdeaChat(project, attachedItems, user?.uid);
@@ -678,7 +723,7 @@ export default function ProjectDetailScreen() {
     setSendingThought(true);
 
     try {
-      const attachedItems = links
+      const attachedItems = uniqueLinks
         .map((l) => bankMap[l.inspirationId])
         .filter(Boolean) as InspirationItem[];
 
@@ -880,7 +925,7 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     setLinkingChatId('new');
     try {
-      const attachedItems = links
+      const attachedItems = uniqueLinks
         .map((l) => bankMap[l.inspirationId])
         .filter(Boolean) as InspirationItem[];
 
@@ -925,7 +970,7 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     const success = await copyIdeaAsMarkdown(
       project,
-      links,
+      uniqueLinks,
       bankMap,
       ideaChat,
       chatMessages
@@ -945,7 +990,7 @@ export default function ProjectDetailScreen() {
     try {
       await exportIdeaAsPDF(
         project,
-        links,
+        uniqueLinks,
         bankMap,
         ideaChat,
         chatMessages
@@ -963,7 +1008,7 @@ export default function ProjectDetailScreen() {
     try {
       await exportIdeaAsDoc(
         project,
-        links,
+        uniqueLinks,
         bankMap,
         ideaChat,
         chatMessages
@@ -975,9 +1020,10 @@ export default function ProjectDetailScreen() {
     }
   };
 
-  const unattachedDumpItems = allDumpItems.filter(
-    (item) => !item.archived && !links.some((l) => l.inspirationId === item.id)
-  );
+  const unattachedDumpItems = useMemo(() => {
+    const attachedIds = new Set(uniqueLinks.map((l) => l.inspirationId || l.id));
+    return allDumpItems.filter((item) => !item.archived && !attachedIds.has(item.id));
+  }, [allDumpItems, uniqueLinks]);
 
   const filteredDumpItems = useMemo(() => {
     const q = pickerSearchQuery.trim().toLowerCase();
@@ -1331,7 +1377,7 @@ export default function ProjectDetailScreen() {
                     onPress={() => setActiveTab('references')}
                   >
                     <Text style={styles.overviewNavLabel}>INSPIRATIONS</Text>
-                    <Text style={styles.overviewNavCount}>{links.length} Linked</Text>
+                    <Text style={styles.overviewNavCount}>{uniqueLinks.length} Linked</Text>
                     <Text style={styles.overviewNavHint}>OPEN GALLERY →</Text>
                   </Pressable>
 
@@ -1622,9 +1668,9 @@ export default function ProjectDetailScreen() {
                 {/* ATTACHED INSPIRATIONS SECTION HEADER & BATCH ACTIONS */}
                 <View style={styles.refSectionHeaderRow}>
                   <Text style={styles.sectionHeading}>
-                    INSPIRATIONS ({links.length})
+                    INSPIRATIONS ({uniqueLinks.length})
                   </Text>
-                  {links.length > 0 && !selectRefsMode && (
+                  {uniqueLinks.length > 0 && !selectRefsMode && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                       <Button
                         title="SELECT MANY"
@@ -1637,7 +1683,7 @@ export default function ProjectDetailScreen() {
                         variant="secondary"
                         onPress={() => {
                           setSelectRefsMode(true);
-                          setSelectedRefIds(links.map((l) => l.inspirationId));
+                          setSelectedRefIds(uniqueLinks.map((l) => l.inspirationId || l.id));
                         }}
                         style={{ height: 28, paddingHorizontal: 10 }}
                       />
@@ -1646,14 +1692,14 @@ export default function ProjectDetailScreen() {
                 </View>
 
                 {/* MULTI-SELECT BAR FOR REFERENCES */}
-                {selectRefsMode && links.length > 0 && (
+                {selectRefsMode && uniqueLinks.length > 0 && (
                   <View style={styles.refSelectionBar}>
                     <Text style={styles.refSelectionCount}>
-                      {selectedRefIds.length} OF {links.length} SELECTED
+                      {selectedRefIds.length} OF {uniqueLinks.length} SELECTED
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' }}>
                       <Button
-                        title={selectedRefIds.length === links.length ? 'DESELECT ALL' : 'SELECT ALL'}
+                        title={selectedRefIds.length === uniqueLinks.length ? 'DESELECT ALL' : 'SELECT ALL'}
                         variant="secondary"
                         onPress={handleToggleSelectAllRef}
                         style={{ height: 32, paddingHorizontal: 10 }}
@@ -1684,7 +1730,7 @@ export default function ProjectDetailScreen() {
                 )}
 
                 {/* ATTACHED INSPIRATIONS LIST */}
-                {links.length === 0 ? (
+                {uniqueLinks.length === 0 ? (
                   <Card style={styles.emptyLinksCard}>
                     <Text style={styles.emptyLinksTitle}>NO INSPIRATIONS ATTACHED YET</Text>
                     <Text style={styles.emptyLinksText}>
@@ -1692,12 +1738,12 @@ export default function ProjectDetailScreen() {
                     </Text>
                   </Card>
                 ) : (
-                  links.map((link) => {
+                  uniqueLinks.map((link) => {
                     const item = bankMap[link.inspirationId];
                     const isSelected = selectedRefIds.includes(link.inspirationId);
                     return (
                       <Card
-                        key={link.id}
+                        key={link.inspirationId || link.id}
                         onPress={selectRefsMode ? () => toggleSelectRef(link.inspirationId) : undefined}
                         style={[styles.linkCard, selectRefsMode && isSelected && styles.linkCardSelected]}
                       >
