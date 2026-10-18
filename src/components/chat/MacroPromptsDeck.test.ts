@@ -29,6 +29,7 @@ describe('MacroPromptsDeck Configurations', () => {
     // Similar Ideas
     const similar = MACRO_PROMPTS.find((m) => m.id === 'similar_ideas')!;
     expect(similar.name).toBe('Similar Ideas');
+    expect(similar.subtitle).toBe('FIND SIMILAR IDEAS');
     expect(similar.webAccess).toBe(true);
     expect(similar.prompt.toLowerCase()).toContain('similar implementations');
   });

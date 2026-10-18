@@ -69,7 +69,7 @@ export const MACRO_PROMPTS: MacroPromptItem[] = [
     id: 'similar_ideas',
     name: 'Similar Ideas',
     shortLabel: 'SIMILAR',
-    subtitle: 'WEB RESEARCH',
+    subtitle: 'FIND SIMILAR IDEAS',
     icon: '🌐',
     color: '#8B5CF6',
     webAccess: true,
