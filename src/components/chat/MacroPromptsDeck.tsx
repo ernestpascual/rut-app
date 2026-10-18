@@ -257,31 +257,36 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
                   {
                     backgroundColor: colors.surfaceGrade,
                     borderColor: colors.hairlineGrade,
-                    opacity: disabled ? 0.4 : pressed ? 0.75 : 1,
+                    opacity: disabled ? 0.4 : pressed ? 0.8 : 1,
                   },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={`Friend Persona: ${f.name} - ${f.role}`}
               >
-                {/* Accent LED top indicator */}
+                {/* Full Background Portrait Image */}
+                {FRIEND_AVATARS[f.id] ? (
+                  <Image
+                    source={FRIEND_AVATARS[f.id]}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                ) : null}
+
+                {/* Dark Contrast Scrim Overlay for Legibility */}
+                <View style={styles.friendKeyScrim} />
+
+                {/* Accent LED Top Indicator */}
                 <View style={[styles.keyLed, { backgroundColor: f.color }]} />
-                <View style={[styles.avatarWrapper, { borderColor: f.color }]}>
-                  {FRIEND_AVATARS[f.id] ? (
-                    <Image
-                      source={FRIEND_AVATARS[f.id]}
-                      style={styles.friendAvatarImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.keyIcon}>{f.icon}</Text>
-                  )}
+
+                {/* Bottom Label Content */}
+                <View style={styles.friendKeyBottomContent}>
+                  <Text style={styles.friendKeyName} numberOfLines={1}>
+                    {f.name.toUpperCase()}
+                  </Text>
+                  <Text style={styles.friendKeyRole} numberOfLines={1}>
+                    {f.role}
+                  </Text>
                 </View>
-                <Text style={[styles.keyLabel, { color: colors.ink }]} numberOfLines={1}>
-                  {f.name.toUpperCase()}
-                </Text>
-                <Text style={[styles.keySubtitle, { color: colors.inkSoft }]} numberOfLines={1}>
-                  {f.role}
-                </Text>
               </Pressable>
             ))}
           </View>
@@ -359,37 +364,51 @@ const styles = StyleSheet.create({
   },
   friendDeckKey: {
     width: '31.8%',
-    aspectRatio: 0.98,
+    aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4,
+    justifyContent: 'flex-end',
     position: 'relative',
     overflow: 'hidden',
   },
-  avatarWrapper: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    marginBottom: 4,
-    marginTop: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  friendKeyScrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.42)',
   },
-  friendAvatarImage: {
+  friendKeyBottomContent: {
+    paddingHorizontal: 4,
+    paddingBottom: 6,
+    alignItems: 'center',
     width: '100%',
-    height: '100%',
+  },
+  friendKeyName: {
+    ...typography.captionCap,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  friendKeyRole: {
+    fontSize: 7.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   keyLed: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 3,
+    height: 3.5,
   },
   keyIcon: {
     fontSize: 20,
