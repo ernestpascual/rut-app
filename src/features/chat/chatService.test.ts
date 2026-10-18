@@ -429,6 +429,60 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
       }
     });
   });
+
+  describe('Google Live Voice Mode Enhancements', () => {
+    test('synthesizeThoughtTrain with isLiveAudio produces short 1-2 sentence spoken summary', () => {
+      const result = synthesizeThoughtTrain({
+        userQuery: 'What are the main references in my bank for this concept?',
+        isLiveAudio: true,
+      });
+
+      expect(result.response.length).toBeGreaterThan(5);
+      // Strictly 1-2 sentences (under 35 words)
+      const wordCount = result.response.split(/\s+/).filter(Boolean).length;
+      expect(wordCount).toBeLessThanOrEqual(35);
+    });
+
+    test('synthesizeThoughtTrain with isLiveAudio and matching dump item cites item', () => {
+      const dumpItem: InspirationItem = {
+        id: 'brutalist-1',
+        ownerUid: 'user-1',
+        kind: 'note',
+        title: 'Studio Drift Kinetic Shutter',
+        url: null,
+        normalizedUrl: null,
+        sharedText: null,
+        userNote: 'Kinetic light and architectural shadow play',
+        sourcePlatform: null,
+        sourceDomain: null,
+        sourceApp: null,
+        previewDescription: null,
+        remotePreviewImageUrl: null,
+        tags: ['kinetic', 'light'],
+        aiTags: ['kinetic', 'glass'],
+        concepts: ['movement'],
+        aiSummary: 'Kinetic design precedent',
+        processingStatus: 'ready',
+        processingErrorCode: null,
+        duplicateOf: null,
+        archived: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        capturedAt: Date.now(),
+      };
+
+      const result = synthesizeThoughtTrain({
+        userQuery: 'How does Studio Drift fit in?',
+        allInspirations: [dumpItem],
+        isLiveAudio: true,
+      });
+
+      expect(result.response).toContain('Studio Drift');
+      expect(result.sourceInspirationIds).toContain('brutalist-1');
+      const wordCount = result.response.split(/\s+/).filter(Boolean).length;
+      expect(wordCount).toBeLessThanOrEqual(35);
+    });
+  });
 });
 
 

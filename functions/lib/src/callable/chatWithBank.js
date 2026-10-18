@@ -402,6 +402,7 @@ exports.chatWithBank = (0, https_1.onCall)({
             model: requestedModel,
             totalBankCount,
             isReevaluate: isReevaluateQuery,
+            isLiveAudio: Boolean(request.data?.isLiveAudio),
         });
         // 6. Record usage event in integer micros
         await (0, ledger_1.recordUsageEvent)({

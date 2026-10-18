@@ -57,6 +57,83 @@ import {
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
+import { openExternalUrl } from '../../../src/utils/linking';
+
+/**
+ * Selects the highest quality natural human voice available from browser SpeechSynthesis.
+ * Prioritizes natural Google Neural voices (e.g. Google US English, Google UK English)
+ * and natural modern OS voices, strictly filtering out legacy robotic novelty voices.
+ */
+export function pickBestNaturalVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (!voices || voices.length === 0) return null;
+
+  const roboticNames = new Set([
+    'fred', 'junior', 'albert', 'bad news', 'bells', 'boing', 'cellos',
+    'deranged', 'good news', 'hysterical', 'pipe organ', 'trinoids',
+    'whisper', 'zarvox', 'xander', 'ralph', 'bruce', 'kathy', 'vicki', 'agnes', 'princess'
+  ]);
+  const clean = voices.filter((v) => !roboticNames.has(v.name.toLowerCase()));
+
+  // 1. Google US / UK English natural voices
+  const googleVoice = clean.find(
+    (v) =>
+      v.name.toLowerCase().includes('google') &&
+      (v.lang.startsWith('en') || v.lang.includes('US') || v.lang.includes('GB'))
+  );
+  if (googleVoice) return googleVoice;
+
+  // 2. High-quality neural / natural / online / enhanced voices
+  const naturalVoice = clean.find(
+    (v) =>
+      (v.name.toLowerCase().includes('natural') ||
+        v.name.toLowerCase().includes('neural') ||
+        v.name.toLowerCase().includes('online') ||
+        v.name.toLowerCase().includes('enhanced') ||
+        v.name.toLowerCase().includes('premium')) &&
+      v.lang.startsWith('en')
+  );
+  if (naturalVoice) return naturalVoice;
+
+  // 3. Apple premium natural voices (Siri, Samantha, Ava, Serena, Daniel, Karen)
+  const appleVoice = clean.find(
+    (v) =>
+      /siri|samantha|ava|serena|daniel|karen|oliver|kate/i.test(v.name) &&
+      v.lang.startsWith('en')
+  );
+  if (appleVoice) return appleVoice;
+
+  // 4. Any English voice that is not in the robotic list
+  const english = clean.find((v) => v.lang.startsWith('en'));
+  if (english) return english;
+
+  return clean[0] || null;
+}
+
+/**
+ * Prepares and trims text for smooth, natural vocal delivery:
+ * - Strips formatting, IDs, and markdown
+ * - Enforces strictly 1-2 spoken sentences (the core summary)
+ *   so speech is instantaneous, conversational, and never drags on.
+ */
+export function prepareLiveSpokenText(text: string): string {
+  let spoken = text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[ID:[^\]]+\]/gi, '')
+    .replace(/\(ID:[^)]+\)/gi, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#*`_~>]/g, '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const sentences = spoken.match(/[^.!?]+[.!?]+(\s|$)/g);
+  if (sentences && sentences.length > 0) {
+    spoken = sentences.slice(0, 2).join(' ').trim();
+  } else if (spoken.length > 180) {
+    spoken = spoken.slice(0, 160).replace(/\s\S*$/, '') + '.';
+  }
+  return spoken;
+}
 
 export default function ChatWorkspaceScreen() {
   const router = useRouter();
@@ -120,9 +197,34 @@ export default function ChatWorkspaceScreen() {
   const [liveTranscript, setLiveTranscript] = useState('');
   const [speechSynthesisActive, setSpeechSynthesisActive] = useState(true);
   const [latestLiveResponse, setLatestLiveResponse] = useState('');
+  const [latestLiveCitations, setLatestLiveCitations] = useState<InspirationItem[]>([]);
+  const [latestLiveWebSources, setLatestLiveWebSources] = useState<Array<{ title?: string; uri?: string }>>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [liveInputText, setLiveInputText] = useState('');
   const [waveformBars, setWaveformBars] = useState<number[]>([12, 18, 10, 24, 16, 30, 20, 14, 22, 16, 28, 12]);
   const recognitionRef = useRef<any>(null);
+
+  // Load and cache high-quality natural voices for Google Live
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const loadVoices = () => {
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          const best = pickBestNaturalVoice(voices);
+          if (best) setSelectedVoice(best);
+        }
+      } catch {}
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -453,14 +555,17 @@ export default function ChatWorkspaceScreen() {
     }
     try {
       window.speechSynthesis.cancel();
-      const cleanSpoken = text
-        .replace(/[#*`_~]/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/\n+/g, ' ')
-        .trim();
+      // Clean and isolate strictly the 1-2 sentence spoken summary for crisp vocal delivery
+      const cleanSpoken = prepareLiveSpokenText(text);
 
       const utterance = new SpeechSynthesisUtterance(cleanSpoken);
-      utterance.rate = 1.05;
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      } else {
+        const best = pickBestNaturalVoice(window.speechSynthesis.getVoices());
+        if (best) utterance.voice = best;
+      }
+      utterance.rate = 1.0; // Calm natural human pacing (not rushed or clipped)
       utterance.pitch = 1.0;
       utterance.onstart = () => setLiveStatus('speaking');
       utterance.onend = () => setLiveStatus('ready');
@@ -482,6 +587,12 @@ export default function ChatWorkspaceScreen() {
       const result = await handleSendMessage(textToSend, { isLiveAudio: true });
       if (result && result.assistantMessage) {
         setLatestLiveResponse(result.assistantMessage.content);
+        // Resolve referenced items from Dump RAG and web precedents to display on screen
+        const referenced = (result.assistantMessage.sourceInspirationIds || [])
+          .map((cid) => bankItems.find((b) => b.id === cid) || pinnedMap[cid])
+          .filter(Boolean) as InspirationItem[];
+        setLatestLiveCitations(referenced);
+        setLatestLiveWebSources(result.assistantMessage.webSources || []);
         speakLiveResponse(result.assistantMessage.content);
       } else {
         setLiveStatus('ready');
@@ -1396,11 +1507,20 @@ export default function ChatWorkspaceScreen() {
                       : 'GOOGLE LIVE: READY'}
                   </Text>
                 </View>
-                <Badge
-                  label={selectedModel.replace('gemini-', '').toUpperCase()}
-                  variant="grade"
-                  style={{ paddingVertical: 2, paddingHorizontal: 6 }}
-                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {selectedVoice ? (
+                    <Badge
+                      label={`🎙️ ${selectedVoice.name.replace(/^(Google|Microsoft|Apple)\s*/i, '').slice(0, 16)}`}
+                      variant="outline"
+                      style={{ paddingVertical: 2, paddingHorizontal: 6 }}
+                    />
+                  ) : null}
+                  <Badge
+                    label={selectedModel.replace('gemini-', '').toUpperCase()}
+                    variant="grade"
+                    style={{ paddingVertical: 2, paddingHorizontal: 6 }}
+                  />
+                </View>
               </View>
 
               {/* RAG & CONTEXT STRIP */}
@@ -1443,15 +1563,20 @@ export default function ChatWorkspaceScreen() {
                     : liveStatus === 'thinking'
                     ? 'Retrieving inspirations and formulating conversational thesis...'
                     : liveStatus === 'speaking'
-                    ? 'Speaking response out loud'
+                    ? 'Speaking short summary out loud'
                     : 'Tap microphone or speak to converse in Google Live'}
                 </Text>
               </View>
 
               {/* LIVE TRANSCRIPT DISPLAY */}
               <View style={styles.liveTranscriptCard}>
-                <Text style={styles.liveTranscriptLabel}>LIVE TRANSCRIPTION & INFERENCE</Text>
-                <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={styles.liveTranscriptLabel}>LIVE TRANSCRIPTION & INFERENCE</Text>
+                  {latestLiveResponse ? (
+                    <Badge label="1-2 SENTENCE SUMMARY" variant="grade" style={{ paddingVertical: 1, paddingHorizontal: 4 }} />
+                  ) : null}
+                </View>
+                <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator>
                   {liveTranscript ? (
                     <Text style={styles.liveTranscriptUser}>
                       <Text style={{ fontWeight: '800' }}>YOU: </Text>
@@ -1459,14 +1584,71 @@ export default function ChatWorkspaceScreen() {
                     </Text>
                   ) : null}
                   {latestLiveResponse ? (
-                    <Text style={styles.liveTranscriptAssistant}>
-                      <Text style={{ fontWeight: '800' }}>RUT: </Text>
-                      {latestLiveResponse}
-                    </Text>
+                    <View style={{ marginBottom: 6 }}>
+                      <Text style={styles.liveTranscriptAssistant}>
+                        <Text style={{ fontWeight: '800' }}>RUT: </Text>
+                        {latestLiveResponse}
+                      </Text>
+                    </View>
                   ) : null}
+
+                  {/* SPECIFIC REFERENCED DUMP INSPIRATIONS */}
+                  {latestLiveCitations.length > 0 ? (
+                    <View style={styles.liveReferencedSection}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={styles.liveReferencedSectionTitle}>SPECIFIC REFERENCED SAVES ({latestLiveCitations.length})</Text>
+                        <Badge label="DUMP RAG DATA" variant="inverse" style={{ paddingVertical: 1, paddingHorizontal: 4 }} />
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+                        {latestLiveCitations.map((item) => (
+                          <Pressable
+                            key={item.id}
+                            style={styles.liveCitationCard}
+                            onPress={() => item.url && openExternalUrl(item.url)}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                              <Badge
+                                label={(item.sourcePlatform || item.sourceApp || item.kind || 'SAVE').toUpperCase()}
+                                variant="grade"
+                                style={{ paddingVertical: 1, paddingHorizontal: 4 }}
+                              />
+                              {item.url ? <Text style={{ fontSize: 9, color: colors.inkSoft }}>↗</Text> : null}
+                            </View>
+                            <Text style={styles.liveCitationCardTitle} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            <Text style={styles.liveCitationCardSnippet} numberOfLines={2}>
+                              {item.userNote || item.aiSummary || item.previewDescription || 'Referenced inspiration from your bank'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+
+                  {/* LIVE WEB PRECEDENTS */}
+                  {latestLiveWebSources.length > 0 ? (
+                    <View style={styles.liveWebSourcesSection}>
+                      <Text style={styles.liveReferencedSectionTitle}>WEB PRECEDENTS GROUNDING:</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {latestLiveWebSources.map((src, i) => (
+                          <Pressable
+                            key={`web-src-${i}`}
+                            style={styles.liveWebSourcePill}
+                            onPress={() => src.uri && openExternalUrl(src.uri)}
+                          >
+                            <Text style={styles.liveWebSourcePillText} numberOfLines={1}>
+                              🌐 {src.title || src.uri} ↗
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
                   {!liveTranscript && !latestLiveResponse ? (
                     <Text style={styles.liveTranscriptPlaceholder}>
-                      All turns spoken or submitted in Google Live are automatically stored in this thought&rsquo;s permanent chat and Firestore.
+                      Short 1-2 sentence spoken answers powered by natural Google speech, while specific Dump references & web precedents are displayed on screen.
                     </Text>
                   ) : null}
                 </ScrollView>
@@ -2370,5 +2552,55 @@ const getStyles = (colors: ThemeColors) =>
   liveTextInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  liveReferencedSection: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
+  },
+  liveReferencedSectionTitle: {
+    ...typography.captionCap,
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.inkSoft,
+    letterSpacing: 0.8,
+  },
+  liveCitationCard: {
+    width: 200,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    padding: spacing.xs,
+  },
+  liveCitationCardTitle: {
+    ...typography.bodyMd,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 2,
+  },
+  liveCitationCardSnippet: {
+    ...typography.captionSm,
+    fontSize: 10,
+    lineHeight: 14,
+    color: colors.inkSoft,
+  },
+  liveWebSourcesSection: {
+    marginTop: spacing.xs,
+  },
+  liveWebSourcePill: {
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceGrade,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: 240,
+  },
+  liveWebSourcePillText: {
+    ...typography.captionCap,
+    fontSize: 9,
+    color: colors.ink,
+    letterSpacing: 0.4,
   },
 });

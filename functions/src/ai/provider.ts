@@ -27,6 +27,7 @@ export interface ChatRequest {
   model?: string;
   totalBankCount?: number;
   isReevaluate?: boolean;
+  isLiveAudio?: boolean;
 }
 
 export interface ChatResult {

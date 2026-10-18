@@ -510,11 +510,12 @@ export async function callDirectGoogleGemini(params: {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature?: number;
   webAccess?: boolean;
+  maxOutputTokens?: number;
 }): Promise<{
   text: string;
   webSources?: Array<{ title?: string; uri?: string }>;
 } | null> {
-  const { apiKey, model, systemPrompt, messages, temperature, webAccess } = params;
+  const { apiKey, model, systemPrompt, messages, temperature, webAccess, maxOutputTokens } = params;
   if (!apiKey) return null;
 
   const targetModel = (model || 'gemini-2.0-flash').trim();
@@ -540,7 +541,7 @@ export async function callDirectGoogleGemini(params: {
     contents,
     generationConfig: {
       temperature: typeof temperature === 'number' ? temperature : 0.5,
-      maxOutputTokens: 8192,
+      maxOutputTokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : 8192,
     },
   };
 
@@ -619,6 +620,7 @@ export function synthesizeThoughtTrain(params: {
   allInspirations?: InspirationItem[];
   webAccess?: boolean;
   memorySummary?: string | null;
+  isLiveAudio?: boolean;
 }): {
   response: string;
   sourceInspirationIds: string[];
@@ -631,6 +633,7 @@ export function synthesizeThoughtTrain(params: {
     pinnedInspirations = [],
     allInspirations = [],
     webAccess = false,
+    isLiveAudio = false,
   } = params;
   const q = userQuery.toLowerCase().trim();
   const isOngoing = conversationHistory.length > 0;
@@ -738,6 +741,27 @@ export function synthesizeThoughtTrain(params: {
 
     return {
       response: friendVoice,
+      sourceInspirationIds: citedIds,
+      webSources: undefined,
+    };
+  }
+
+  // Google Live Voice Mode: strictly 1-2 sentences for natural spoken delivery
+  if (isLiveAudio) {
+    let liveReply = '';
+    if (topMatches.length > 0) {
+      const top = topMatches[0].item;
+      liveReply = `From your bank, "${top.title}" is the most relevant reference. It provides the core aesthetic anchor for this concept.`;
+    } else if (isDumpPullQuery) {
+      liveReply = `I checked your bank. You don't have matching saves on this topic yet, but we can formulate the concept directly.`;
+    } else if (isOngoing) {
+      liveReply = `That sharpens the direction nicely. Let's decide whether to push the physical or digital execution first.`;
+    } else {
+      liveReply = `Strong premise. Let's focus on the single core interaction that makes this unforgettable.`;
+    }
+
+    return {
+      response: liveReply,
       sourceInspirationIds: citedIds,
       webSources: undefined,
     };
@@ -1040,6 +1064,7 @@ export async function sendChatMessage(
           dumpContext?: any[];
           totalBankCount?: number;
           memorySummary?: string;
+          isLiveAudio?: boolean;
         },
         {
           response: string;
@@ -1063,6 +1088,7 @@ export async function sendChatMessage(
         dumpContext,
         totalBankCount: allInspirations.length,
         memorySummary: existingMemory || undefined,
+        isLiveAudio: Boolean(options?.isLiveAudio),
       });
 
       if (result.data?.response) {
@@ -1163,7 +1189,16 @@ export async function sendChatMessage(
           ? `\n\nCompacted Memory from earlier in this thought:\n${existingMemory}`
           : '';
 
-        const systemPrompt = `${AGENT_SYSTEM_DIRECTIVE}${memoryDirective}${dumpKnowledgeStr}`;
+        const liveAudioDirective = options?.isLiveAudio
+          ? `\n\nGOOGLE LIVE VOICE MODE (CRITICAL MANDATE):
+The user is speaking out loud in Google Live voice mode.
+1. NATURAL HUMAN SPOKEN FLOW: Speak with a warm, natural, human cadence. Never sound robotic, preachy, or formal.
+2. STRICT SHORT LENGTH: Keep your answer strictly to 1 or 2 concise, punchy sentences (maximum 30-35 words total).
+3. SPOKEN SUMMARY + SCREEN DETAILS: State the direct creative answer or main summary immediately. If citing dump inspirations, mention 1-2 item titles naturally in your sentence so the system displays their rich visual reference cards on screen.
+4. ZERO MARKDOWN: Never output asterisks, markdown bullet points, numbered lists, or headers.`
+          : '';
+
+        const systemPrompt = `${AGENT_SYSTEM_DIRECTIVE}${memoryDirective}${liveAudioDirective}${dumpKnowledgeStr}`;
 
         const messagesHistory = updatedWithUser
           .slice(-30)
@@ -1180,6 +1215,7 @@ export async function sendChatMessage(
           messages: messagesHistory,
           temperature: 0.7,
           webAccess: isWebAccess,
+          maxOutputTokens: options?.isLiveAudio ? 120 : 8192,
         });
 
         if (directResult?.text) {
@@ -1215,6 +1251,7 @@ export async function sendChatMessage(
       allInspirations: options?.allInspirations,
       webAccess: isWebAccess,
       memorySummary: existingMemory,
+      isLiveAudio: options?.isLiveAudio,
     });
     assistantResponse = synthesized.response;
     citedIds = synthesized.sourceInspirationIds;

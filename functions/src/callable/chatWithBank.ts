@@ -447,6 +447,7 @@ export const chatWithBank = onCall(
         model: requestedModel,
         totalBankCount,
         isReevaluate: isReevaluateQuery,
+        isLiveAudio: Boolean(request.data?.isLiveAudio),
       });
 
       // 6. Record usage event in integer micros

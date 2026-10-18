@@ -183,7 +183,16 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
       ? `\n\nWEB SEARCH GROUNDING:\nLive internet search is active. Ground your insights in contemporary design precedents, architectural projects, or studio work when relevant.`
       : '';
 
-    const systemInstructionText = `${CHAT_SYSTEM_PROMPT}${memoryDirective}${webAccessDirective}${contextFormatted}`;
+    const liveAudioDirective = input.isLiveAudio
+      ? `\n\nGOOGLE LIVE VOICE MODE (CRITICAL MANDATE):
+The user is speaking out loud in Google Live voice mode.
+1. NATURAL HUMAN SPOKEN FLOW: Speak with a warm, natural, human cadence. Never sound robotic, preachy, or formal.
+2. STRICT SHORT LENGTH: Keep your answer strictly to 1 or 2 concise, punchy sentences (maximum 30-35 words total).
+3. SPOKEN SUMMARY + SCREEN DETAILS: State the direct creative answer or main summary immediately. If citing dump inspirations, mention 1-2 item titles naturally in your sentence so the system displays their rich visual reference cards on screen.
+4. ZERO MARKDOWN: Never output asterisks, markdown bullet points, numbered lists, or headers.`
+      : '';
+
+    const systemInstructionText = `${CHAT_SYSTEM_PROMPT}${memoryDirective}${webAccessDirective}${liveAudioDirective}${contextFormatted}`;
 
     // Clean, alternating multi-turn conversation history
     const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
@@ -224,7 +233,7 @@ PAGE PREVIEW: ${input.previewDescription || 'none'}
         systemInstruction: systemInstructionText,
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 8192,
+          maxOutputTokens: input.isLiveAudio ? 120 : 8192,
         },
       };
       if (input.webAccess) {
