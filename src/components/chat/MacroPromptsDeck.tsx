@@ -267,7 +267,7 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
                 {FRIEND_AVATARS[f.id] ? (
                   <Image
                     source={FRIEND_AVATARS[f.id]}
-                    style={StyleSheet.absoluteFill}
+                    style={styles.friendKeyImage}
                     resizeMode="cover"
                   />
                 ) : null}
@@ -371,15 +371,31 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
+  friendKeyImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 0,
+  },
   friendKeyScrim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.42)',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '48%',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    zIndex: 1,
   },
   friendKeyBottomContent: {
     paddingHorizontal: 4,
     paddingBottom: 6,
     alignItems: 'center',
     width: '100%',
+    zIndex: 2,
   },
   friendKeyName: {
     ...typography.captionCap,
@@ -409,6 +425,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3.5,
+    zIndex: 3,
   },
   keyIcon: {
     fontSize: 20,
