@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useTheme } from '../../design/ThemeContext';
 import { typography, spacing, rounded } from '../../design/tokens';
 import { Badge } from '../ui/Badge';
+
+export const FRIEND_AVATARS: Record<string, any> = {
+  kenji: require('../../../assets/images/friends/kenji.jpg'),
+  tala: require('../../../assets/images/friends/tala.jpg'),
+  ingrid: require('../../../assets/images/friends/ingrid.jpg'),
+  tariq: require('../../../assets/images/friends/tariq.jpg'),
+  priya: require('../../../assets/images/friends/priya.jpg'),
+  mateo: require('../../../assets/images/friends/mateo.jpg'),
+};
 
 export interface MacroPromptItem {
   id: string;
@@ -256,7 +265,17 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
               >
                 {/* Accent LED top indicator */}
                 <View style={[styles.keyLed, { backgroundColor: f.color }]} />
-                <Text style={styles.keyIcon}>{f.icon}</Text>
+                <View style={[styles.avatarWrapper, { borderColor: f.color }]}>
+                  {FRIEND_AVATARS[f.id] ? (
+                    <Image
+                      source={FRIEND_AVATARS[f.id]}
+                      style={styles.friendAvatarImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.keyIcon}>{f.icon}</Text>
+                  )}
+                </View>
                 <Text style={[styles.keyLabel, { color: colors.ink }]} numberOfLines={1}>
                   {f.name.toUpperCase()}
                 </Text>
@@ -340,7 +359,7 @@ const styles = StyleSheet.create({
   },
   friendDeckKey: {
     width: '31.8%',
-    aspectRatio: 1.05,
+    aspectRatio: 0.98,
     borderWidth: 1.5,
     borderRadius: rounded.none,
     alignItems: 'center',
@@ -348,6 +367,22 @@ const styles = StyleSheet.create({
     padding: 4,
     position: 'relative',
     overflow: 'hidden',
+  },
+  avatarWrapper: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    marginBottom: 4,
+    marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  friendAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   keyLed: {
     position: 'absolute',

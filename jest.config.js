@@ -12,7 +12,8 @@ module.exports = {
     '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
     '^expo-clipboard$': '<rootDir>/src/__mocks__/expo-clipboard.ts',
     '^expo-print$': '<rootDir>/src/__mocks__/expo-print.ts',
-    '^expo-sharing$': '<rootDir>/src/__mocks__/expo-sharing.ts'
+    '^expo-sharing$': '<rootDir>/src/__mocks__/expo-sharing.ts',
+    '\\.(jpg|jpeg|png|gif|webp|svg)$': '<rootDir>/src/__mocks__/fileMock.ts'
   },
   modulePathIgnorePatterns: ['<rootDir>/functions/']
 };
