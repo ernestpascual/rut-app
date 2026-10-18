@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../design/ThemeContext';
 import { typography, spacing, rounded } from '../../design/tokens';
@@ -316,6 +316,8 @@ const styles = StyleSheet.create({
   },
   collapsibleWrapper: {
     width: '100%',
+    maxWidth: Platform.OS === 'web' ? 380 : undefined,
+    alignSelf: Platform.OS === 'web' ? 'flex-start' : 'stretch',
   },
   toggleHeader: {
     flexDirection: 'row',
@@ -355,6 +357,8 @@ const styles = StyleSheet.create({
   },
   streamDeckKey: {
     flex: 1,
+    maxWidth: Platform.OS === 'web' ? 95 : undefined,
+    maxHeight: Platform.OS === 'web' ? 95 : undefined,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
@@ -375,6 +379,8 @@ const styles = StyleSheet.create({
   },
   friendDeckKey: {
     width: '31.8%',
+    maxWidth: Platform.OS === 'web' ? 110 : undefined,
+    maxHeight: Platform.OS === 'web' ? 110 : undefined,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
