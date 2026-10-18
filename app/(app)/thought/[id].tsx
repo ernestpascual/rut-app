@@ -203,6 +203,8 @@ export default function ChatWorkspaceScreen() {
   const [liveInputText, setLiveInputText] = useState('');
   const [waveformBars, setWaveformBars] = useState<number[]>([12, 18, 10, 24, 16, 30, 20, 14, 22, 16, 28, 12]);
   const recognitionRef = useRef<any>(null);
+  const liveTranscriptRef = useRef<string>('');
+  const utteranceRef = useRef<any>(null);
 
   // Load and cache high-quality natural voices for Google Live
   useEffect(() => {
@@ -497,6 +499,9 @@ export default function ChatWorkspaceScreen() {
         } catch {}
       }
 
+      liveTranscriptRef.current = '';
+      setLiveTranscript('');
+
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = true;
@@ -512,6 +517,7 @@ export default function ChatWorkspaceScreen() {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           currentTranscript += event.results[i][0].transcript;
         }
+        liveTranscriptRef.current = currentTranscript;
         setLiveTranscript(currentTranscript);
       };
 
@@ -523,8 +529,10 @@ export default function ChatWorkspaceScreen() {
 
       recognition.onend = () => {
         setIsListening(false);
-        if (liveTranscript.trim()) {
-          handleSendLiveMessage(liveTranscript.trim());
+        const finalSpoken = liveTranscriptRef.current.trim();
+        if (finalSpoken) {
+          liveTranscriptRef.current = '';
+          handleSendLiveMessage(finalSpoken);
         } else {
           setLiveStatus('ready');
         }
@@ -540,12 +548,17 @@ export default function ChatWorkspaceScreen() {
   };
 
   const handleStopListening = () => {
+    const pendingText = liveTranscriptRef.current.trim();
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch {}
     }
     setIsListening(false);
+    if (pendingText) {
+      liveTranscriptRef.current = '';
+      handleSendLiveMessage(pendingText);
+    }
   };
 
   const speakLiveResponse = (text: string) => {
@@ -555,36 +568,53 @@ export default function ChatWorkspaceScreen() {
     }
     try {
       window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       // Clean and isolate strictly the 1-2 sentence spoken summary for crisp vocal delivery
       const cleanSpoken = prepareLiveSpokenText(text);
+      if (!cleanSpoken) {
+        setLiveStatus('ready');
+        return;
+      }
 
       const utterance = new SpeechSynthesisUtterance(cleanSpoken);
+      utteranceRef.current = utterance; // Prevent V8 garbage collection mid-playback
       if (selectedVoice) {
         utterance.voice = selectedVoice;
       } else {
         const best = pickBestNaturalVoice(window.speechSynthesis.getVoices());
         if (best) utterance.voice = best;
       }
-      utterance.rate = 1.0; // Calm natural human pacing (not rushed or clipped)
+      utterance.rate = 1.0; // Calm natural human pacing
       utterance.pitch = 1.0;
       utterance.onstart = () => setLiveStatus('speaking');
-      utterance.onend = () => setLiveStatus('ready');
-      utterance.onerror = () => setLiveStatus('ready');
+      utterance.onend = () => {
+        utteranceRef.current = null;
+        setLiveStatus('ready');
+      };
+      utterance.onerror = (err) => {
+        console.warn('TTS utterance error:', err);
+        utteranceRef.current = null;
+        setLiveStatus('ready');
+      };
       window.speechSynthesis.speak(utterance);
     } catch (err) {
       console.warn('TTS playback error:', err);
+      utteranceRef.current = null;
       setLiveStatus('ready');
     }
   };
 
   const handleSendLiveMessage = async (textToSend: string) => {
-    if (!textToSend.trim() || sending) return;
+    const cleanText = textToSend.trim();
+    if (!cleanText || sending) return;
     setLiveStatus('thinking');
-    setLiveTranscript('');
+    setLiveTranscript(cleanText); // Keep user question visible while thinking and responding
     setLiveInputText('');
 
     try {
-      const result = await handleSendMessage(textToSend, { isLiveAudio: true });
+      const result = await handleSendMessage(cleanText, { isLiveAudio: true });
       if (result && result.assistantMessage) {
         setLatestLiveResponse(result.assistantMessage.content);
         // Resolve referenced items from Dump RAG and web precedents to display on screen
@@ -597,7 +627,8 @@ export default function ChatWorkspaceScreen() {
       } else {
         setLiveStatus('ready');
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Live] Send message error:', err);
       setLiveStatus('ready');
     }
   };
