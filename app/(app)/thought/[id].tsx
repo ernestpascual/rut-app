@@ -33,6 +33,7 @@ import { Card } from '../../../src/components/ui/Card';
 import { Badge } from '../../../src/components/ui/Badge';
 import { SourceCard } from '../../../src/components/ui/SourceCard';
 import { MarkdownRenderer } from '../../../src/components/ui/MarkdownRenderer';
+import { MacroPromptsDeck } from '../../../src/components/chat/MacroPromptsDeck';
 import * as WebBrowser from 'expo-web-browser';
 import { rounded, typography, spacing, ThemeColors } from '../../../src/design/tokens';
 import { isPlatformTag } from '../../../src/design/platformColors';
@@ -238,12 +239,15 @@ export default function ChatWorkspaceScreen() {
     };
   }, [user]);
 
-  const handleSendMessage = async (customText?: string) => {
+  const handleSendMessage = async (customText?: string, options?: { webAccess?: boolean }) => {
     const textToSend = (customText !== undefined ? customText : inputText).trim();
     if (!textToSend || !id || sending) return;
     setInputText('');
     setInputHeight(44);
     setSending(true);
+
+    const effectiveWebAccess =
+      options?.webAccess !== undefined ? options.webAccess : webAccessEnabled;
 
     const userMessageId = `msg-user-${Date.now()}`;
     const optimisticUserMessage: ChatMessage = {
@@ -256,7 +260,7 @@ export default function ChatWorkspaceScreen() {
       outputTokens: null,
       estimatedCostMicros: null,
       status: 'complete',
-      webAccess: webAccessEnabled,
+      webAccess: effectiveWebAccess,
       createdAt: Date.now(),
     };
 
@@ -281,7 +285,7 @@ export default function ChatWorkspaceScreen() {
         pinnedInspirations: pinnedItems,
         allInspirations: bankItems,
         model: selectedModel,
-        webAccess: webAccessEnabled,
+        webAccess: effectiveWebAccess,
       });
 
       // Update state immediately with final assistant message and confirmed user message
@@ -668,6 +672,12 @@ export default function ChatWorkspaceScreen() {
             </Text>
           </View>
         ) : null}
+
+        {/* Macro Prompts & Ask a Friend Stream Deck */}
+        <MacroPromptsDeck
+          onSelectPrompt={(prompt, opts) => handleSendMessage(prompt, opts)}
+          disabled={sending}
+        />
 
         {/* Input Bar (Auto-expanding textarea up to 5 lines, default 1 line) */}
         <View style={styles.inputBar}>
