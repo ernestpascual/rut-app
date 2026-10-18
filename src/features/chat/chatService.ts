@@ -617,7 +617,7 @@ export async function callDirectGoogleGemini(params: {
   const { apiKey, model, systemPrompt, messages, temperature, webAccess, maxOutputTokens } = params;
   if (!apiKey) return null;
 
-  const targetModel = (model || 'gemini-2.0-flash').trim();
+  const targetModel = (model || 'gemini-3.5-flash-lite').trim();
 
   const rawFiltered = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
   const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
@@ -1133,7 +1133,7 @@ export async function sendChatMessage(
   const existingMemory = currentSession?.memorySummary || null;
   const sessionModel = currentSession?.model || null;
   const userPreferred = await getUserPreferredModel(uid);
-  const effectiveModel = options?.model || sessionModel || userPreferred || DEFAULT_AI_MODEL;
+  const effectiveModel = options?.isLiveAudio ? 'gemini-3.5-flash-lite' : (options?.model || sessionModel || userPreferred || DEFAULT_AI_MODEL);
 
   // 3. Multi-tier Agent Inference
   let assistantResponse = '';
@@ -1309,7 +1309,7 @@ The user is speaking out loud in Google Live voice mode.
 
         const directResult = await callDirectGoogleGemini({
           apiKey: clientGeminiKey,
-          model: options?.model || 'gemini-2.0-flash',
+          model: effectiveModel,
           systemPrompt,
           messages: messagesHistory,
           temperature: 0.7,
@@ -1320,7 +1320,7 @@ The user is speaking out loud in Google Live voice mode.
         if (directResult?.text) {
           assistantResponse = directResult.text;
           webSources = directResult.webSources;
-          usedModel = options?.model || 'gemini-2.0-flash';
+          usedModel = effectiveModel;
 
           for (const item of allInspirations) {
             if (directResult.text.includes(item.id) || directResult.text.includes(item.title)) {

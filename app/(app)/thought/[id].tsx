@@ -403,7 +403,7 @@ export default function ChatWorkspaceScreen() {
         ideaContext,
         pinnedInspirations: pinnedItems,
         allInspirations: bankItems,
-        model: selectedModel,
+        model: options?.isLiveAudio ? 'gemini-3.5-flash-lite' : selectedModel,
         webAccess: effectiveWebAccess,
         displayContent: options?.displayText,
         isLiveAudio: options?.isLiveAudio,
@@ -1411,9 +1411,9 @@ export default function ChatWorkspaceScreen() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={styles.menuItemSection}>AUDIO & VOICE MODALITY (OPTIONAL)</Text>
-                  <Text style={styles.menuItemTitle}>⚡ Google Live Voice Studio</Text>
+                  <Text style={styles.menuItemTitle}>⚡ Google Live 3.5 Voice Studio</Text>
                   <Text style={styles.menuItemDesc}>
-                    Real-time voice brainstorming grounded in your Dump RAG and full thought history (Shortcut: Alt+L)
+                    Real-time voice brainstorming powered by Google Live 3.5 API grounded in your Dump RAG and full thought history (Shortcut: Alt+L)
                   </Text>
                 </View>
                 <Badge label="LAUNCH ↗" variant="outline" />
@@ -1475,7 +1475,7 @@ export default function ChatWorkspaceScreen() {
           <View style={styles.modalContent}>
             <TopNav
               title="rut"
-              subtitle="Google Live · Real-Time Studio"
+              subtitle="Google Live 3.5 API · Real-Time Studio"
               rightAction={
                 <Button
                   title="EXIT LIVE ✕"
@@ -1499,12 +1499,12 @@ export default function ChatWorkspaceScreen() {
                   />
                   <Text style={styles.liveStatusText}>
                     {liveStatus === 'listening'
-                      ? 'GOOGLE LIVE: LISTENING...'
+                      ? 'GOOGLE LIVE 3.5: LISTENING...'
                       : liveStatus === 'thinking'
-                      ? 'GOOGLE LIVE: SYNTHESIZING DUMP RAG...'
+                      ? 'GOOGLE LIVE 3.5: SYNTHESIZING DUMP RAG...'
                       : liveStatus === 'speaking'
-                      ? 'GOOGLE LIVE: SPEAKING...'
-                      : 'GOOGLE LIVE: READY'}
+                      ? 'GOOGLE LIVE 3.5: SPEAKING...'
+                      : 'GOOGLE LIVE 3.5: READY'}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1516,7 +1516,7 @@ export default function ChatWorkspaceScreen() {
                     />
                   ) : null}
                   <Badge
-                    label={selectedModel.replace('gemini-', '').toUpperCase()}
+                    label="LIVE 3.5 API"
                     variant="grade"
                     style={{ paddingVertical: 2, paddingHorizontal: 6 }}
                   />

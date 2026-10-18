@@ -535,6 +535,15 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
       const wordCount = result.response.split(/\s+/).filter(Boolean).length;
       expect(wordCount).toBeLessThanOrEqual(35);
     });
+
+    test('sendChatMessage with isLiveAudio routes to gemini-3.5-flash-lite', async () => {
+      const res = await sendChatMessage('test-session-live-35', 'Synthesize live with 3.5 API', {
+        isLiveAudio: true,
+      });
+
+      expect(res.assistantMessage.isLiveAudio).toBe(true);
+      expect(res.assistantMessage.model).toBe('gemini-3.5-flash-lite');
+    });
   });
 });
 
