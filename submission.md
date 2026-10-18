@@ -519,7 +519,7 @@ Prototype performance and system resilience are measured across **five concrete 
 #### 9.1 Submission Summary
 `rut` solves creative fragmentation by turning unorganized digital hoarding across Instagram, Pinterest, TikTok, and the open web into an active, citation-backed ideation partner. By integrating native mobile share sheets, a dedicated Manifest V3 Chrome extension, and a high-performance Web PWA with Google Gemini models, `rut` bridges the gap between passive asset collection and active creative execution. The platform is architected for zero-binary storage overhead, extreme speed (< 25ms semantic search, ~1s live voice turnarounds), and sustainable unit economics ($0.039/user/month with a 99.2% gross margin).
 
-#### 9.2 Top 10 "By the Numbers" Highlights
+#### 9.2 Top 15 "By the Numbers" Highlights
 
 | Rank | Highlight Metric | Measured Value | Significance to Creators & Business |
 |:---:|---|:---:|---|
@@ -533,6 +533,11 @@ Prototype performance and system resilience are measured across **five concrete 
 | **#8** | **Multi-Thought Stream Switch** | **< 35 ms** | Instantaneous reactive state switching between multiple independent Train of Thought brainstorm threads attached to a single idea. |
 | **#9** | **Automated Daily Cost Cap** | **$2.00 / user** | Strict server-side integer-micros circuit breaker and administrative kill switch preventing runaway AI token consumption. |
 | **#10** | **One-Click Multi-Platform Sync** | **100% Automated** | Virtualized background scraper importing complete saved collections and reels across **Instagram, Pinterest, and Facebook** directly into the vault. |
+| **#11** | **Apple TestFlight Delivery** | **App Store #6822694174** | Automated cloud binary compilation and zero-touch direct deployment to Apple TestFlight with compliant encryption flags. |
+| **#12** | **End-to-End AI Ingestion** | **450 ms – 780 ms** | Turnaround time per save for metadata scraping, dual-sentence summary generation, auto-tagging, and 768-dim vector embedding creation. |
+| **#13** | **Contextual Export Speed** | **< 120 ms** | Instant client-side compilation rendering rich idea workspaces, multiple thoughts, and citations into clean Markdown, Semantic HTML for PDF print, and DOC files. |
+| **#14** | **Creative Sparring Fleet** | **6 Personas + 4 Macros** | Instant strategic perspectives (*Rei, Tala, Linh, Minji, Priya, Kamila*) with hard conversational spoken limits (< 35 words) and collapsible macro keys. |
+| **#15** | **SSRF Scraper Defense Cap** | **256 KB Buffer / 5.0s Timeout** | Robust serverless network guardrails preventing Server-Side Request Forgery, redirect loops, and payload exhaustion during live URL unfurling. |
 
 #### 9.3 Key Architectural & Functional Highlights
 
