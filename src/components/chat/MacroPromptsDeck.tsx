@@ -272,11 +272,8 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
                   />
                 ) : null}
 
-                {/* Dark Contrast Scrim Overlay for Legibility */}
+                {/* Dark Contrast Scrim Overlay across whole button for Legibility */}
                 <View style={styles.friendKeyScrim} />
-
-                {/* Accent LED Top Indicator */}
-                <View style={[styles.keyLed, { backgroundColor: f.color }]} />
 
                 {/* Bottom Label Content */}
                 <View style={styles.friendKeyBottomContent}>
@@ -356,14 +353,16 @@ const styles = StyleSheet.create({
   friendsGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    padding: 6,
+    justifyContent: 'center',
+    gap: 8,
+    padding: 8,
     borderWidth: 1,
     borderTopWidth: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
   },
   friendDeckKey: {
-    width: '31.8%',
+    width: '30%',
+    maxWidth: 82,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
@@ -382,26 +381,22 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   friendKeyScrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '48%',
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
     zIndex: 1,
   },
   friendKeyBottomContent: {
-    paddingHorizontal: 4,
-    paddingBottom: 6,
+    paddingHorizontal: 3,
+    paddingBottom: 5,
     alignItems: 'center',
     width: '100%',
     zIndex: 2,
   },
   friendKeyName: {
     ...typography.captionCap,
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     textAlign: 'center',
     color: '#FFFFFF',
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
@@ -409,11 +404,11 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   friendKeyRole: {
-    fontSize: 7.5,
+    fontSize: 7,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     textAlign: 'center',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 255, 255, 0.92)',
     marginTop: 1,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
