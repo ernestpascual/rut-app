@@ -313,11 +313,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingTop: spacing.xxs,
     paddingBottom: spacing.xxs,
+    alignItems: 'center',
+    width: '100%',
   },
   collapsibleWrapper: {
     width: '100%',
-    maxWidth: Platform.OS === 'web' ? 320 : undefined,
-    alignSelf: Platform.OS === 'web' ? 'flex-start' : 'stretch',
+    maxWidth: Platform.OS === 'web' ? 340 : undefined,
+    alignSelf: 'center',
   },
   toggleHeader: {
     flexDirection: 'row',
@@ -350,6 +352,8 @@ const styles = StyleSheet.create({
   },
   deckGridRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
     padding: 6,
     borderWidth: 1,
@@ -373,6 +377,8 @@ const styles = StyleSheet.create({
   friendsGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
     padding: 6,
     borderWidth: 1,
@@ -381,8 +387,8 @@ const styles = StyleSheet.create({
   },
   friendDeckKey: {
     width: '31.8%',
-    maxWidth: Platform.OS === 'web' ? 96 : undefined,
-    maxHeight: Platform.OS === 'web' ? 96 : undefined,
+    maxWidth: Platform.OS === 'web' ? 100 : undefined,
+    maxHeight: Platform.OS === 'web' ? 100 : undefined,
     aspectRatio: 1,
     borderWidth: 1.5,
     borderRadius: rounded.none,
