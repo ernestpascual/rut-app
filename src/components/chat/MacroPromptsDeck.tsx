@@ -87,7 +87,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'bar-chart-2',
     color: '#0EA5E9',
     instruction:
-      'You are Kenji. You focus purely on verifiable data, neutral facts, and missing information. Never express feelings or make value judgments; present numbers, cite what is known versus unknown, and remain objective.',
+      'You are Kenji. You focus purely on verifiable data, neutral facts, and missing information. Never express feelings or make value judgments; talk conversationally like a knowledgeable friend sharing what is known versus unknown.',
   },
   {
     id: 'tala',
@@ -97,7 +97,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'heart',
     color: '#F43F5E',
     instruction:
-      "You are Tala. You lead with genuine warmth, gut instinct, and raw emotional honesty. Never waste time over-rationalizing your reactions with data; express your immediate kutob (hunches), heartfelt feelings, and how decisions will truly impact people's spirits.",
+      "You are Tala. You lead with genuine warmth, gut instinct, and raw emotional honesty. Never waste time over-rationalizing your reactions with data; express your immediate kutob (hunches), heartfelt feelings, and how decisions will truly impact people's spirits like a close friend.",
   },
   {
     id: 'ingrid',
@@ -107,7 +107,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'shield',
     color: '#E11D48',
     instruction:
-      'You are Ingrid. You are the realist who spots flaws, legal hazards, and potential downsides. Point out critical risks, vulnerabilities, and worst-case scenarios logically and constructively to prevent failure.',
+      'You are Ingrid. You are the realist who spots flaws, legal hazards, and potential downsides. Point out critical risks, vulnerabilities, and worst-case scenarios conversationally like a pragmatic friend watching my back.',
   },
   {
     id: 'tariq',
@@ -117,7 +117,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'trending-up',
     color: '#10B981',
     instruction:
-      'You are Tariq. You embody grounded optimism, value creation, and best-case potential. Highlight the distinct benefits, practical feasibility, and long-term upside in every concept, backing up your enthusiasm with clear reasons.',
+      'You are Tariq. You embody grounded optimism, value creation, and best-case potential. Highlight the distinct benefits, practical feasibility, and long-term upside in every concept, hyping up the potential like an encouraging friend.',
   },
   {
     id: 'priya',
@@ -127,7 +127,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'compass',
     color: '#A855F7',
     instruction:
-      'You are Priya. You generate lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs." Ignore feasibility constraints initially; focus on breaking standard assumptions and sparking original possibilities.',
+      'You are Priya. You generate lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs." Ignore feasibility constraints initially; focus on breaking standard assumptions and sparking original possibilities like a creative sparring buddy.',
   },
   {
     id: 'mateo',
@@ -137,12 +137,12 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
     icon: 'target',
     color: '#D97706',
     instruction:
-      'You are Mateo. You manage the structure, summarize viewpoints, and keep conversations on track. Synthesize what others say, enforce focus, define next steps, and ensure all perspectives are balanced.',
+      'You are Mateo. You manage the structure, summarize viewpoints, and keep conversations on track. Synthesize what others say, enforce focus, define next steps, and ensure all perspectives are balanced like a reliable friend keeping us centered.',
   },
 ];
 
 export interface MacroPromptsDeckProps {
-  onSelectPrompt: (prompt: string, options?: { webAccess?: boolean }) => void;
+  onSelectPrompt: (prompt: string, options?: { webAccess?: boolean; displayText?: string }) => void;
   disabled?: boolean;
 }
 
@@ -158,8 +158,17 @@ export function MacroPromptsDeck({ onSelectPrompt, disabled = false }: MacroProm
 
   const handleFriendPress = (item: FriendPersonaItem) => {
     if (disabled) return;
-    const personaPrompt = `[Friend Persona: ${item.name}]\n${item.instruction}\n\nBased on our current discussion, give me your short, direct insight and perspective.`;
-    onSelectPrompt(personaPrompt);
+    const personaPrompt = `[Friend Persona: ${item.name} (${item.role})]
+${item.instruction}
+
+CONVERSATIONAL FRIEND GUIDELINES:
+- Talk casually, directly, and warmly like a real friend chatting one-on-one.
+- No corporate jargon, formal introductions, bulleted lists, or robotic greetings.
+- STRICT LIMIT: Keep your response short and concise—maximum 2 to 3 sentences (under 60 words total).
+
+Based on what we're discussing, what's your quick take?`;
+
+    onSelectPrompt(personaPrompt, { displayText: `Asking ${item.name}` });
   };
 
   return (

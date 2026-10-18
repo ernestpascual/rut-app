@@ -13,6 +13,7 @@ import {
   setUserPreferredModel,
   getWebAccessPreference,
   setWebAccessPreference,
+  getMessageDisplayText,
 } from './chatService';
 import { Project, InspirationItem } from '../../types';
 
@@ -357,6 +358,76 @@ describe('Chat Service & Train of Thought Synthesizer', () => {
     });
 
     expect(result.response).toContain("let's refocus directly");
+  });
+
+  describe('Ask a Friend Personas & UI Display', () => {
+    test('getMessageDisplayText masks system persona prompts to Asking [Friend]', () => {
+      expect(
+        getMessageDisplayText({
+          role: 'user',
+          content: '[Friend Persona: Kenji (Facts)]\nYou are Kenji...',
+        })
+      ).toBe('Asking Kenji');
+
+      expect(
+        getMessageDisplayText({
+          role: 'user',
+          content: '[Friend Persona: Tala]\nYou are Tala...',
+        })
+      ).toBe('Asking Tala');
+
+      expect(
+        getMessageDisplayText({
+          role: 'user',
+          content: 'Some raw prompt',
+          displayContent: 'Asking Ingrid',
+        })
+      ).toBe('Asking Ingrid');
+
+      expect(
+        getMessageDisplayText({
+          role: 'user',
+          content: 'Just a regular question',
+        })
+      ).toBe('Just a regular question');
+
+      expect(
+        getMessageDisplayText({
+          role: 'assistant',
+          content: 'Here are the facts...',
+        })
+      ).toBe('Here are the facts...');
+    });
+
+    test('sendChatMessage persists displayContent when provided', async () => {
+      const session = await createChatSession('Friend Persona Test');
+      const { userMessage } = await sendChatMessage(
+        session.id,
+        '[Friend Persona: Kenji (Facts)]\nYou are Kenji...',
+        {
+          displayContent: 'Asking Kenji',
+        }
+      );
+
+      expect(userMessage.displayContent).toBe('Asking Kenji');
+      expect(getMessageDisplayText(userMessage)).toBe('Asking Kenji');
+    });
+
+    test('synthesizes short conversational friend replies under 60 words', () => {
+      const friends = ['Kenji', 'Tala', 'Ingrid', 'Tariq', 'Priya', 'Mateo'];
+
+      for (const friend of friends) {
+        const result = synthesizeThoughtTrain({
+          userQuery: `[Friend Persona: ${friend}]\nGive me your quick take.`,
+        });
+
+        // Conversational and punchy
+        expect(result.response.length).toBeGreaterThan(10);
+        // Short: under 60 words
+        const wordCount = result.response.split(/\s+/).filter(Boolean).length;
+        expect(wordCount).toBeLessThanOrEqual(60);
+      }
+    });
   });
 });
 

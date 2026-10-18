@@ -715,6 +715,34 @@ export function synthesizeThoughtTrain(params: {
 
   let body = '';
 
+  // 0. Ask a Friend Persona handling (conversational, short, strict limit)
+  const friendMatch = /\[(?:Friend Persona|System Instruction: You are responding as):?\s*([A-Za-z]+)/i.exec(userQuery);
+  if (friendMatch) {
+    const friendName = friendMatch[1].toLowerCase();
+    let friendVoice = '';
+    if (friendName === 'kenji') {
+      friendVoice = "Looking strictly at the facts and verifiable data, we don't have enough metrics to validate this yet. Let's test the baseline numbers first before investing more time.";
+    } else if (friendName === 'tala') {
+      friendVoice = "My gut feel says something here feels a bit heavy and overthought. Follow what genuinely excites you right now—trust that instinct and keep it simple.";
+    } else if (friendName === 'ingrid') {
+      friendVoice = "As a realist, watch out for the operational drag and points of failure here. If that bottleneck breaks, everything halts, so stress-test that downside first.";
+    } else if (friendName === 'tariq') {
+      friendVoice = "I love the genuine upside and value creation here! If this hits, the potential for long-term momentum is huge, so double down on the strongest hook.";
+    } else if (friendName === 'priya') {
+      friendVoice = "What if we throw out standard assumptions completely? Imagine if this entire flow was zero-touch and flipped the typical model upside down.";
+    } else if (friendName === 'mateo') {
+      friendVoice = "Let's keep this organized and on track. We've got two solid paths on the table—let's pick the single most urgent decision and lock down the next step.";
+    } else {
+      friendVoice = "That's an interesting direction! Let's keep it conversational and test the smallest possible version first.";
+    }
+
+    return {
+      response: friendVoice,
+      sourceInspirationIds: citedIds,
+      webSources: undefined,
+    };
+  }
+
   // 1. User correcting or asking to refocus
   if (isCorrection) {
     body = `Got it, my mistake—let's refocus directly on what you need without the fluff. What specific part or technical challenge should we address first?`;
@@ -866,7 +894,34 @@ CORE RULES:
      * Immediately follow that honest statement by directly answering their question with real intellectual/technical substance and actionable ideas.
 6. CONVERSATIONAL RESPONSIVENESS:
    - If the user says "it doesn't answer my question", corrects you, or redirects:
-     * Immediately acknowledge the redirect with zero defensiveness (e.g. "Got it, let's refocus directly on...") and address their exact point.`;
+     * Immediately acknowledge the redirect with zero defensiveness (e.g. "Got it, let's refocus directly on...") and address their exact point.
+7. FRIEND PERSONAS (ASK A FRIEND):
+   - When the user prompt includes a Friend Persona instruction (e.g. Kenji, Tala, Ingrid, Tariq, Priya, Mateo), adopt that specific friend persona completely.
+   - Reply conversationally like a trusted friend chatting casually. Do NOT sound like an AI assistant or corporate consultant, and do NOT use bulleted lists or formal greetings.
+   - STRICT LIMIT: Strictly keep your reply short and concise—maximum 2 to 3 sentences (under 60 words total).`;
+
+/**
+ * Resolves the user-facing display content for a message.
+ * Hides raw persona system prompts (e.g. "[Friend Persona: Kenji]") so the UI simply shows "Asking Kenji".
+ */
+export function getMessageDisplayText(message: {
+  content: string;
+  displayContent?: string;
+  role: string;
+}): string {
+  if (message.displayContent) {
+    return message.displayContent;
+  }
+  if (message.role === 'user') {
+    const friendMatch = message.content.match(
+      /^\[(?:Friend Persona|System Instruction: You are responding as):?\s*([A-Za-z]+)/i
+    );
+    if (friendMatch) {
+      return `Asking ${friendMatch[1]}`;
+    }
+  }
+  return message.content;
+}
 
 /**
  * Sends a message in a chat session.
@@ -892,6 +947,7 @@ export async function sendChatMessage(
     allInspirations?: InspirationItem[];
     model?: string;
     webAccess?: boolean;
+    displayContent?: string;
   }
 ): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage; thesisStatement?: string }> {
   const cleanContent = messageContent.trim();
@@ -910,6 +966,7 @@ export async function sendChatMessage(
     id: userMessageId,
     role: 'user',
     content: cleanContent,
+    displayContent: options?.displayContent?.trim() || undefined,
     sourceInspirationIds: [],
     model: null,
     inputTokens: null,

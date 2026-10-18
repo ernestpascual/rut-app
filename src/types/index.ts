@@ -56,6 +56,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system-summary';
   content: string;
+  displayContent?: string;
   sourceInspirationIds: string[];
   model: string | null;
   inputTokens: number | null;

@@ -53,6 +53,7 @@ import {
   getWebAccessPreference,
   setWebAccessPreference,
   deduplicateMessages,
+  getMessageDisplayText,
 } from '../../../src/features/chat/chatService';
 import { getDumpInspirations, saveProject } from '../../../src/features/dump/dumpService';
 import { calculateDynamicInputHeight } from '../../../src/utils/inputHeight';
@@ -239,7 +240,10 @@ export default function ChatWorkspaceScreen() {
     };
   }, [user]);
 
-  const handleSendMessage = async (customText?: string, options?: { webAccess?: boolean }) => {
+  const handleSendMessage = async (
+    customText?: string,
+    options?: { webAccess?: boolean; displayText?: string }
+  ) => {
     const textToSend = (customText !== undefined ? customText : inputText).trim();
     if (!textToSend || !id || sending) return;
     setInputText('');
@@ -254,6 +258,7 @@ export default function ChatWorkspaceScreen() {
       id: userMessageId,
       role: 'user',
       content: textToSend,
+      displayContent: options?.displayText,
       sourceInspirationIds: [],
       model: null,
       inputTokens: null,
@@ -286,6 +291,7 @@ export default function ChatWorkspaceScreen() {
         allInspirations: bankItems,
         model: selectedModel,
         webAccess: effectiveWebAccess,
+        displayContent: options?.displayText,
       });
 
       // Update state immediately with final assistant message and confirmed user message
@@ -298,7 +304,7 @@ export default function ChatWorkspaceScreen() {
         setSession({
           ...session,
           thesisStatement: result.thesisStatement || session.thesisStatement,
-          summary: textToSend.slice(0, 100),
+          summary: (options?.displayText || textToSend).slice(0, 100),
           updatedAt: Date.now(),
         });
       }
@@ -544,7 +550,7 @@ export default function ChatWorkspaceScreen() {
               </View>
 
               <MarkdownRenderer
-                content={item.content}
+                content={getMessageDisplayText(item)}
                 isUser={item.role === 'user'}
               />
 
