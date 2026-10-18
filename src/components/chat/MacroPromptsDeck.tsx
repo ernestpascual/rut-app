@@ -82,7 +82,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'kenji',
     name: 'Kenji',
-    role: 'DATA & FACTS',
+    role: 'Facts',
     subtitle: 'Objective Truth',
     icon: 'bar-chart-2',
     color: '#0EA5E9',
@@ -92,7 +92,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'tala',
     name: 'Tala',
-    role: 'GUT & WARMTH',
+    role: 'Gut Feel',
     subtitle: 'Emotional Honesty',
     icon: 'heart',
     color: '#F43F5E',
@@ -102,7 +102,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'ingrid',
     name: 'Ingrid',
-    role: 'REALIST & RISKS',
+    role: 'Realist',
     subtitle: 'Downside Hunter',
     icon: 'shield',
     color: '#E11D48',
@@ -112,7 +112,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'tariq',
     name: 'Tariq',
-    role: 'OPTIMISM & UPSIDE',
+    role: 'Optimist',
     subtitle: 'Value Creation',
     icon: 'trending-up',
     color: '#10B981',
@@ -122,7 +122,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'priya',
     name: 'Priya',
-    role: 'LATERAL & WHAT-IF',
+    role: 'What Ifs',
     subtitle: 'Disruptive Spark',
     icon: 'compass',
     color: '#A855F7',
@@ -132,7 +132,7 @@ export const FRIEND_PERSONAS: FriendPersonaItem[] = [
   {
     id: 'mateo',
     name: 'Mateo',
-    role: 'STRUCTURE & FOCUS',
+    role: 'Organized',
     subtitle: 'Synthesizer',
     icon: 'target',
     color: '#D97706',

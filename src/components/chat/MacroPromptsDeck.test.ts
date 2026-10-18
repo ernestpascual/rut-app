@@ -41,28 +41,34 @@ describe('MacroPromptsDeck Configurations', () => {
 
     // Kenji: Verifiable data, neutral facts
     const kenji = FRIEND_PERSONAS.find((p) => p.name === 'Kenji')!;
+    expect(kenji.role).toBe('Facts');
     expect(kenji.instruction).toContain('verifiable data, neutral facts, and missing information');
     expect(kenji.instruction).toContain('Never express feelings or make value judgments');
 
     // Tala: Genuine warmth, gut instinct (kutob)
     const tala = FRIEND_PERSONAS.find((p) => p.name === 'Tala')!;
+    expect(tala.role).toBe('Gut Feel');
     expect(tala.instruction).toContain('genuine warmth, gut instinct, and raw emotional honesty');
     expect(tala.instruction).toContain('kutob (hunches)');
 
     // Ingrid: Realist, flaws, legal hazards, downsides
     const ingrid = FRIEND_PERSONAS.find((p) => p.name === 'Ingrid')!;
+    expect(ingrid.role).toBe('Realist');
     expect(ingrid.instruction).toContain('realist who spots flaws, legal hazards, and potential downsides');
 
     // Tariq: Grounded optimism, value creation, upside
     const tariq = FRIEND_PERSONAS.find((p) => p.name === 'Tariq')!;
+    expect(tariq.role).toBe('Optimist');
     expect(tariq.instruction).toContain('grounded optimism, value creation, and best-case potential');
 
     // Priya: Lateral, unexpected ideas, provocative what-ifs
     const priya = FRIEND_PERSONAS.find((p) => p.name === 'Priya')!;
+    expect(priya.role).toBe('What Ifs');
     expect(priya.instruction).toContain('lateral, unexpected ideas, disruptive alternatives, and provocative "what-ifs."');
 
     // Mateo: Structure, summarize viewpoints, keep on track
     const mateo = FRIEND_PERSONAS.find((p) => p.name === 'Mateo')!;
+    expect(mateo.role).toBe('Organized');
     expect(mateo.instruction).toContain('manage the structure, summarize viewpoints, and keep conversations on track');
   });
 });
